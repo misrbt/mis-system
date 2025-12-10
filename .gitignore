@@ -1,0 +1,47 @@
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+backend/.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Dependencies / builds
+node_modules/
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+backend/vendor/
+backend/node_modules/
+
+# Laravel generated files
+backend/storage/*
+!backend/storage/.gitignore
+backend/bootstrap/cache/*
+!backend/bootstrap/cache/.gitignore
+
+# Tooling / coverage
+.turbo/
+coverage/
+.nyc_output/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Local tooling folder
+.qodo/

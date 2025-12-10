@@ -1,0 +1,122 @@
+#root {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 3rem;
+}
+
+.app {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.app__header {
+  background: linear-gradient(135deg, rgba(100, 108, 255, 0.1), rgba(33, 53, 71, 0.35));
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  text-align: left;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.lede {
+  margin: 0.5rem 0 0;
+  color: #d1d5db;
+  max-width: 720px;
+}
+
+.card {
+  background-color: rgba(17, 24, 39, 0.8);
+  border-radius: 14px;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.label {
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 0.85rem;
+}
+
+.pill--online {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.pill--checking {
+  background: rgba(251, 191, 36, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.pill--error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.json {
+  margin: 0;
+  padding: 1rem;
+  background: rgba(31, 41, 55, 0.9);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #e5e7eb;
+  font-size: 0.95rem;
+  overflow-x: auto;
+}
+
+.muted {
+  margin: 0;
+  color: #9ca3af;
+}
+
+.error {
+  color: #fca5a5;
+  margin: 0.75rem 0 0;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.actions button {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: 1px solid rgba(99, 102, 241, 0.6);
+  color: #f9fafb;
+}
+
+.actions button[disabled] {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
