@@ -1,31 +1,65 @@
-import { createBrowserRouter } from 'react-router-dom'
-import MainLayout from '../layouts/MainLayout'
-import InventoryLayout from '../layouts/InventoryLayout'
-import HelpdeskLayout from '../layouts/HelpdeskLayout'
-import HomePage from '../pages/Home'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
+import AuthLayout from '../layouts/AuthLayout'
+import Login from '../pages/auth/Login'
+import Register from '../pages/auth/Register'
+import Portal from '../pages/Portal'
+import ProtectedRoute from '../components/ProtectedRoute'
 import inventoryRoutes from './inventoryRoutes'
-import helpdeskRoutes from './helpdeskRoutes'
 
 const router = createBrowserRouter([
+  // Root redirect to login
   {
     path: '/',
-    element: <MainLayout />,
+    element: <Navigate to="/auth/login" replace />,
+  },
+
+  // Auth routes (public)
+  {
+    path: '/auth',
+    element: <AuthLayout />,
     children: [
       {
         index: true,
-        element: <HomePage />,
+        element: <Navigate to="/auth/login" replace />,
       },
       {
-        path: 'inventory',
-        element: <InventoryLayout />,
-        children: inventoryRoutes,
+        path: 'login',
+        element: <Login />,
       },
       {
-        path: 'helpdesk',
-        element: <HelpdeskLayout />,
-        children: helpdeskRoutes,
+        path: 'register',
+        element: <Register />,
       },
     ],
+  },
+
+  // Portal selection (protected)
+  {
+    path: '/portal',
+    element: (
+      <ProtectedRoute>
+        <Portal />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Inventory routes (protected)
+  inventoryRoutes,
+
+  // Helpdesk routes (protected) - placeholder for now
+  {
+    path: '/helpdesk',
+    element: (
+      <ProtectedRoute>
+        <Navigate to="/portal" replace />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Catch all - redirect to login
+  {
+    path: '*',
+    element: <Navigate to="/auth/login" replace />,
   },
 ])
 
