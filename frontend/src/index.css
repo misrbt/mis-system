@@ -72,3 +72,171 @@ body {
 .dark-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* Print Styles */
+@media print {
+  /* Hide non-printable elements */
+  .no-print,
+  nav,
+  header,
+  footer,
+  aside,
+  button:not(.print-btn) {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print\:block {
+    display: block !important;
+  }
+
+  /* Reset page styles */
+  @page {
+    margin: 15mm;
+    size: auto;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Ensure full width for main content */
+  main,
+  .space-y-6 {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Summary cards - make them print nicely */
+  .grid {
+    display: grid !important;
+    page-break-inside: avoid;
+    margin-bottom: 20px;
+  }
+
+  /* Format cards for print */
+  .bg-white {
+    background: white !important;
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  /* Table formatting */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+    margin-top: 20px;
+  }
+
+  thead {
+    display: table-header-group;
+    background: #4F46E5 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  th {
+    background: #4F46E5 !important;
+    color: white !important;
+    padding: 8px !important;
+    font-weight: bold !important;
+    border: 1px solid #4F46E5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  tbody tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  tbody tr:nth-child(even) {
+    background: #f9fafb !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  td {
+    padding: 6px 8px !important;
+    border: 1px solid #e5e7eb !important;
+    font-size: 9pt !important;
+  }
+
+  /* Prevent page breaks inside important sections */
+  .summary,
+  .summary-grid {
+    page-break-inside: avoid;
+  }
+
+  /* Currency formatting */
+  .currency {
+    font-family: 'Courier New', monospace;
+  }
+
+  /* Hide overflow */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Ensure text is readable */
+  * {
+    color: black !important;
+    text-shadow: none !important;
+  }
+
+  /* Keep status badges visible */
+  .bg-blue-100 {
+    background: #dbeafe !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .text-blue-800 {
+    color: #1e40af !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Summary card icons and values */
+  .text-blue-600,
+  .text-green-600,
+  .text-indigo-600,
+  .text-amber-600 {
+    color: #4F46E5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .bg-blue-100,
+  .bg-green-100,
+  .bg-indigo-100,
+  .bg-amber-100 {
+    background: #f3f4f6 !important;
+    border: 1px solid #d1d5db !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page numbers */
+  .page-number::after {
+    content: counter(page);
+  }
+
+  /* Prevent widows and orphans */
+  p, h1, h2, h3 {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Headers */
+  h1, h2 {
+    page-break-after: avoid;
+  }
+}

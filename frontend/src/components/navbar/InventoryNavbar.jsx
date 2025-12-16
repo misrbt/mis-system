@@ -17,6 +17,7 @@ import {
   Package,
   Truck,
   UserRound,
+  BarChart3,
 } from 'lucide-react'
 import Logo from '../../assets/logos.png'
 
@@ -59,6 +60,7 @@ function InventoryNavBar({ user, onLogout }) {
     { name: 'Asset Category', icon: Package, path: '/inventory/asset-category' },
     { name: 'IT Asset', icon: Package, path: '/inventory/assets' },
     { name: 'Vendors', icon: Truck, path: '/inventory/vendors' },
+    { name: 'Reports', icon: BarChart3, path: '/inventory/reports' },
   ]
 
   const isActive = (path) => location.pathname.startsWith(path)

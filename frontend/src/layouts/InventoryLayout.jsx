@@ -12,7 +12,7 @@ function InventoryLayout() {
   const isCenteredLayout = centeredPages.includes(location.pathname)
 
   // Pages that use wide layout
-  const widePages = ['/inventory/home', '/inventory/assets']
+  const widePages = ['/inventory/home', '/inventory/assets', '/inventory/reports']
   const isWideLayout = widePages.includes(location.pathname) ||
     location.pathname.startsWith('/inventory/assets/') ||
     location.pathname.match(/\/inventory\/employees\/\d+\/assets/)

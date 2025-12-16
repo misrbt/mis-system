@@ -13,7 +13,6 @@ import {
   Edit,
   Plus,
   Trash2,
-  DollarSign,
   Save,
   X,
   Shield,

@@ -10,6 +10,7 @@ import VendorsPage from '../pages/inventory/VendorsPage'
 import AssetCategoryPage from '../pages/inventory/AssetCategoryPage'
 import AssetsPage from '../pages/inventory/AssetsPage'
 import AssetViewPage from '../pages/inventory/AssetViewPage'
+import ReportsPage from '../pages/inventory/ReportsPage'
 import InventoryLayout from '../layouts/InventoryLayout'
 
 const inventoryRoutes = {
@@ -67,6 +68,10 @@ const inventoryRoutes = {
     {
       path: 'employees/:employeeId/assets',
       element: <AssetViewPage />,
+    },
+    {
+      path: 'reports',
+      element: <ReportsPage />,
     },
   ],
 }

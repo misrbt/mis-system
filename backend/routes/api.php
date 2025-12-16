@@ -10,6 +10,7 @@ use App\Http\Controllers\VendorController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetCategoryController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\ReportController;
 
 // Health check endpoint
 Route::get('/ping', function () {
@@ -77,4 +78,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('assets/bulk-delete', [AssetController::class, 'bulkDelete']);
     Route::patch('assets/{id}/update-field', [AssetController::class, 'updateField']);
     Route::apiResource('assets', AssetController::class);
+
+    // Report routes
+    Route::prefix('reports')->group(function () {
+        Route::get('/assets', [ReportController::class, 'getAssetReport']);
+        Route::post('/assets/export', [ReportController::class, 'exportAssets']);
+    });
 });
