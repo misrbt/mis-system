@@ -2,6 +2,7 @@
   "name": "mis-system",
   "private": true,
   "scripts": {
+    "predev": "npm --prefix frontend install",
     "dev": "concurrently -c \"#22c55e,#3b82f6\" -n \"api,web\" \"cd backend && php artisan serve\" \"cd frontend && npm run dev\""
   },
   "devDependencies": {

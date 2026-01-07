@@ -17,6 +17,9 @@ class ReportController extends Controller
             $query = $this->buildAssetQuery($request);
             $assets = $query->get();
 
+            // Group assets by employee
+            $groupedByEmployee = $this->groupAssetsByEmployee($assets);
+
             // Calculate summary statistics
             $summary = $this->calculateSummary($assets);
 
@@ -24,6 +27,7 @@ class ReportController extends Controller
                 'success' => true,
                 'data' => [
                     'assets' => $assets,
+                    'grouped_by_employee' => $groupedByEmployee,
                     'summary' => $summary,
                 ],
             ], 200);
@@ -109,13 +113,12 @@ class ReportController extends Controller
             $query->where('assigned_to_employee_id', $request->assigned_to_employee_id);
         }
 
-        // Purchase date range filter
-        if ($request->has('purchase_date_from') && $request->purchase_date_from) {
-            $query->where('purchase_date', '>=', $request->purchase_date_from);
-        }
+        $reportDateTo = $request->input('report_date_to', $request->input('purchase_date_to'));
 
-        if ($request->has('purchase_date_to') && $request->purchase_date_to) {
-            $query->where('purchase_date', '<=', $request->purchase_date_to);
+        // Report snapshot: Show all assets that existed as of the end date
+        // Only filter by purchase date <= end date (asset must have been acquired by then)
+        if ($reportDateTo) {
+            $query->whereDate('purchase_date', '<=', $reportDateTo);
         }
 
         // Search filter
@@ -130,11 +133,54 @@ class ReportController extends Controller
         }
 
         // Sorting
-        $sortBy = $request->get('sort_by', 'purchase_date');
+        $sortBy = $request->get('sort_by', 'updated_at');
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
         return $query;
+    }
+
+    /**
+     * Group assets by employee with totals.
+     */
+    private function groupAssetsByEmployee($assets)
+    {
+        $grouped = $assets->groupBy('assigned_to_employee_id')->map(function ($employeeAssets, $employeeId) {
+            $employee = $employeeAssets->first()->assignedEmployee;
+            $totalAcquisitionCost = $employeeAssets->sum('acq_cost') ?? 0;
+
+            return [
+                'employee_id' => $employeeId,
+                'employee' => $employee ? [
+                    'id' => $employee->id,
+                    'fullname' => $employee->fullname,
+                    'employee_id' => $employee->employee_id,
+                    'branch' => $employee->branch ? [
+                        'id' => $employee->branch->id,
+                        'branch_name' => $employee->branch->branch_name,
+                    ] : null,
+                    'position' => $employee->position ? [
+                        'id' => $employee->position->id,
+                        'title' => $employee->position->title,
+                    ] : null,
+                    'department' => $employee->department ? [
+                        'id' => $employee->department->id,
+                        'dept_name' => $employee->department->dept_name,
+                    ] : null,
+                ] : null,
+                'assets' => $employeeAssets->values(),
+                'total_assets' => $employeeAssets->count(),
+                'total_acquisition_cost' => round($totalAcquisitionCost, 2),
+            ];
+        });
+
+        // Sort: Unassigned first, then by employee name
+        return $grouped->sortBy(function ($group) {
+            if ($group['employee_id'] === null) {
+                return '0'; // Unassigned first
+            }
+            return '1' . ($group['employee']['fullname'] ?? '');
+        })->values();
     }
 
     /**
@@ -198,12 +244,15 @@ class ReportController extends Controller
     {
         $filters = [];
 
-        if ($request->has('purchase_date_from') && $request->purchase_date_from) {
-            $filters[] = 'From: ' . date('M d, Y', strtotime($request->purchase_date_from));
+        $reportDateFrom = $request->input('report_date_from', $request->input('purchase_date_from'));
+        $reportDateTo = $request->input('report_date_to', $request->input('purchase_date_to'));
+
+        if ($reportDateFrom) {
+            $filters[] = 'Report Date From: ' . date('M d, Y', strtotime($reportDateFrom));
         }
 
-        if ($request->has('purchase_date_to') && $request->purchase_date_to) {
-            $filters[] = 'To: ' . date('M d, Y', strtotime($request->purchase_date_to));
+        if ($reportDateTo) {
+            $filters[] = 'Report Date To: ' . date('M d, Y', strtotime($reportDateTo));
         }
 
         if ($request->has('branch_id') && $request->branch_id) {
@@ -246,8 +295,12 @@ class ReportController extends Controller
      */
     private function exportToPDF($assets, $summary, $filtersDisplay)
     {
+        // Group assets by employee for the PDF
+        $groupedByEmployee = $this->groupAssetsByEmployee($assets);
+
         $pdf = PDF::loadView('exports.assets-pdf', [
             'assets' => $assets,
+            'groupedByEmployee' => $groupedByEmployee,
             'summary' => $summary,
             'filters' => $filtersDisplay,
         ])->setPaper('a4', 'landscape');

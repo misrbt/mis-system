@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class Asset extends Model
 {
@@ -26,6 +27,8 @@ class Asset extends Model
         'status_id',
         'remarks',
         'assigned_to_employee_id',
+        'qr_code',
+        'barcode',
     ];
 
     protected $casts = [
@@ -56,6 +59,67 @@ class Asset extends Model
         return $this->belongsTo(Employee::class, 'assigned_to_employee_id');
     }
 
+    public function repairs()
+    {
+        return $this->hasMany(Repair::class);
+    }
+
+    public function activeRepairs()
+    {
+        return $this->repairs()
+            ->whereIn('status', ['Pending', 'In Repair', 'Completed']);
+    }
+
+    /**
+     * Asset Movement Relationships
+     */
+    public function movements()
+    {
+        return $this->hasMany(AssetMovement::class)->orderBy('movement_date', 'desc');
+    }
+
+    public function latestMovement()
+    {
+        return $this->hasOne(AssetMovement::class)->latestOfMany('movement_date');
+    }
+
+    /**
+     * Movement Statistics Helpers
+     */
+    public function getAssignmentCount()
+    {
+        return $this->movements()->whereIn('movement_type', ['assigned', 'transferred'])->count();
+    }
+
+    public function getRepairCount()
+    {
+        return $this->movements()->where('movement_type', 'repair_initiated')->count();
+    }
+
+    public function getStatusChangeCount()
+    {
+        return $this->movements()->where('movement_type', 'status_changed')->count();
+    }
+
+    public function getCurrentAssignmentDuration()
+    {
+        if (!$this->assigned_to_employee_id) {
+            return null;
+        }
+
+        $lastAssignment = $this->movements()
+            ->whereIn('movement_type', ['assigned', 'transferred'])
+            ->where('to_employee_id', $this->assigned_to_employee_id)
+            ->latest('movement_date')
+            ->first();
+
+        if (!$lastAssignment) {
+            return null;
+        }
+
+        return now()->diffInDays($lastAssignment->movement_date);
+    }
+
     /**
      * Calculate the current book value using straight-line depreciation
      * Formula: Book Value = max(1, Amount Purchased - (Daily Depreciation × Days Since Purchase))
@@ -65,10 +129,17 @@ class Asset extends Model
     {
         // Return null if required fields are missing
         if (!$this->purchase_date || !$this->estimate_life || !$this->acq_cost) {
+            $purchaseDateString = $this->purchase_date
+                ? \Carbon\Carbon::parse($this->purchase_date)->toDateString()
+                : null;
+            $asOfDateString = $asOfDate
+                ? \Carbon\Carbon::parse($asOfDate)->toDateString()
+                : now()->toDateString();
+
             return [
                 'book_value' => $this->acq_cost ?? 0,
-                'purchase_date' => $this->purchase_date?->toDateString(),
-                'as_of_date' => now()->toDateString(),
+                'purchase_date' => $purchaseDateString,
+                'as_of_date' => $asOfDateString,
                 'life_years' => $this->estimate_life ?? 0,
                 'amount_purchased' => $this->acq_cost ?? 0,
                 'days_elapsed' => 0,
@@ -111,7 +182,33 @@ class Asset extends Model
     }
 
     /**
-     * Update the book value in the database
+     * Automatic real-time book value calculation accessor
+     * Whenever you access $asset->book_value, it calculates the current depreciated value
+     * NO SCHEDULER NEEDED - Always shows exact current value
+     */
+    protected function bookValue(): Attribute
+    {
+        return Attribute::make(
+            get: function ($value) {
+                // If required fields are missing, return stored value or acquisition cost
+                if (!$this->purchase_date || !$this->estimate_life || !$this->acq_cost) {
+                    return $value ?? $this->acq_cost ?? 0;
+                }
+
+                // Calculate real-time depreciated book value
+                $purchaseDate = \Carbon\Carbon::parse($this->purchase_date);
+                $daysElapsed = $purchaseDate->startOfDay()->diffInDays(now()->startOfDay());
+                $totalLifeDays = $this->estimate_life * 365;
+                $dailyDepreciation = $this->acq_cost / $totalLifeDays;
+                $bookValue = max(1, $this->acq_cost - ($dailyDepreciation * $daysElapsed));
+
+                return round($bookValue, 2);
+            }
+        );
+    }
+
+    /**
+     * Update the book value in the database (optional - for manual updates)
      */
     public function updateBookValue()
     {
@@ -169,5 +266,89 @@ class Asset extends Model
     public function getDepreciationInfoAttribute()
     {
         return $this->calculateBookValue();
+    }
+
+    /**
+     * Generate QR code for this asset
+     * Returns base64 encoded SVG image
+     */
+    public function generateQRCode()
+    {
+        $purchaseDate = $this->purchase_date
+            ? \Carbon\Carbon::parse($this->purchase_date)->toDateString()
+            : 'N/A';
+        $warrantyDate = $this->waranty_expiration_date
+            ? \Carbon\Carbon::parse($this->waranty_expiration_date)->toDateString()
+            : 'N/A';
+        $vendorName = $this->vendor?->company_name ?? 'N/A';
+        $statusName = $this->status?->name ?? 'N/A';
+        $assignedTo = $this->assignedEmployee?->fullname ?? 'Unassigned';
+        $branchName = $this->assignedEmployee?->branch?->branch_name ?? 'N/A';
+        $acqCost = !is_null($this->acq_cost) ? number_format($this->acq_cost, 2) : 'N/A';
+        $bookValue = !is_null($this->book_value) ? number_format($this->book_value, 2) : 'N/A';
+
+        // Professional text payload for QR code (multi-line key/value pairs)
+        $qrData = implode("\n", [
+            'Equipment ID: ' . ($this->category?->code ?? 'N/A'),
+            'Asset Name: ' . ($this->asset_name ?? 'N/A'),
+            'Category: ' . ($this->category?->name ?? 'N/A'),
+            'Serial Number: ' . ($this->serial_number ?? 'N/A'),
+            'Brand: ' . ($this->brand ?? 'N/A'),
+            'Model: ' . ($this->model ?? 'N/A'),
+            'Purchase Date: ' . $purchaseDate,
+            'Warranty Expiration: ' . $warrantyDate,
+            'Vendor: ' . $vendorName,
+            'Status: ' . $statusName,
+            'Assigned To: ' . $assignedTo,
+            'Branch: ' . $branchName,
+            'Acquisition Cost: ' . $acqCost,
+            'Book Value: ' . $bookValue,
+        ]);
+
+        // Use SVG format to avoid image library dependencies
+        $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')
+            // Larger base size + margin + highest error correction to keep codes scannable even when printed small
+            ->size(600)
+            ->margin(2)
+            ->errorCorrection('H')
+            ->generate($qrData);
+
+        return 'data:image/svg+xml;base64,' . base64_encode($qrCode);
+    }
+
+    /**
+     * Generate and save QR code for this asset
+     */
+    public function generateAndSaveQRCode()
+    {
+        $this->qr_code = $this->generateQRCode();
+        $this->save();
+        return $this->qr_code;
+    }
+
+    /**
+     * Generate barcode for this asset
+     * Returns base64 encoded SVG image
+     */
+    public function generateBarcode()
+    {
+        // Use asset ID as barcode value (simpler than QR code)
+        $barcodeValue = str_pad($this->id, 8, '0', STR_PAD_LEFT);
+
+        // Generate CODE128 barcode as SVG
+        $generator = new \Picqer\Barcode\BarcodeGeneratorSVG();
+        $barcodeSvg = $generator->getBarcode($barcodeValue, $generator::TYPE_CODE_128, 3, 80);
+
+        return 'data:image/svg+xml;base64,' . base64_encode($barcodeSvg);
+    }
+
+    /**
+     * Generate and save barcode for this asset
+     */
+    public function generateAndSaveBarcode()
+    {
+        $this->barcode = $this->generateBarcode();
+        $this->save();
+        return $this->barcode;
     }
 }

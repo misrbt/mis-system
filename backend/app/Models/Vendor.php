@@ -21,4 +21,9 @@ class Vendor extends Model
     {
         return $this->hasMany(Asset::class);
     }
+
+    public function repairs()
+    {
+        return $this->hasMany(Repair::class);
+    }
 }

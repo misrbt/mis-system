@@ -17,6 +17,7 @@ function StatusPage() {
   // Form state
   const [formData, setFormData] = useState({
     name: '',
+    color: '#3B82F6',
   })
 
   // Fetch statuses
@@ -48,7 +49,7 @@ function StatusPage() {
   }
 
   const openAddModal = () => {
-    setFormData({ name: '' })
+    setFormData({ name: '', color: '#3B82F6' })
     setIsAddModalOpen(true)
   }
 
@@ -56,6 +57,7 @@ function StatusPage() {
     setSelectedStatus(status)
     setFormData({
       name: status.name,
+      color: status.color || '#3B82F6',
     })
     setIsEditModalOpen(true)
   }, [])
@@ -146,7 +148,26 @@ function StatusPage() {
         accessorKey: 'name',
         header: 'Status Name',
         cell: (info) => (
-          <div className="text-sm font-semibold text-slate-900">{info.getValue()}</div>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
+              style={{ backgroundColor: info.row.original.color || '#3B82F6' }}
+            />
+            <div className="text-sm font-semibold text-slate-900">{info.getValue()}</div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'color',
+        header: 'Color',
+        cell: (info) => (
+          <div className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-lg border-2 border-slate-200 shadow-sm"
+              style={{ backgroundColor: info.getValue() || '#3B82F6' }}
+            />
+            <span className="text-xs font-mono text-slate-600">{info.getValue() || '#3B82F6'}</span>
+          </div>
         ),
       },
       {
@@ -226,6 +247,31 @@ function StatusPage() {
             </div>
           </div>
 
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Status Color</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                name="color"
+                value={formData.color}
+                onChange={handleInputChange}
+                className="h-10 w-20 rounded-lg border border-slate-300 cursor-pointer"
+              />
+              <input
+                type="text"
+                value={formData.color}
+                onChange={(e) => setFormData((prev) => ({ ...prev, color: e.target.value }))}
+                className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono text-sm"
+                placeholder="#3B82F6"
+                pattern="^#[0-9A-Fa-f]{6}$"
+              />
+              <div
+                className="h-10 w-10 rounded-lg border-2 border-slate-300 shadow-sm"
+                style={{ backgroundColor: formData.color }}
+              />
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
             <button
               type="button"
@@ -268,6 +314,31 @@ function StatusPage() {
                 required
                 className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="Enter status name"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Status Color</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                name="color"
+                value={formData.color}
+                onChange={handleInputChange}
+                className="h-10 w-20 rounded-lg border border-slate-300 cursor-pointer"
+              />
+              <input
+                type="text"
+                value={formData.color}
+                onChange={(e) => setFormData((prev) => ({ ...prev, color: e.target.value }))}
+                className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono text-sm"
+                placeholder="#3B82F6"
+                pattern="^#[0-9A-Fa-f]{6}$"
+              />
+              <div
+                className="h-10 w-10 rounded-lg border-2 border-slate-300 shadow-sm"
+                style={{ backgroundColor: formData.color }}
               />
             </div>
           </div>

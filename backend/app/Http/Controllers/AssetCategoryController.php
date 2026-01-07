@@ -47,7 +47,11 @@ class AssetCategoryController extends Controller
         }
 
         try {
-            $category = AssetCategory::create($request->all());
+            $code = $this->generateCode($request->name);
+            $category = AssetCategory::create([
+                'name' => $request->name,
+                'code' => $code,
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -103,7 +107,11 @@ class AssetCategoryController extends Controller
 
         try {
             $category = AssetCategory::findOrFail($id);
-            $category->update($request->all());
+            // Preserve existing code; if missing, generate a new one based on the current name.
+            $category->update([
+                'name' => $request->name,
+                'code' => $category->code ?: $this->generateCode($request->name, (int) $id),
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -148,5 +156,45 @@ class AssetCategoryController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Generate a unique category code based on the category name.
+     */
+    private function generateCode(string $name, ?int $ignoreId = null): string
+    {
+        $cleaned = trim($name);
+        $initials = '';
+
+        if ($cleaned !== '') {
+            $words = preg_split('/\s+/', $cleaned);
+            foreach ($words as $word) {
+                $initials .= mb_substr($word, 0, 1);
+            }
+        }
+
+        $prefix = strtoupper($initials !== '' ? $initials : 'CAT');
+        $prefix = mb_substr($prefix, 0, 4);
+
+        $query = AssetCategory::where('code', 'like', $prefix . '-%');
+        if ($ignoreId) {
+            $query->where('id', '!=', $ignoreId);
+        }
+
+        $existingCodes = $query->pluck('code');
+        $maxNumber = 0;
+
+        foreach ($existingCodes as $code) {
+            if (preg_match('/-(\d+)$/', $code, $matches)) {
+                $num = (int) $matches[1];
+                if ($num > $maxNumber) {
+                    $maxNumber = $num;
+                }
+            }
+        }
+
+        $nextNumber = $maxNumber + 1;
+
+        return sprintf('%s-%03d', $prefix, $nextNumber);
     }
 }

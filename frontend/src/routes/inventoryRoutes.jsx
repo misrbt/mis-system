@@ -10,7 +10,10 @@ import VendorsPage from '../pages/inventory/VendorsPage'
 import AssetCategoryPage from '../pages/inventory/AssetCategoryPage'
 import AssetsPage from '../pages/inventory/AssetsPage'
 import AssetViewPage from '../pages/inventory/AssetViewPage'
+import RepairsPage from '../pages/inventory/RepairsPage'
 import ReportsPage from '../pages/inventory/ReportsPage'
+import AuditLogsPage from '../pages/inventory/AuditLogsPage'
+import MonthlyExpensesPage from '../pages/inventory/MonthlyExpensesPage'
 import InventoryLayout from '../layouts/InventoryLayout'
 
 const inventoryRoutes = {
@@ -58,6 +61,10 @@ const inventoryRoutes = {
       element: <VendorsPage />,
     },
     {
+      path: 'repairs',
+      element: <RepairsPage />,
+    },
+    {
       path: 'assets',
       element: <AssetsPage />,
     },
@@ -72,6 +79,14 @@ const inventoryRoutes = {
     {
       path: 'reports',
       element: <ReportsPage />,
+    },
+    {
+      path: 'audit-logs',
+      element: <AuditLogsPage />,
+    },
+    {
+      path: 'monthly-expenses',
+      element: <MonthlyExpensesPage />,
     },
   ],
 }

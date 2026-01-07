@@ -92,8 +92,8 @@ body {
 
   /* Reset page styles */
   @page {
+    size: legal landscape;
     margin: 15mm;
-    size: auto;
   }
 
   body {
@@ -132,6 +132,7 @@ body {
     border-collapse: collapse !important;
     page-break-inside: auto;
     margin-top: 20px;
+    font-size: 7pt !important;
   }
 
   thead {
@@ -145,9 +146,10 @@ body {
   th {
     background: #4F46E5 !important;
     color: white !important;
-    padding: 8px !important;
+    padding: 6px 4px !important;
     font-weight: bold !important;
     border: 1px solid #4F46E5 !important;
+    font-size: 7pt !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -164,9 +166,23 @@ body {
   }
 
   td {
-    padding: 6px 8px !important;
+    padding: 4px 3px !important;
     border: 1px solid #e5e7eb !important;
-    font-size: 9pt !important;
+    font-size: 7pt !important;
+    border-right: 1px solid #cbd5e1 !important;
+  }
+
+  /* Highlight employee group separators */
+  .border-b-2 {
+    border-bottom: 2px solid #818cf8 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .border-indigo-200 {
+    border-bottom-color: #c7d2fe !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   /* Prevent page breaks inside important sections */
@@ -238,5 +254,55 @@ body {
   /* Headers */
   h1, h2 {
     page-break-after: avoid;
+  }
+
+  /* Grand Total Section - Print Styles */
+  .border-emerald-500 {
+    border-color: #10b981 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .from-emerald-600,
+  .to-green-600,
+  .bg-gradient-to-r {
+    background: #059669 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .from-blue-500,
+  .to-indigo-600,
+  .from-emerald-500,
+  .bg-gradient-to-br {
+    background: #4F46E5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .border-emerald-200 {
+    border-color: #a7f3d0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .text-emerald-600 {
+    color: #059669 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .from-slate-50,
+  .to-emerald-50 {
+    background: #f9fafb !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Ensure Grand Total section doesn't break across pages */
+  .rounded-xl.shadow-xl {
+    page-break-inside: avoid;
+    margin-top: 20px;
+    margin-bottom: 20px;
   }
 }

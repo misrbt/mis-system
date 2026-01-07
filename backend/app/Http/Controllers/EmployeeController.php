@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Employee;
+use App\Models\AssetMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class EmployeeController extends Controller
 {
@@ -156,6 +158,136 @@ class EmployeeController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete employee',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get asset movement history for a specific employee
+     * Returns only movements where this employee was directly involved
+     */
+    public function getAssetHistory($id, Request $request)
+    {
+        try {
+            $employee = Employee::findOrFail($id);
+
+            // Fetch only movements where this employee was directly involved
+            // This includes:
+            // 1. Assets assigned TO this employee (to_employee_id)
+            // 2. Assets transferred FROM this employee (from_employee_id)
+            // 3. Movements for assets currently assigned to this employee
+            $query = AssetMovement::with([
+                'asset.category',
+                'asset.status',
+                'asset.vendor',
+                'fromEmployee.branch',
+                'fromEmployee.position',
+                'toEmployee.branch',
+                'toEmployee.position',
+                'fromStatus',
+                'toStatus',
+                'fromBranch',
+                'toBranch',
+                'repair.vendor',
+                'performedBy',
+            ])
+            ->where(function ($query) use ($id) {
+                $query->where('to_employee_id', $id)
+                      ->orWhere('from_employee_id', $id)
+                      ->orWhereHas('asset', function ($q) use ($id) {
+                          $q->where('assigned_to_employee_id', $id);
+                      });
+            });
+
+            // Apply filters
+            if ($request->has('movement_type') && $request->movement_type) {
+                $types = is_array($request->movement_type) ? $request->movement_type : [$request->movement_type];
+                $query->whereIn('movement_type', $types);
+            }
+
+            if ($request->has('date_from') && $request->date_from) {
+                $query->whereDate('movement_date', '>=', $request->date_from);
+            }
+
+            if ($request->has('date_to') && $request->date_to) {
+                $query->whereDate('movement_date', '<=', $request->date_to);
+            }
+
+            if ($request->has('asset_id') && $request->asset_id) {
+                $query->where('asset_id', $request->asset_id);
+            }
+
+            // Sorting
+            $sortBy = $request->get('sort_by', 'movement_date');
+            $sortOrder = $request->get('sort_order', 'desc');
+            $query->orderBy($sortBy, $sortOrder);
+
+            if ($sortBy !== 'created_at') {
+                $query->orderBy('created_at', 'desc');
+            }
+
+            // Pagination
+            $perPage = $request->get('per_page', 50);
+            $movements = $query->paginate($perPage);
+
+            // Enhance each movement with description, icon, and color
+            $movements->getCollection()->transform(function ($movement) {
+                return array_merge($movement->toArray(), [
+                    'description' => $movement->getMovementDescription(),
+                    'icon' => $movement->getIconClass(),
+                    'color' => $movement->getColorClass(),
+                ]);
+            });
+
+            // Get statistics for movements involving this employee
+            $statsQuery = AssetMovement::where(function ($q) use ($id) {
+                $q->where('to_employee_id', $id)
+                  ->orWhere('from_employee_id', $id)
+                  ->orWhereHas('asset', function ($query) use ($id) {
+                      $query->where('assigned_to_employee_id', $id);
+                  });
+            });
+
+            // Get unique asset IDs from the movements
+            $uniqueAssetIds = (clone $statsQuery)->distinct()->pluck('asset_id')->toArray();
+
+            // Get currently assigned assets count
+            $currentlyAssignedCount = DB::table('assets')
+                ->where('assigned_to_employee_id', $id)
+                ->count();
+
+            $stats = [
+                'total_movements' => (clone $statsQuery)->count(),
+                'total_assets' => count($uniqueAssetIds),
+                'currently_assigned' => $currentlyAssignedCount,
+                'by_type' => (clone $statsQuery)
+                    ->select('movement_type', DB::raw('count(*) as count'))
+                    ->groupBy('movement_type')
+                    ->pluck('count', 'movement_type'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $movements->items(),
+                'meta' => [
+                    'total' => $movements->total(),
+                    'per_page' => $movements->perPage(),
+                    'current_page' => $movements->currentPage(),
+                    'last_page' => $movements->lastPage(),
+                ],
+                'statistics' => $stats,
+                'employee' => [
+                    'id' => $employee->id,
+                    'name' => $employee->fullname,
+                    'position' => $employee->position?->position_name,
+                    'branch' => $employee->branch?->branch_name,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch employee asset history',
                 'error' => $e->getMessage(),
             ], 500);
         }

@@ -1,322 +1,342 @@
-import { useState } from 'react'
+import React, { useState, lazy, Suspense } from 'react'
 import {
-  Monitor,
-  Laptop,
-  Printer,
-  HardDrive,
   Package,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle,
+  Wrench,
+  Clock,
   Building2,
-  Search,
-  Download,
+  TrendingUp,
 } from 'lucide-react'
 
+// Custom Hooks (data fetching)
+import { useAllDashboardData } from '../../hooks/useDashboardData'
+
+// Utility Functions
+import {
+  calculateKPIMetrics,
+  STATUS_COLOR_MAP,
+  formatCompactNumber,
+} from '../../utils/dashboardUtils'
+
+// UI Components
+import DashboardCard from '../../components/dashboard/DashboardCard'
+import { SkeletonCard, SkeletonChart, SkeletonTable } from '../../components/dashboard/SkeletonLoader'
+
+// Lazy load heavy chart components for better performance
+const MonthlyExpensesChart = lazy(() =>
+  import('../../components/dashboard/Charts').then((mod) => ({ default: mod.MonthlyExpensesChart }))
+)
+const YearlyComparisonChart = lazy(() =>
+  import('../../components/dashboard/Charts').then((mod) => ({ default: mod.YearlyComparisonChart }))
+)
+
+// Branch Analytics Charts
+const BranchComparisonChart = lazy(() =>
+  import('../../components/dashboard/BranchCharts').then((mod) => ({ default: mod.BranchComparisonChart }))
+)
+const BranchExpenseTrendsChart = lazy(() =>
+  import('../../components/dashboard/BranchCharts').then((mod) => ({ default: mod.BranchExpenseTrendsChart }))
+)
+const BranchStatusBreakdownChart = lazy(() =>
+  import('../../components/dashboard/BranchCharts').then((mod) => ({ default: mod.BranchStatusBreakdownChart }))
+)
+const BranchContributionBars = lazy(() =>
+  import('../../components/dashboard/BranchCharts').then((mod) => ({ default: mod.BranchContributionBars }))
+)
+
+/**
+ * Main Dashboard Component
+ * Clean architecture with separation of concerns
+ */
 function InventoryHome() {
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [selectedBranch, setSelectedBranch] = useState('all')
-  const [selectedStatus, setSelectedStatus] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
+  // State Management
+  const [selectedBranchesForTrend, setSelectedBranchesForTrend] = useState(null) // null = all branches
+  const [showBranchSection, setShowBranchSection] = useState(true)
 
-  // Dashboard stats
-  const stats = [
+  // Data Fetching with Custom Hook
+  const {
+    statistics,
+    currentMonthExpenses,
+    monthlyExpenses,
+    yearlyExpenses,
+    branchStatistics,
+    isLoading,
+  } = useAllDashboardData()
+
+  // Extract Data
+  const statsData = statistics.data
+  const monthlyExpensesData = monthlyExpenses.data || []
+  const yearlyExpensesData = yearlyExpenses.data || []
+  const currentMonthTotal = currentMonthExpenses.data?.total_expenses || 0
+
+  // Branch Statistics Data
+  const branchStats = branchStatistics.data || {}
+  const branchSummary = branchStats.summary || []
+  const branchMonthlyTrends = branchStats.monthly_trends || []
+  const branchStatusBreakdown = branchStats.status_breakdown || []
+
+  // Calculate KPI Metrics
+  const kpiMetrics = calculateKPIMetrics(statsData, currentMonthTotal)
+
+  // KPI Cards Configuration
+  const kpiCards = [
     {
-      label: 'Total Equipment',
-      value: '1,234',
-      change: '+12%',
-      changeType: 'increase',
+      label: 'Total Assets',
+      value: kpiMetrics.totalAssets.toLocaleString(),
+      trend: null,
+      trendUp: null,
       icon: Package,
-      color: 'from-blue-500 to-blue-600',
+      color: 'blue',
     },
     {
-      label: 'Active Devices',
-      value: '987',
-      change: '+8%',
-      changeType: 'increase',
-      icon: Monitor,
-      color: 'from-emerald-500 to-emerald-600',
-      iconColor: 'text-emerald-50',
+      label: "This Month's Expenses",
+      value: formatCompactNumber(kpiMetrics.currentMonthExpenses),
+      trend: `${new Date().toLocaleString('default', { month: 'short' })} ${new Date().getFullYear()}`,
+      trendUp: null,
+      icon: TrendingUp,
+      color: 'indigo',
+      isMonetary: true,
     },
     {
-      label: 'Under Maintenance',
-      value: '45',
-      change: '-5%',
-      changeType: 'decrease',
-      icon: AlertTriangle,
-      color: 'from-amber-500 to-amber-600',
+      label: 'Under Repair',
+      value: kpiMetrics.underRepair.toLocaleString(),
+      trend: 'Needs attention',
+      trendUp: null,
+      icon: Wrench,
+      color: 'amber',
     },
     {
-      label: 'Available',
-      value: '202',
-      change: '+15%',
-      changeType: 'increase',
-      icon: CheckCircle,
-      color: 'from-purple-500 to-purple-600',
+      label: 'Due for Maintenance',
+      value: kpiMetrics.dueForMaintenance.toLocaleString(),
+      trend: 'Warranty expiring',
+      trendUp: null,
+      icon: Clock,
+      color: 'orange',
     },
   ]
 
-  // Equipment categories
-  const categories = [
-    { name: 'Computers', count: 450, icon: Monitor, color: 'bg-blue-500' },
-    { name: 'Laptops', count: 320, icon: Laptop, color: 'bg-emerald-500' },
-    { name: 'Printers', count: 85, icon: Printer, color: 'bg-amber-500' },
-    { name: 'Storage', count: 156, icon: HardDrive, color: 'bg-purple-500' },
-  ]
-
-  // Recent activities
-  const recentActivities = [
-    { action: 'New laptop added', item: 'Dell XPS 15', time: '2 hours ago', type: 'add' },
-    { action: 'Equipment assigned', item: 'HP Monitor #234', time: '4 hours ago', type: 'assign' },
-    { action: 'Maintenance completed', item: 'Printer #089', time: '6 hours ago', type: 'maintenance' },
-    { action: 'Equipment returned', item: 'Lenovo ThinkPad', time: '8 hours ago', type: 'return' },
-  ]
-
-  // Sample inventory data
-  const inventoryData = [
-    { id: 1, name: 'Dell XPS 15 Laptop', serial: 'DXP-2024-001', category: 'Laptop', branch: 'Main Office', status: 'Active', assignedTo: 'John Doe' },
-    { id: 2, name: 'HP Monitor 27"', serial: 'HPM-2024-234', category: 'Monitor', branch: 'Jasaan Branch', status: 'Active', assignedTo: 'Jane Smith' },
-    { id: 3, name: 'Canon Printer LBP', serial: 'CNP-2024-089', category: 'Printer', branch: 'Salay Branch', status: 'For Repair', assignedTo: '-' },
-    { id: 4, name: 'Lenovo ThinkPad', serial: 'LTP-2024-156', category: 'Laptop', branch: 'CDO Branch', status: 'Active', assignedTo: 'Mike Johnson' },
-    { id: 5, name: 'Seagate HDD 2TB', serial: 'SHD-2024-445', category: 'Storage', branch: 'Main Office', status: 'Available', assignedTo: '-' },
-  ]
-
-  // Branch data
-  const branchData = [
-    { name: 'Main Office', count: 450, percentage: 36 },
-    { name: 'Jasaan Branch', count: 320, percentage: 26 },
-    { name: 'Salay Branch', count: 250, percentage: 20 },
-    { name: 'CDO Branch', count: 214, percentage: 18 },
-  ]
+  // Loading State
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6">
+        <div className="max-w-[1600px] mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[...Array(7)].map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SkeletonChart />
+            <SkeletonChart />
+            <SkeletonTable />
+            <SkeletonTable />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="sm:px-[4.75rem]">
-      {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-800">IT Inventory Dashboard</h1>
-        <p className="text-slate-500 mt-1">Monitor and manage all IT assets across branches</p>
-      </div>
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-[1600px] mx-auto p-6">
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">
+              IT Asset Inventory Dashboard
+            </h1>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon
-          return (
-            <div
-              key={index}
-              className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-                  <p className="text-3xl font-bold text-slate-800 mt-2">{stat.value}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp
-                      className={`w-4 h-4 ${
-                        stat.changeType === 'increase' ? 'text-emerald-500' : 'text-red-500'
-                      }`}
-                    />
-                    <span
-                      className={`text-sm font-medium ${
-                        stat.changeType === 'increase' ? 'text-emerald-500' : 'text-red-500'
-                      }`}
-                    >
-                      {stat.change}
-                    </span>
-                    <span className="text-sm text-slate-400">from last month</span>
-                  </div>
-                </div>
-                <div className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center shadow-lg`}>
-                  <Icon className={`w-6 h-6 ${stat.iconColor || 'text-white'}`} />
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Filters Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-          <div className="flex-1 w-full lg:w-auto">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search inventory by name, serial number..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+            <p className="text-slate-600">
+              Real-time overview of your asset management system
+            </p>
           </div>
-          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Categories</option>
-              <option value="laptop">Laptops</option>
-              <option value="monitor">Monitors</option>
-              <option value="printer">Printers</option>
-              <option value="storage">Storage</option>
-            </select>
-            <select
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Branches</option>
-              <option value="main">Main Office</option>
-              <option value="jasaan">Jasaan Branch</option>
-              <option value="salay">Salay Branch</option>
-              <option value="cdo">CDO Branch</option>
-            </select>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="available">Available</option>
-              <option value="repair">For Repair</option>
-              <option value="retired">Retired</option>
-            </select>
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors">
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* Inventory Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-8 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-800">Recent Inventory</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Item Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Serial No.</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Category</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Branch</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assigned To</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {inventoryData.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-slate-800">{item.name}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 font-mono">{item.serial}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{item.category}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{item.branch}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                      item.status === 'Active' ? 'bg-green-100 text-green-700' :
-                      item.status === 'Available' ? 'bg-blue-100 text-blue-700' :
-                      item.status === 'For Repair' ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{item.assignedTo}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Branch Overview Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
-        <h2 className="text-lg font-semibold text-slate-800 mb-6">Branch Inventory Overview</h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {branchData.map((branch, index) => (
-            <div key={index} className="p-4 bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-xl border border-slate-200">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-slate-800">{branch.name}</h3>
-                  <p className="text-2xl font-bold text-blue-600 mt-1">{branch.count}</p>
-                </div>
-                <Building2 className="w-8 h-8 text-blue-500/30" />
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-2">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${branch.percentage}%` }}
-                ></div>
-              </div>
-              <p className="text-xs text-slate-500 mt-2">{branch.percentage}% of total inventory</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Two Column Layout */}
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Equipment Categories */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Equipment Categories</h2>
-          <div className="space-y-4">
-            {categories.map((category, index) => {
-              const Icon = category.icon
-              const percentage = Math.round((category.count / 1234) * 100)
-              return (
-                <div key={index} className="flex items-center gap-4">
-                  <div className={`w-10 h-10 ${category.color} rounded-lg flex items-center justify-center`}>
-                    <Icon className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-slate-700">{category.name}</span>
-                      <span className="text-sm text-slate-500">{category.count} items</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div
-                        className={`${category.color} h-2 rounded-full transition-all duration-500`}
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Recent Activity</h2>
-          <div className="space-y-4">
-            {recentActivities.map((activity, index) => (
-              <div key={index} className="flex items-start gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    activity.type === 'add'
-                      ? 'bg-emerald-500'
-                      : activity.type === 'assign'
-                      ? 'bg-blue-500'
-                      : activity.type === 'maintenance'
-                      ? 'bg-amber-500'
-                      : 'bg-purple-500'
-                  }`}
-                ></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-700">{activity.action}</p>
-                  <p className="text-sm text-slate-500">{activity.item}</p>
-                </div>
-                <span className="text-xs text-slate-400">{activity.time}</span>
-              </div>
+          {/* KPI Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {kpiCards.map((card, index) => (
+              <DashboardCard key={index} {...card} />
             ))}
           </div>
         </div>
+
+        {/* Financial Charts */}
+        <Suspense fallback={<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"><SkeletonChart /><SkeletonChart /></div>}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Monthly Expenses */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Monthly Expenses
+                </h3>
+                <span className="text-xs text-slate-500">
+                  Year {new Date().getFullYear()}
+                </span>
+              </div>
+              <MonthlyExpensesChart data={monthlyExpensesData} />
+
+              {/* Summary Cards */}
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {monthlyExpensesData.slice(-3).map((monthData) => (
+                  <div
+                    key={monthData.month_key}
+                    className="bg-slate-50 rounded-lg p-3 border border-slate-200"
+                  >
+                    <p className="text-xs font-semibold text-slate-600 mb-1">
+                      {monthData.month}
+                    </p>
+                    <p className="text-lg font-bold text-slate-900">
+                      ₱{(parseFloat(monthData.total_cost) / 1000).toFixed(0)}k
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span className="text-xs text-slate-500">
+                          ₱{(parseFloat(monthData.acquisition_cost) / 1000).toFixed(0)}k
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span className="text-xs text-slate-500">
+                          ₱{(parseFloat(monthData.repair_cost) / 1000).toFixed(0)}k
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Yearly Comparison */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                Yearly Expenses Comparison
+              </h3>
+              <YearlyComparisonChart data={yearlyExpensesData} />
+
+              {/* Yearly Summary */}
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {yearlyExpensesData.map((yearData) => (
+                  <div
+                    key={yearData.year}
+                    className="bg-slate-50 rounded-lg p-3 border border-slate-200"
+                  >
+                    <p className="text-xs font-semibold text-slate-600 mb-1">
+                      {yearData.year}
+                    </p>
+                    <p className="text-lg font-bold text-slate-900">
+                      ₱{(parseFloat(yearData.total_cost) / 1000).toFixed(0)}k
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {yearData.asset_count} assets
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Suspense>
+
+        {/* Branch Analytics Section */}
+        {showBranchSection && branchSummary.length > 0 && (
+          <Suspense fallback={<div className="mb-8"><SkeletonChart /></div>}>
+            <div className="mb-8">
+              {/* Section Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <Building2 className="w-6 h-6 text-blue-600" />
+                  <h2 className="text-2xl font-bold text-slate-900">Branch Analytics</h2>
+                </div>
+                <button
+                  onClick={() => setShowBranchSection(false)}
+                  className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  Hide Section
+                </button>
+              </div>
+
+              {/* Row 1: Branch Comparison + Contribution Bars */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                {/* Branch Comparison Chart (2/3 width) */}
+                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                    Branch Comparison
+                  </h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Asset count by status across all branches
+                  </p>
+                  <BranchComparisonChart
+                    data={branchSummary}
+                    statusBreakdown={branchStatusBreakdown}
+                    statusColorMap={STATUS_COLOR_MAP}
+                  />
+                </div>
+
+                {/* Branch Contribution Bars (1/3 width) */}
+                <div className="bg-white rounded-xl border border-slate-200 p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                    Branch Contribution
+                  </h3>
+                  <BranchContributionBars data={branchSummary} />
+                </div>
+              </div>
+
+              {/* Row 2: Expense Trends Chart with Branch Filter */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Branch Expense Trends
+                    </h3>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Monthly expenses (acquisitions + repairs) over the last 12 months
+                    </p>
+                  </div>
+                  {/* Branch Filter */}
+                  <select
+                    value={selectedBranchesForTrend || 'all'}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setSelectedBranchesForTrend(value === 'all' ? null : [value])
+                    }}
+                    className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="all">All Branches</option>
+                    {[...branchSummary]
+                      .sort((a, b) => {
+                        const codeA = a.brcode || '';
+                        const codeB = b.brcode || '';
+                        return codeA.localeCompare(codeB);
+                      })
+                      .map((branch) => (
+                        <option key={branch.branch_id} value={branch.branch_name}>
+                          {branch.branch_name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <BranchExpenseTrendsChart
+                  data={branchMonthlyTrends}
+                  selectedBranches={selectedBranchesForTrend}
+                  branchSummary={branchSummary}
+                />
+              </div>
+
+              {/* Status Breakdown Chart */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                  Asset Status Breakdown by Branch
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Distribution of asset statuses across branches
+                </p>
+                <BranchStatusBreakdownChart
+                  data={branchStatusBreakdown}
+                  statusColorMap={STATUS_COLOR_MAP}
+                  branchSummary={branchSummary}
+                />
+              </div>
+            </div>
+          </Suspense>
+        )}
       </div>
     </div>
   )

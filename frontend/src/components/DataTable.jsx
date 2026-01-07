@@ -15,6 +15,7 @@ function DataTable({ columns, data, pageSize = 10, showGlobalFilter = true, load
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState([])
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

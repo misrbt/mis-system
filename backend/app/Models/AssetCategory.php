@@ -13,6 +13,7 @@ class AssetCategory extends Model
 
     protected $fillable = [
         'name',
+        'code',
     ];
 
     public function assets()

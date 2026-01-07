@@ -5,6 +5,7 @@
     <title>IT Asset Report</title>
     <style>
         @page {
+            size: A4 landscape;
             margin: 15mm;
         }
         body {
@@ -158,46 +159,70 @@
     <table>
         <thead>
             <tr>
-                <th style="width: 3%;">#</th>
-                <th style="width: 18%;">Asset Name</th>
-                <th style="width: 10%;">Serial #</th>
-                <th style="width: 10%;">Category</th>
-                <th style="width: 12%;">Brand/Model</th>
-                <th style="width: 8%;">Status</th>
-                <th style="width: 12%;">Assigned To</th>
-                <th style="width: 10%;">Branch</th>
-                <th style="width: 9%;" class="text-right">Acq. Cost</th>
+                <th style="width: 14%;">Name of User</th>
+                <th style="width: 13%;">Equipment</th>
+                <th style="width: 8%;">Serial No.</th>
+                <th style="width: 6%;">Date Acq</th>
+                <th style="width: 7%;">Type</th>
+                <th style="width: 10%;">Vendor</th>
+                <th style="width: 8%;" class="text-right">Acq Cost</th>
+                <th style="width: 4%;" class="text-center">Est. Life</th>
+                <th style="width: 6%;">Exp. Date</th>
+                <th style="width: 6%;">Current Date</th>
                 <th style="width: 8%;" class="text-right">Book Value</th>
+                <th style="width: 10%;">Status</th>
             </tr>
         </thead>
         <tbody>
-            @forelse($assets as $index => $asset)
-            <tr>
-                <td class="text-center">{{ $index + 1 }}</td>
-                <td>{{ $asset->asset_name }}</td>
-                <td class="text-nowrap">{{ $asset->serial_number ?: '—' }}</td>
-                <td>{{ $asset->category->name ?? '—' }}</td>
-                <td>{{ trim(($asset->brand ?? '') . ' ' . ($asset->model ?? '')) ?: '—' }}</td>
-                <td>{{ $asset->status->name ?? '—' }}</td>
-                <td>{{ $asset->assignedEmployee->fullname ?? 'Unassigned' }}</td>
-                <td>{{ $asset->assignedEmployee->branch->branch_name ?? '—' }}</td>
-                <td class="text-right currency">₱{{ number_format($asset->acq_cost ?? 0, 2) }}</td>
-                <td class="text-right currency">₱{{ number_format($asset->book_value ?? 0, 2) }}</td>
-            </tr>
+            @forelse($groupedByEmployee as $group)
+                @foreach($group['assets'] as $assetIndex => $asset)
+                    @php
+                        $isFirstAsset = $assetIndex === 0;
+                        $purchaseDate = $asset->purchase_date ? \Carbon\Carbon::parse($asset->purchase_date) : null;
+                        $estLife = $asset->estimated_life ?? 3;
+                        $expirationDate = $purchaseDate ? $purchaseDate->copy()->addYears($estLife) : null;
+                    @endphp
+                    <tr style="{{ $assetIndex === count($group['assets']) - 1 ? 'border-bottom: 2px solid #C7D2FE;' : '' }}">
+                        <td style="font-size: 7pt; line-height: 1.3;">
+                            @if($isFirstAsset)
+                                <strong>{{ $group['employee']['fullname'] ?? 'Unassigned' }}</strong><br/>
+                                @if(isset($group['employee']['position']['title']))
+                                    <span style="font-size: 6pt; color: #666;">{{ $group['employee']['position']['title'] }}</span><br/>
+                                @endif
+                                @if(isset($group['employee']['branch']['branch_name']))
+                                    <span style="font-size: 6pt; color: #666;">{{ $group['employee']['branch']['branch_name'] }}</span>
+                                @endif
+                            @endif
+                        </td>
+                        <td>{{ $asset->asset_name }}</td>
+                        <td class="text-nowrap">{{ $asset->serial_number ?: '—' }}</td>
+                        <td>{{ $purchaseDate ? $purchaseDate->format('m/d/y') : '—' }}</td>
+                        <td>{{ $asset->category->name ?? '—' }}</td>
+                        <td>{{ $asset->vendor->company_name ?? '—' }}</td>
+                        <td class="text-right currency">{{ number_format($asset->acq_cost ?? 0, 2) }}</td>
+                        <td class="text-center">{{ $estLife }}</td>
+                        <td>{{ $expirationDate ? $expirationDate->format('m/d/y') : '—' }}</td>
+                        <td>{{ \Carbon\Carbon::now()->format('m/d/Y') }}</td>
+                        <td class="text-right currency">{{ number_format($asset->book_value ?? 0, 2) }}</td>
+                        <td>{{ $asset->status->name ?? '—' }}</td>
+                    </tr>
+                @endforeach
             @empty
             <tr>
-                <td colspan="10" class="text-center" style="padding: 20px; color: #999;">
+                <td colspan="12" class="text-center" style="padding: 20px; color: #999;">
                     No assets found matching the selected criteria
                 </td>
             </tr>
             @endforelse
         </tbody>
         @if($assets->count() > 0)
-        <tfoot style="background: #F3F4F6; font-weight: bold;">
+        <tfoot style="background: #10B981; color: white; font-weight: bold; font-size: 10pt;">
             <tr>
-                <td colspan="8" class="text-right" style="padding: 10px;">TOTAL:</td>
-                <td class="text-right currency">₱{{ number_format($summary['total_acquisition_cost'], 2) }}</td>
-                <td class="text-right currency">₱{{ number_format($summary['total_book_value'], 2) }}</td>
+                <td colspan="6" style="padding: 10px; text-align: right;">GRAND TOTAL:</td>
+                <td class="text-right currency" style="padding: 10px;">₱{{ number_format($summary['total_acquisition_cost'], 2) }}</td>
+                <td colspan="3" class="text-center" style="padding: 10px;">{{ $summary['total_count'] }} Assets</td>
+                <td class="text-right currency" style="padding: 10px;">₱{{ number_format($summary['total_book_value'], 2) }}</td>
+                <td></td>
             </tr>
         </tfoot>
         @endif

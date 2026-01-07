@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { X } from 'lucide-react'
 
@@ -12,8 +12,6 @@ function Modal({
   closeOnOverlayClick = true,
   footer
 }) {
-  const [isAnimating, setIsAnimating] = useState(false)
-
   // Close modal on ESC key
   useEffect(() => {
     const handleEscape = (e) => {
@@ -29,11 +27,8 @@ function Modal({
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
-      // Trigger animation after mount
-      setTimeout(() => setIsAnimating(true), 10)
     } else {
       document.body.style.overflow = 'unset'
-      setIsAnimating(false)
     }
     return () => {
       document.body.style.overflow = 'unset'
@@ -60,17 +55,11 @@ function Modal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 ${
-        isAnimating ? 'bg-black/60' : 'bg-black/0'
-      }`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
       onClick={handleOverlayClick}
     >
       <div
-        className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300 ${
-          isAnimating
-            ? 'opacity-100 scale-100 translate-y-0'
-            : 'opacity-0 scale-95 -translate-y-4'
-        }`}
+        className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh]`}
       >
         {/* Header */}
         {(title || showCloseButton) && (

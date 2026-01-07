@@ -4,8 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Asset;
 use App\Models\Employee;
+use App\Models\Status;
+use App\Services\InventoryAuditLogService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
+use Carbon\Carbon;
 
 class AssetController extends Controller
 {
@@ -76,9 +81,10 @@ class AssetController extends Controller
             $assets = $query->get();
 
             // Return a single row per employee for the main list; when filtering by a specific
-            // employee, return all of their assets.
+            // employee, return all of their assets. If ?all=1 is provided, return everything.
             $hasEmployeeFilter = $request->has('assigned_to_employee_id') && $request->assigned_to_employee_id;
-            if (!$hasEmployeeFilter) {
+            $returnAll = $request->boolean('all', false);
+            if (!$hasEmployeeFilter && !$returnAll) {
                 $assets = $assets
                     ->unique(fn ($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
                     ->values();
@@ -109,9 +115,11 @@ class AssetController extends Controller
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'serial_number' => 'nullable|string|max:255',
-            'purchase_date' => 'nullable|date',
+            'purchase_date' => 'required|date',
             'acq_cost' => 'nullable|numeric|min:0',
             'waranty_expiration_date' => 'nullable|date',
+            'warranty_duration_value' => 'nullable|numeric|min:0',
+            'warranty_duration_unit' => 'nullable|in:months,weeks,years',
             'estimate_life' => 'nullable|integer|min:0',
             'vendor_id' => 'nullable|exists:vendors,id',
             'remarks' => 'nullable|string',
@@ -129,16 +137,37 @@ class AssetController extends Controller
         try {
             $data = $request->except(['status_id', 'book_value']); // Remove status and book_value from request
 
-            // Auto-assign "New" status
-            $newStatus = \App\Models\Status::where('name', 'New')->first();
-            if (!$newStatus) {
-                // If "New" status doesn't exist, create it or use first available status
-                $newStatus = \App\Models\Status::firstOrCreate(
-                    ['name' => 'New'],
-                    ['description' => 'Newly added asset']
+            // Compute warranty expiration if duration is provided; otherwise respect provided date or leave null
+            $data['waranty_expiration_date'] = $this->calculateWarrantyExpiration(
+                $request->purchase_date,
+                $request->warranty_duration_value,
+                $request->warranty_duration_unit,
+                $request->waranty_expiration_date
+            );
+
+            // Auto-assign status based on purchase date
+            // If purchase date is within 1 month from today -> "New"
+            // If purchase date is more than 1 month old -> "Functional"
+            $purchaseDate = Carbon::parse($request->purchase_date);
+            $today = Carbon::today();
+            $oneMonthAgo = $today->copy()->subMonth();
+
+            // If purchase date is more than 1 month old, set to Functional
+            if ($purchaseDate->lessThan($oneMonthAgo)) {
+                $statusName = 'Functional';
+            } else {
+                $statusName = 'New';
+            }
+
+            $status = Status::where('name', $statusName)->first();
+            if (!$status) {
+                // If status doesn't exist, create it
+                $status = Status::firstOrCreate(
+                    ['name' => $statusName],
+                    ['description' => $statusName === 'New' ? 'Newly added asset' : 'Functional asset']
                 );
             }
-            $data['status_id'] = $newStatus->id;
+            $data['status_id'] = $status->id;
 
             // Create asset
             $asset = Asset::create($data);
@@ -147,6 +176,25 @@ class AssetController extends Controller
             $bookValueCalc = $asset->calculateBookValue();
             $asset->book_value = $bookValueCalc['book_value'];
             $asset->save();
+
+            // Generate QR code for the asset (non-blocking - won't fail asset creation)
+            try {
+                $asset->generateAndSaveQRCode();
+            } catch (\Exception $e) {
+                // Log error but don't fail asset creation
+                Log::warning("Failed to generate QR code for asset {$asset->id}: " . $e->getMessage());
+            }
+
+            // Generate barcode for the asset (non-blocking - won't fail asset creation)
+            try {
+                $asset->generateAndSaveBarcode();
+            } catch (\Exception $e) {
+                // Log error but don't fail asset creation
+                Log::warning("Failed to generate barcode for asset {$asset->id}: " . $e->getMessage());
+            }
+
+            // Refresh the asset to get the generated QR code and barcode
+            $asset->refresh();
 
             // Load relationships
             $asset->load([
@@ -160,7 +208,7 @@ class AssetController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Asset created successfully with status "New"',
+                'message' => "Asset created successfully with status \"{$statusName}\"",
                 'data' => $asset,
                 'depreciation_info' => $bookValueCalc,
             ], 201);
@@ -217,9 +265,11 @@ class AssetController extends Controller
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'serial_number' => 'nullable|string|max:255',
-            'purchase_date' => 'nullable|date',
+            'purchase_date' => 'required|date',
             'acq_cost' => 'nullable|numeric|min:0',
             'waranty_expiration_date' => 'nullable|date',
+            'warranty_duration_value' => 'nullable|numeric|min:0',
+            'warranty_duration_unit' => 'nullable|in:months,weeks,years',
             'estimate_life' => 'nullable|integer|min:0',
             'vendor_id' => 'nullable|exists:vendors,id',
             'status_id' => 'required|exists:status,id',
@@ -245,6 +295,45 @@ class AssetController extends Controller
 
             // Update asset (excluding book_value from request)
             $data = $request->except(['book_value']);
+
+            // Auto-adjust status based on purchase date if:
+            // 1. Purchase date is being changed
+            // 2. Current status is "New" or "Functional" (don't override manual statuses)
+            if ($request->has('purchase_date')) {
+                $currentStatus = $asset->status;
+                if ($currentStatus && in_array($currentStatus->name, ['New', 'Functional'])) {
+                    $purchaseDate = Carbon::parse($request->purchase_date);
+                    $today = Carbon::today();
+                    $oneMonthAgo = $today->copy()->subMonth();
+
+                    // Determine the appropriate status
+                    if ($purchaseDate->lessThan($oneMonthAgo)) {
+                        $statusName = 'Functional';
+                    } else {
+                        $statusName = 'New';
+                    }
+
+                    // Only update if different from current
+                    if ($currentStatus->name !== $statusName) {
+                        $newStatus = Status::where('name', $statusName)->first();
+                        if ($newStatus) {
+                            $data['status_id'] = $newStatus->id;
+                        }
+                    }
+                }
+            }
+
+            // Compute warranty expiration if duration input is provided; otherwise honor provided date or keep current
+            $computedWarranty = $this->calculateWarrantyExpiration(
+                $request->purchase_date ?? $asset->purchase_date,
+                $request->warranty_duration_value,
+                $request->warranty_duration_unit,
+                $request->waranty_expiration_date
+            );
+            if (!is_null($computedWarranty)) {
+                $data['waranty_expiration_date'] = $computedWarranty;
+            }
+
             $asset->update($data);
 
             // Recalculate book value if needed
@@ -276,7 +365,7 @@ class AssetController extends Controller
                 $response['message'] .= ' (book value recalculated)';
             }
 
-            return response()->json($response, 200);
+        return response()->json($response, 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -322,21 +411,38 @@ class AssetController extends Controller
                 ], 404);
             }
 
-            $assetIds = Asset::where('assigned_to_employee_id', $employeeId)->pluck('id');
-            if ($assetIds->isEmpty()) {
+            $assets = Asset::where('assigned_to_employee_id', $employeeId)->get();
+            if ($assets->isEmpty()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No assets found for this employee',
                 ], 404);
             }
 
-            $deletedCount = Asset::whereIn('id', $assetIds)->delete();
+            $deletedCount = 0;
+            $deletedAssets = [];
+            foreach ($assets as $asset) {
+                $deletedAssets[] = [
+                    'id' => $asset->id,
+                    'name' => $asset->asset_name,
+                    'serial_number' => $asset->serial_number,
+                ];
+                $asset->delete(); // This triggers AssetObserver for individual asset logs
+                $deletedCount++;
+            }
+
+            // Log the bulk operation summary
+            InventoryAuditLogService::logBulkDelete(
+                'asset',
+                $deletedAssets,
+                "Bulk delete all assets for employee: {$employee->fullname}"
+            );
 
             return response()->json([
                 'success' => true,
                 'message' => $deletedCount . ' asset(s) deleted for employee ' . $employee->fullname,
                 'deleted_count' => $deletedCount,
-                'deleted_asset_ids' => $assetIds,
+                'deleted_asset_ids' => $assets->pluck('id'),
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -366,7 +472,24 @@ class AssetController extends Controller
         }
 
         try {
-            Asset::whereIn('id', $request->ids)->delete();
+            $assets = Asset::whereIn('id', $request->ids)->get();
+            $deletedAssets = [];
+
+            foreach ($assets as $asset) {
+                $deletedAssets[] = [
+                    'id' => $asset->id,
+                    'name' => $asset->asset_name,
+                    'serial_number' => $asset->serial_number,
+                ];
+                $asset->delete(); // This triggers AssetObserver for individual asset logs
+            }
+
+            // Log the bulk operation summary
+            InventoryAuditLogService::logBulkDelete(
+                'asset',
+                $deletedAssets,
+                'Bulk delete operation'
+            );
 
             return response()->json([
                 'success' => true,
@@ -386,10 +509,21 @@ class AssetController extends Controller
      */
     public function updateField(Request $request, $id)
     {
-        $validator = Validator::make($request->all(), [
+        $rules = [
             'field' => 'required|string',
             'value' => 'nullable',
-        ]);
+        ];
+
+        // Tighten validation for status changes (explicit table name via model to avoid pluralization issues)
+        if ($request->field === 'status_id') {
+            $rules['value'] = [
+                'required',
+                'integer',
+                Rule::exists((new Status())->getTable(), 'id'),
+            ];
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json([
@@ -425,7 +559,11 @@ class AssetController extends Controller
                 ], 400);
             }
 
-            $asset->update([$request->field => $request->value]);
+            $value = $request->field === 'status_id'
+                ? (int) $request->value
+                : $request->value;
+
+            $asset->update([$request->field => $value]);
 
             // Recalculate book value if depreciation-related field was updated
             $depreciationFields = ['purchase_date', 'acq_cost', 'estimate_life'];
@@ -464,5 +602,158 @@ class AssetController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Update only the asset status (dedicated endpoint).
+     */
+    public function updateStatus(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'status_id' => [
+                'required',
+                'integer',
+                Rule::exists((new Status())->getTable(), 'id'),
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $asset = Asset::findOrFail($id);
+            $asset->status_id = (int) $request->status_id;
+            $asset->save();
+
+            $asset->load([
+                'category',
+                'vendor',
+                'status',
+                'assignedEmployee.branch',
+                'assignedEmployee.position',
+                'assignedEmployee.department'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Status updated successfully',
+                'data' => $asset,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update status',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate QR code for a specific asset
+     */
+    public function generateQRCode($id)
+    {
+        try {
+            $asset = Asset::findOrFail($id);
+            $qrCode = $asset->generateAndSaveQRCode();
+
+            // Log QR code generation
+            InventoryAuditLogService::logCodeGeneration(
+                $asset->id,
+                'qr_code',
+                $asset->asset_name
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'QR code generated successfully',
+                'data' => [
+                    'id' => $asset->id,
+                    'qr_code' => $qrCode,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate QR code',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate QR codes for all assets that don't have one
+     */
+    public function generateAllQRCodes()
+    {
+        try {
+            $assetsWithoutQR = Asset::whereNull('qr_code')->orWhere('qr_code', '')->get();
+            $generated = 0;
+            $assetIds = [];
+
+            foreach ($assetsWithoutQR as $asset) {
+                $asset->generateAndSaveQRCode();
+                $assetIds[] = $asset->id;
+                $generated++;
+            }
+
+            // Log bulk QR code generation
+            if ($generated > 0) {
+                InventoryAuditLogService::logBulkCodeGeneration(
+                    'qr_code',
+                    $generated,
+                    $assetIds
+                );
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "QR codes generated successfully for {$generated} assets",
+                'data' => [
+                    'generated_count' => $generated,
+                    'total_assets' => Asset::count(),
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate QR codes',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Calculate warranty expiration date based on purchase date and duration.
+     */
+    private function calculateWarrantyExpiration($purchaseDate, $durationValue, $durationUnit, $explicitDate = null)
+    {
+        // If duration is provided, calculate; otherwise use explicit date (or null)
+        $value = is_null($durationValue) ? null : (float) $durationValue;
+        $unit = $durationUnit ?: 'months';
+
+        if (!is_null($value) && $value > 0) {
+            $baseDate = $purchaseDate ? Carbon::parse($purchaseDate) : Carbon::now();
+            switch ($unit) {
+                case 'weeks':
+                    $baseDate->addWeeks($value);
+                    break;
+                case 'years':
+                    $baseDate->addYears($value);
+                    break;
+                case 'months':
+                default:
+                    $baseDate->addMonths($value);
+                    break;
+            }
+            return $baseDate->toDateString();
+        }
+
+        return $explicitDate ?: null;
     }
 }

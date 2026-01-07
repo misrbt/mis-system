@@ -3,21 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus,
-  Edit,
   Trash2,
   Filter,
   X,
   Download,
-  Upload,
   RefreshCw,
   Table2,
   BarChart3,
-  Save,
-  XCircle,
-  User,
-  Briefcase,
-  Building2,
-  Eye,
 } from 'lucide-react'
 import {
   flexRender,
@@ -28,14 +20,97 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import apiClient from '../../services/apiClient'
-import Modal from '../../components/Modal'
-import SearchableSelect from '../../components/SearchableSelect'
+import AssetFormModal from './assets/AssetFormModal'
+import { getAssetColumns } from './assets/assetColumns'
 import Swal from 'sweetalert2'
+import { buildSerialNumber } from '../../utils/assetSerial'
 
 const normalizeArrayResponse = (data) => {
   if (Array.isArray(data?.data)) return data.data
   if (Array.isArray(data)) return data
   return []
+}
+
+const EMPTY_VALUE = '—'
+const CURRENCY_PREFIX = '₱'
+
+const INITIAL_FILTERS = {
+  branch_id: '',
+  category_id: '',
+  status_id: '',
+  vendor_id: '',
+  purchase_date_from: '',
+  purchase_date_to: '',
+  search: '',
+}
+
+const INITIAL_PIVOT_CONFIG = {
+  rowDimension: 'category',
+  columnDimension: 'status',
+  aggregation: 'count',
+  showTotals: true,
+}
+
+const buildQueryParams = (filters, extra = {}) => {
+  const params = new URLSearchParams()
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.append(key, value)
+  })
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, value)
+    }
+  })
+  return params.toString()
+}
+
+// Helper function to format date for input fields (YYYY-MM-DD)
+const formatDateForInput = (dateString) => {
+  if (!dateString) return ''
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ''
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  } catch {
+    return ''
+  }
+}
+
+const buildFormData = (asset = {}) => ({
+  asset_name: asset.asset_name || '',
+  asset_category_id: asset.asset_category_id || '',
+  brand: asset.brand || '',
+  model: asset.model || '',
+  book_value: asset.book_value || '',
+  serial_number: asset.serial_number || '',
+  purchase_date: formatDateForInput(asset.purchase_date),
+  acq_cost: asset.acq_cost || '',
+  waranty_expiration_date: formatDateForInput(asset.waranty_expiration_date),
+  estimate_life: asset.estimate_life || '',
+  vendor_id: asset.vendor_id || '',
+  status_id: asset.status_id || '',
+  remarks: asset.remarks || '',
+  assigned_to_employee_id: asset.assigned_to_employee_id || '',
+})
+
+const notifySuccess = (title, text) => {
+  Swal.fire({
+    icon: 'success',
+    title,
+    text,
+    timer: 2000,
+  })
+}
+
+const notifyError = (fallback, error) => {
+  Swal.fire({
+    icon: 'error',
+    title: 'Error',
+    text: error?.response?.data?.message || fallback,
+  })
 }
 
 function AssetsPage() {
@@ -52,48 +127,28 @@ function AssetsPage() {
   const [showFilters, setShowFilters] = useState(false)
 
   // Pivot configuration state
-  const [pivotConfig, setPivotConfig] = useState({
-    rowDimension: 'category',
-    columnDimension: 'status',
-    aggregation: 'count',
-    showTotals: true,
-  })
+  const [pivotConfig, setPivotConfig] = useState(INITIAL_PIVOT_CONFIG)
 
   // Filter state
-  const [filters, setFilters] = useState({
-    branch_id: '',
-    category_id: '',
-    status_id: '',
-    vendor_id: '',
-    purchase_date_from: '',
-    purchase_date_to: '',
-    search: '',
-  })
+  const [filters, setFilters] = useState(() => ({ ...INITIAL_FILTERS }))
 
   // Form state
-  const [formData, setFormData] = useState({
-    asset_name: '',
-    asset_category_id: '',
-    brand: '',
-    model: '',
-    serial_number: '',
-    purchase_date: '',
-    acq_cost: '',
-    waranty_expiration_date: '',
-    estimate_life: '',
-    vendor_id: '',
-    remarks: '',
-    assigned_to_employee_id: '',
-  })
+  const [formData, setFormData] = useState(() => buildFormData())
 
   // Fetch assets with React Query
   const { data: assetsData, isLoading, refetch } = useQuery({
     queryKey: ['assets', filters],
     queryFn: async () => {
-      const params = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value)
-      })
+      const params = buildQueryParams(filters)
+      const response = await apiClient.get(`/assets?${params}`)
+      return response.data
+    },
+  })
+
+  const { data: assetsTotalsData, isLoading: isLoadingTotals } = useQuery({
+    queryKey: ['assets', 'totals', filters],
+    queryFn: async () => {
+      const params = buildQueryParams(filters, { all: '1' })
       const response = await apiClient.get(`/assets?${params}`)
       return response.data
     },
@@ -140,25 +195,65 @@ function AssetsPage() {
     },
   })
 
+  const employeeAcqTotals = useMemo(() => {
+    const totals = {}
+    const assets = assetsTotalsData?.data || []
+
+    assets.forEach((asset) => {
+      const employeeKey =
+        asset.assigned_to_employee_id ?? asset.assigned_employee?.id ?? 'unassigned'
+
+      if (!Object.prototype.hasOwnProperty.call(totals, employeeKey)) {
+        totals[employeeKey] = 0
+      }
+
+      const value = parseFloat(asset.acq_cost)
+      if (!Number.isNaN(value)) {
+        totals[employeeKey] += value
+      }
+    })
+
+    return totals
+  }, [assetsTotalsData])
+
+  // Normalize data responses to ensure arrays
+  const statusOptions = useMemo(() => normalizeArrayResponse(statuses), [statuses])
+  const statusColorMap = useMemo(() => {
+    return statusOptions.reduce((acc, s) => {
+      acc[s.id] = s.color || ''
+      return acc
+    }, {})
+  }, [statusOptions])
+  const vendorOptions = useMemo(
+    () =>
+      (Array.isArray(vendors) ? vendors : []).map((vendor) => ({
+        id: vendor.id,
+        name: vendor.company_name,
+        contact: vendor.contact_person || vendor.email || vendor.phone,
+      })),
+    [vendors]
+  )
+  const employeeOptions = useMemo(
+    () =>
+      (Array.isArray(employees) ? employees : []).map((emp) => ({
+        id: emp.id,
+        name: emp.fullname,
+        position: emp.position?.position_name,
+        branch: emp.branch?.branch_name,
+      })),
+    [employees]
+  )
+
   // Mutations
   const createMutation = useMutation({
     mutationFn: (data) => apiClient.post('/assets', data),
     onSuccess: () => {
       queryClient.invalidateQueries(['assets'])
-      Swal.fire({
-        icon: 'success',
-        title: 'Success',
-        text: 'Asset created successfully',
-        timer: 2000,
-      })
+      notifySuccess('Success', 'Asset created successfully')
       setIsAddModalOpen(false)
     },
     onError: (error) => {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to create asset',
-      })
+      notifyError('Failed to create asset', error)
     },
   })
 
@@ -166,20 +261,11 @@ function AssetsPage() {
     mutationFn: ({ id, data }) => apiClient.put(`/assets/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['assets'])
-      Swal.fire({
-        icon: 'success',
-        title: 'Success',
-        text: 'Asset updated successfully',
-        timer: 2000,
-      })
+      notifySuccess('Success', 'Asset updated successfully')
       setIsEditModalOpen(false)
     },
     onError: (error) => {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update asset',
-      })
+      notifyError('Failed to update asset', error)
     },
   })
 
@@ -191,11 +277,7 @@ function AssetsPage() {
       setEditingCell(null)
     },
     onError: (error) => {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update field',
-      })
+      notifyError('Failed to update field', error)
     },
   })
 
@@ -203,39 +285,10 @@ function AssetsPage() {
     mutationFn: (id) => apiClient.delete(`/assets/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries(['assets'])
-      Swal.fire({
-        icon: 'success',
-        title: 'Deleted!',
-        text: 'Asset deleted successfully',
-        timer: 2000,
-      })
+      notifySuccess('Deleted!', 'Asset deleted successfully')
     },
     onError: (error) => {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to delete asset',
-      })
-    },
-  })
-
-  const deleteEmployeeAssetsMutation = useMutation({
-    mutationFn: (employeeId) => apiClient.delete(`/employees/${employeeId}/assets`),
-    onSuccess: ({ data }) => {
-      queryClient.invalidateQueries(['assets'])
-      Swal.fire({
-        icon: 'success',
-        title: 'Deleted!',
-        text: data?.message || 'All assets for this employee were deleted',
-        timer: 2000,
-      })
-    },
-    onError: (error) => {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to delete assets for employee',
-      })
+      notifyError('Failed to delete asset', error)
     },
   })
 
@@ -244,107 +297,89 @@ function AssetsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries(['assets'])
       setSelectedRows({})
-      Swal.fire({
-        icon: 'success',
-        title: 'Deleted!',
-        text: 'Selected assets deleted successfully',
-        timer: 2000,
-      })
+      notifySuccess('Deleted!', 'Selected assets deleted successfully')
     },
     onError: (error) => {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to delete assets',
-      })
+      notifyError('Failed to delete assets', error)
     },
   })
 
   // Handlers
-  const handleInputChange = (e) => {
+  const handleInputChange = useCallback((e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+  }, [])
 
-  const handleFilterChange = (e) => {
+  const handleVendorChange = useCallback((value) => {
+    setFormData((prev) => ({ ...prev, vendor_id: value }))
+  }, [])
+
+  const handleEmployeeChange = useCallback((value) => {
+    setFormData((prev) => ({ ...prev, assigned_to_employee_id: value }))
+  }, [])
+
+  const generateSerialNumber = useCallback(() => {
+    // Get selected category
+    const selectedCategory = categories?.find(cat => cat.id == formData.asset_category_id)
+
+    if (!selectedCategory) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Select Category First',
+        text: 'Please select an asset category before generating a serial number',
+      })
+      return
+    }
+
+    // Generate unique serial number format: CATEGORYCODE-YYYY-TIMESTAMP-RANDOM
+    const categoryCode = selectedCategory?.code || selectedCategory?.name?.substring(0, 3).toUpperCase() || 'AST'
+    const serialNumber = buildSerialNumber(categoryCode)
+
+    setFormData(prev => ({ ...prev, serial_number: serialNumber }))
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Serial Number Generated',
+      text: serialNumber,
+      timer: 2000,
+    })
+  }, [formData.asset_category_id, categories])
+
+  const handleFilterChange = useCallback((e) => {
     const { name, value } = e.target
     setFilters((prev) => ({ ...prev, [name]: value }))
-  }
+  }, [])
 
-  const clearFilters = () => {
-    setFilters({
-      branch_id: '',
-      category_id: '',
-      status_id: '',
-      vendor_id: '',
-      purchase_date_from: '',
-      purchase_date_to: '',
-      search: '',
-    })
-  }
+  const clearFilters = useCallback(() => {
+    setFilters({ ...INITIAL_FILTERS })
+  }, [])
 
-  const openAddModal = () => {
-    setFormData({
-      asset_name: '',
-      asset_category_id: '',
-      brand: '',
-      model: '',
-      book_value: '',
-      serial_number: '',
-      purchase_date: '',
-      acq_cost: '',
-      waranty_expiration_date: '',
-      estimate_life: '',
-      vendor_id: '',
-      status_id: '',
-      remarks: '',
-      assigned_to_employee_id: '',
-    })
+  const openAddModal = useCallback(() => {
+    setFormData(buildFormData())
     setIsAddModalOpen(true)
-  }
+  }, [])
 
   const openEditModal = useCallback((asset) => {
     setSelectedAsset(asset)
-    setFormData({
-      asset_name: asset.asset_name || '',
-      asset_category_id: asset.asset_category_id || '',
-      brand: asset.brand || '',
-      model: asset.model || '',
-      book_value: asset.book_value || '',
-      serial_number: asset.serial_number || '',
-      purchase_date: asset.purchase_date || '',
-      acq_cost: asset.acq_cost || '',
-      waranty_expiration_date: asset.waranty_expiration_date || '',
-      estimate_life: asset.estimate_life || '',
-      vendor_id: asset.vendor_id || '',
-      status_id: asset.status_id || '',
-      remarks: asset.remarks || '',
-      assigned_to_employee_id: asset.assigned_to_employee_id || '',
-    })
+    setFormData(buildFormData(asset))
     setIsEditModalOpen(true)
   }, [])
 
-  const handleCreate = async (e) => {
+  const handleCreate = useCallback((e) => {
     e.preventDefault()
     createMutation.mutate(formData)
-  }
+  }, [createMutation, formData])
 
-  const handleUpdate = async (e) => {
+  const handleUpdate = useCallback((e) => {
     e.preventDefault()
     updateMutation.mutate({ id: selectedAsset.id, data: formData })
-  }
+  }, [formData, selectedAsset, updateMutation])
 
   const handleDelete = useCallback(
     async (asset) => {
-      const employeeName = asset.assigned_employee?.fullname
-      const assignedEmployeeId = asset.assigned_to_employee_id
-      const shouldDeleteAll = Boolean(assignedEmployeeId)
-
       const result = await Swal.fire({
         title: 'Are you sure?',
-        text: shouldDeleteAll
-          ? `Delete all assets assigned to ${employeeName || 'this employee'}?`
-          : `Delete asset "${asset.asset_name}"?`,
+        text: `Delete asset "${asset.asset_name}"?`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#dc2626',
@@ -354,17 +389,13 @@ function AssetsPage() {
       })
 
       if (result.isConfirmed) {
-        if (shouldDeleteAll) {
-          deleteEmployeeAssetsMutation.mutate(assignedEmployeeId)
-        } else {
-          deleteMutation.mutate(asset.id)
-        }
+        deleteMutation.mutate(asset.id)
       }
     },
-    [deleteMutation, deleteEmployeeAssetsMutation]
+    [deleteMutation]
   )
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = useCallback(async () => {
     const selectedIds = Object.keys(selectedRows).filter((key) => selectedRows[key])
     if (selectedIds.length === 0) {
       Swal.fire({
@@ -389,444 +420,51 @@ function AssetsPage() {
     if (result.isConfirmed) {
       bulkDeleteMutation.mutate(selectedIds)
     }
-  }
+  }, [bulkDeleteMutation, selectedRows])
 
-  const handleInlineEdit = (rowId, columnId, value) => {
-    updateFieldMutation.mutate({ id: rowId, field: columnId, value })
-  }
+  const handleInlineEdit = useCallback(
+    (rowId, columnId, value) => {
+      updateFieldMutation.mutate({ id: rowId, field: columnId, value })
+    },
+    [updateFieldMutation]
+  )
 
   // Table columns definition
   const columns = useMemo(
-    () => [
-      {
-        id: 'select',
-        header: ({ table }) => (
-          <input
-            type="checkbox"
-            checked={table.getIsAllRowsSelected()}
-            onChange={table.getToggleAllRowsSelectedHandler()}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-        ),
-        cell: ({ row }) => (
-          <input
-            type="checkbox"
-            checked={row.getIsSelected()}
-            onChange={row.getToggleSelectedHandler()}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-        ),
-        enableSorting: false,
-        size: 40,
-      },
-      {
-        accessorKey: 'assigned_employee',
-        header: 'Employee Info',
-        cell: ({ row }) => {
-          const employee = row.original.assigned_employee
-          const isEditing = editingCell === `${row.id}-assigned_employee`
-          const currentEmployeeId = row.original.assigned_to_employee_id || employee?.id || ''
-
-          if (isEditing) {
-            return (
-              <div className="min-w-[220px]">
-                <SearchableSelect
-                  label="Assign to"
-                  hideLabel
-                  options={
-                    employees?.map((emp) => ({
-                      id: emp.id,
-                      name: emp.fullname,
-                      position: emp.position?.position_name,
-                      branch: emp.branch?.branch_name,
-                    })) || []
-                  }
-                  value={currentEmployeeId}
-                  onChange={(value) => {
-                    handleInlineEdit(row.original.id, 'assigned_to_employee_id', value)
-                    setEditingCell(null)
-                  }}
-                  displayField="name"
-                  secondaryField="position"
-                  tertiaryField="branch"
-                  placeholder="Select employee..."
-                  emptyMessage="No employees found"
-                />
-              </div>
-            )
-          }
-
-          if (!employee) {
-            return (
-              <div
-                className="flex items-center gap-2 text-slate-400 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
-                onDoubleClick={() => setEditingCell(`${row.id}-assigned_employee`)}
-              >
-                <User className="w-4 h-4" />
-                <span className="text-xs italic">Unassigned</span>
-              </div>
-            )
-          }
-          return (
-            <div
-              className="flex flex-col gap-1.5 py-1 cursor-pointer hover:bg-slate-100 px-2 rounded"
-              onDoubleClick={() => setEditingCell(`${row.id}-assigned_employee`)}
-            >
-              {/* Employee Name */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-900 truncate">
-                  {employee.fullname}
-                </span>
-              </div>
-
-              {/* Position */}
-              <div className="flex items-center gap-2 ml-1">
-                <span className="text-xs text-slate-600 truncate">
-                  {employee.position?.title || 'No Position'}
-                </span>
-              </div>
-
-              {/* Branch */}
-              <div className="flex items-center gap-2 ml-1">
-                <span className="text-xs text-slate-500 truncate">
-                  {employee.branch?.branch_name || 'No Branch'}
-                </span>
-              </div>
-            </div>
-          )
-        },
-        size: 220,
-      },
-      {
-        accessorKey: 'asset_name',
-        header: 'Asset Name',
-        cell: ({ row, getValue }) => {
-          const isEditing = editingCell === `${row.id}-asset_name`
-          if (isEditing) {
-            return (
-              <input
-                autoFocus
-                type="text"
-                defaultValue={getValue()}
-                onBlur={(e) => handleInlineEdit(row.original.id, 'asset_name', e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleInlineEdit(row.original.id, 'asset_name', e.target.value)
-                  } else if (e.key === 'Escape') {
-                    setEditingCell(null)
-                  }
-                }}
-                className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )
-          }
-          return (
-            <div
-              className="text-sm text-slate-900 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
-              onDoubleClick={() => setEditingCell(`${row.id}-asset_name`)}
-            >
-              {getValue()}
-            </div>
-          )
-        },
-        size: 150,
-      },
-      {
-        accessorKey: 'serial_number',
-        header: 'Serial No.',
-        cell: ({ row, getValue }) => {
-          const isEditing = editingCell === `${row.id}-serial_number`
-          if (isEditing) {
-            return (
-              <input
-                autoFocus
-                type="text"
-                defaultValue={getValue() || ''}
-                onBlur={(e) =>
-                  handleInlineEdit(row.original.id, 'serial_number', e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleInlineEdit(row.original.id, 'serial_number', e.target.value)
-                  } else if (e.key === 'Escape') {
-                    setEditingCell(null)
-                  }
-                }}
-                className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )
-          }
-          return (
-            <div
-              className="text-sm text-slate-700 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
-              onDoubleClick={() => setEditingCell(`${row.id}-serial_number`)}
-            >
-              {getValue() || '—'}
-            </div>
-          )
-        },
-        size: 130,
-      },
-      {
-        accessorKey: 'purchase_date',
-        header: 'Purchase Date',
-        cell: ({ row }) => {
-          const isEditing = editingCell === `${row.id}-purchase_date`
-          const value = row.original.purchase_date
-
-          if (isEditing) {
-            return (
-              <input
-                autoFocus
-                type="date"
-                defaultValue={value || ''}
-                onBlur={(e) => handleInlineEdit(row.original.id, 'purchase_date', e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleInlineEdit(row.original.id, 'purchase_date', e.target.value)
-                  } else if (e.key === 'Escape') {
-                    setEditingCell(null)
-                  }
-                }}
-                className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )
-          }
-
-          return (
-            <div
-              className="text-sm text-slate-700 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
-              onDoubleClick={() => setEditingCell(`${row.id}-purchase_date`)}
-            >
-              {value ? new Date(value).toLocaleDateString() : '—'}
-            </div>
-          )
-        },
-        size: 120,
-      },
-      {
-        accessorKey: 'category',
-        header: 'Category',
-        cell: ({ row }) => {
-          const isEditing = editingCell === `${row.id}-category`
-          const currentCategoryId = row.original.asset_category_id || row.original.category?.id || ''
-
-          if (isEditing) {
-            return (
-              <select
-                autoFocus
-                defaultValue={currentCategoryId}
-                onChange={(e) => handleInlineEdit(row.original.id, 'asset_category_id', e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleInlineEdit(row.original.id, 'asset_category_id', e.target.value)
-                  } else if (e.key === 'Escape') {
-                    setEditingCell(null)
-                  }
-                }}
-                className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select category</option>
-                {(categories || []).map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name || cat.category_name}
-                  </option>
-                ))}
-              </select>
-            )
-          }
-
-          return (
-            <div
-              className="text-sm text-slate-700 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
-              onDoubleClick={() => setEditingCell(`${row.id}-category`)}
-            >
-              {row.original.category?.name || row.original.category?.category_name || '—'}
-            </div>
-          )
-        },
-        size: 120,
-      },
-      {
-        accessorKey: 'acq_cost',
-        header: 'Acq.cost',
-        cell: ({ row, getValue }) => {
-          const isEditing = editingCell === `${row.id}-acq_cost`
-          const value = getValue()
-
-          if (isEditing) {
-            return (
-              <input
-                autoFocus
-                type="number"
-                step="0.01"
-                defaultValue={value || ''}
-                onBlur={(e) => handleInlineEdit(row.original.id, 'acq_cost', e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleInlineEdit(row.original.id, 'acq_cost', e.target.value)
-                  } else if (e.key === 'Escape') {
-                    setEditingCell(null)
-                  }
-                }}
-                className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )
-          }
-
-          return (
-            <div
-              className="text-sm text-slate-700 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
-              onDoubleClick={() => setEditingCell(`${row.id}-acq_cost`)}
-            >
-              {value ? `₱${Number(value).toLocaleString()}` : '—'}
-            </div>
-          )
-        },
-        size: 120,
-      },
-      {
-        accessorKey: 'estimate_life',
-        header: 'Est. Life',
-        cell: ({ row, getValue }) => {
-          const isEditing = editingCell === `${row.id}-estimate_life`
-          const value = getValue()
-
-          if (isEditing) {
-            return (
-              <input
-                autoFocus
-                type="number"
-                step="1"
-                min="0"
-                defaultValue={value || ''}
-                onBlur={(e) =>
-                  handleInlineEdit(row.original.id, 'estimate_life', e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleInlineEdit(row.original.id, 'estimate_life', e.target.value)
-                  } else if (e.key === 'Escape') {
-                    setEditingCell(null)
-                  }
-                }}
-                className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )
-          }
-
-          return (
-            <div
-              className="text-sm text-slate-700 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
-              onDoubleClick={() => setEditingCell(`${row.id}-estimate_life`)}
-            >
-              {value || '—'} yrs
-            </div>
-          )
-        },
-        size: 90,
-      },
-      {
-        accessorKey: 'book_value',
-        header: 'Book Value',
-        cell: ({ getValue }) => {
-          const value = getValue()
-          return (
-            <div className="text-sm text-slate-900 font-normal">
-              {value ? `₱${Number(value).toLocaleString()}` : '—'}
-            </div>
-          )
-        },
-        size: 120,
-      },
-      {
-        accessorKey: 'status',
-        header: 'Status',
-        cell: ({ row }) => {
-          const status = row.original.status
-          const isEditing = editingCell === `${row.id}-status`
-          const currentStatusId = row.original.status_id || status?.id || ''
-
-          if (isEditing) {
-            return (
-              <select
-                autoFocus
-                defaultValue={currentStatusId}
-                onChange={(e) => handleInlineEdit(row.original.id, 'status_id', e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleInlineEdit(row.original.id, 'status_id', e.target.value)
-                  } else if (e.key === 'Escape') {
-                    setEditingCell(null)
-                  }
-                }}
-                className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select status</option>
-                {(statuses || []).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            )
-          }
-
-          const statusColors = {
-            Active: 'bg-green-100 text-green-800 border-green-200',
-            Inactive: 'bg-gray-100 text-gray-800 border-gray-200',
-            'Under Repair': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            Disposed: 'bg-red-100 text-red-800 border-red-200',
-          }
-          return (
-            <span
-              className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${
-                statusColors[status?.name] || 'bg-slate-100 text-slate-800 border-slate-200'
-              } cursor-pointer`}
-              onDoubleClick={() => setEditingCell(`${row.id}-status`)}
-            >
-              {status?.name || '-'}
-            </span>
-          )
-        },
-        size: 120,
-      },
-      {
-        id: 'actions',
-        header: 'Actions',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate(`/inventory/assets/${row.original.id}`)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-all duration-200"
-              title="View asset details"
-            >
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => openEditModal(row.original)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all duration-200"
-              title="Edit asset"
-            >
-              <Edit className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => handleDelete(row.original)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-all duration-200"
-              title="Delete asset"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ),
-        enableSorting: false,
-        size: 160,
-      },
-    ],
-    [editingCell, openEditModal, handleDelete, navigate, handleInlineEdit, statuses, categories, employees]
+    () =>
+      getAssetColumns({
+        editingCell,
+        setEditingCell,
+        employeeOptions,
+        handleInlineEdit,
+        employeeAcqTotals,
+        isLoadingTotals,
+        categories,
+        statusOptions,
+        statusColorMap,
+        navigate,
+        openEditModal,
+        handleDelete,
+        emptyValue: EMPTY_VALUE,
+        currencyPrefix: CURRENCY_PREFIX,
+      }),
+    [
+      editingCell,
+      employeeOptions,
+      handleInlineEdit,
+      employeeAcqTotals,
+      isLoadingTotals,
+      categories,
+      statusOptions,
+      statusColorMap,
+      navigate,
+      openEditModal,
+      handleDelete,
+    ]
   )
 
   // Table instance
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: assetsData?.data || [],
     columns,
@@ -1147,7 +785,7 @@ function AssetsPage() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All Statuses</option>
-                {statuses?.map((status) => (
+                {(statusOptions || []).map((status) => (
                   <option key={status.id} value={status.id}>
                     {status.name}
                   </option>
@@ -1631,501 +1269,48 @@ function AssetsPage() {
       )}
 
       {/* Add Modal - Part 1 */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Asset" size="xl">
-        <form onSubmit={handleCreate} className="space-y-6">
-          {/* Basic Information Section */}
-          <div className="border-b border-slate-200 pb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="text-blue-600 font-bold text-sm">1</span>
-              </div>
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Basic Information</h4>
-                <p className="text-xs text-slate-500">Asset identification and details</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Asset Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="asset_name"
-                  value={formData.asset_name}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter asset name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Category <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="asset_category_id"
-                  value={formData.asset_category_id}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select category</option>
-                  {categories?.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Brand</label>
-                <input
-                  type="text"
-                  name="brand"
-                  value={formData.brand}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter brand"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Model</label>
-                <input
-                  type="text"
-                  name="model"
-                  value={formData.model}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter model"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Serial Number</label>
-                <input
-                  type="text"
-                  name="serial_number"
-                  value={formData.serial_number}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter serial number"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Financial Details Section */}
-          <div className="border-b border-slate-200 pb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="text-green-600 font-bold text-sm">2</span>
-              </div>
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Financial Details</h4>
-                <p className="text-xs text-slate-500">Costs, values, and financial information</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Purchase Date</label>
-                <input
-                  type="date"
-                  name="purchase_date"
-                  value={formData.purchase_date}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Acquisition Cost</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="acq_cost"
-                  value={formData.acq_cost}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Estimated Life (years)</label>
-                <input
-                  type="number"
-                  name="estimate_life"
-                  value={formData.estimate_life}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Warranty Expiration</label>
-                <input
-                  type="date"
-                  name="waranty_expiration_date"
-                  value={formData.waranty_expiration_date}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <SearchableSelect
-                  label="Vendor"
-                  options={
-                    (Array.isArray(vendors) ? vendors : []).map((vendor) => ({
-                      id: vendor.id,
-                      name: vendor.company_name,
-                      contact: vendor.contact_person || vendor.email || vendor.phone,
-                    }))
-                  }
-                  value={formData.vendor_id}
-                  onChange={(value) => setFormData(prev => ({ ...prev, vendor_id: value }))}
-                  displayField="name"
-                  secondaryField="contact"
-                  placeholder="Select vendor or search..."
-                  emptyMessage="No vendors found"
-                  allowClear={true}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Assignment & Status Section */}
-          <div className="pb-2">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="text-purple-600 font-bold text-sm">3</span>
-              </div>
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Assignment & Remarks</h4>
-                <p className="text-xs text-slate-500">Employee assignment and additional notes</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <SearchableSelect
-                  label="Assigned To Employee"
-                  options={employees?.map(emp => ({
-                    id: emp.id,
-                    name: emp.fullname,
-                    position: emp.position?.position_name,
-                    branch: emp.branch?.branch_name
-                  })) || []}
-                  value={formData.assigned_to_employee_id}
-                  onChange={(value) => setFormData(prev => ({ ...prev, assigned_to_employee_id: value }))}
-                  displayField="name"
-                  secondaryField="position"
-                  tertiaryField="branch"
-                  placeholder="Select employee or search..."
-                  emptyMessage="No employees found"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Remarks</label>
-                <textarea
-                  name="remarks"
-                  value={formData.remarks}
-                  onChange={handleInputChange}
-                  rows="3"
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter any additional remarks or notes"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(false)}
-              className="px-5 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="px-5 py-2.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {createMutation.isPending ? 'Creating...' : 'Create Asset'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+      <AssetFormModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Add New Asset"
+        onSubmit={handleCreate}
+        submitLabel={createMutation.isPending ? 'Creating...' : 'Create Asset'}
+        isSubmitting={createMutation.isPending}
+        formData={formData}
+        onInputChange={handleInputChange}
+        onVendorChange={handleVendorChange}
+        onEmployeeChange={handleEmployeeChange}
+        onGenerateSerial={generateSerialNumber}
+        categories={categories}
+        vendorOptions={vendorOptions}
+        employeeOptions={employeeOptions}
+        statusOptions={statusOptions}
+        assignmentTitle="Assignment & Remarks"
+        assignmentSubtitle="Employee assignment and additional notes"
+        usePlaceholders
+      />
 
       {/* Edit Modal - Similar to Add Modal */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Asset" size="xl">
-        <form onSubmit={handleUpdate} className="space-y-6">
-          {/* Basic Information Section */}
-          <div className="border-b border-slate-200 pb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="text-blue-600 font-bold text-sm">1</span>
-              </div>
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Basic Information</h4>
-                <p className="text-xs text-slate-500">Asset identification and details</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Asset Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="asset_name"
-                  value={formData.asset_name}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Category <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="asset_category_id"
-                  value={formData.asset_category_id}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select category</option>
-                  {categories?.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Brand</label>
-                <input
-                  type="text"
-                  name="brand"
-                  value={formData.brand}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Model</label>
-                <input
-                  type="text"
-                  name="model"
-                  value={formData.model}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Serial Number</label>
-                <input
-                  type="text"
-                  name="serial_number"
-                  value={formData.serial_number}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Financial Details Section */}
-          <div className="border-b border-slate-200 pb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="text-green-600 font-bold text-sm">2</span>
-              </div>
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Financial Details</h4>
-                <p className="text-xs text-slate-500">Costs, values, and financial information</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Purchase Date</label>
-                <input
-                  type="date"
-                  name="purchase_date"
-                  value={formData.purchase_date}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Acquisition Cost</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="acq_cost"
-                  value={formData.acq_cost}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Book Value (Auto-calculated)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="book_value"
-                  value={formData.book_value}
-                  disabled
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg bg-slate-50 text-slate-600 cursor-not-allowed"
-                  title="Book value is automatically calculated based on depreciation"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Calculated using straight-line depreciation
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Estimated Life (years)</label>
-                <input
-                  type="number"
-                  name="estimate_life"
-                  value={formData.estimate_life}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Warranty Expiration</label>
-                <input
-                  type="date"
-                  name="waranty_expiration_date"
-                  value={formData.waranty_expiration_date}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <SearchableSelect
-                  label="Vendor"
-                  options={
-                    (Array.isArray(vendors) ? vendors : []).map((vendor) => ({
-                      id: vendor.id,
-                      name: vendor.company_name,
-                      contact: vendor.contact_person || vendor.email || vendor.phone,
-                    }))
-                  }
-                  value={formData.vendor_id}
-                  onChange={(value) => setFormData(prev => ({ ...prev, vendor_id: value }))}
-                  displayField="name"
-                  secondaryField="contact"
-                  placeholder="Select vendor or search..."
-                  emptyMessage="No vendors found"
-                  allowClear={true}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Assignment & Status Section */}
-          <div className="pb-2">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="text-purple-600 font-bold text-sm">3</span>
-              </div>
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Assignment & Status</h4>
-                <p className="text-xs text-slate-500">Employee assignment and asset status</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Status <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="status_id"
-                  value={formData.status_id}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select status</option>
-                  {statuses?.map((status) => (
-                    <option key={status.id} value={status.id}>
-                      {status.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <SearchableSelect
-                  label="Assigned To Employee"
-                  options={employees?.map(emp => ({
-                    id: emp.id,
-                    name: emp.fullname,
-                    position: emp.position?.position_name,
-                    branch: emp.branch?.branch_name
-                  })) || []}
-                  value={formData.assigned_to_employee_id}
-                  onChange={(value) => setFormData(prev => ({ ...prev, assigned_to_employee_id: value }))}
-                  displayField="name"
-                  secondaryField="position"
-                  tertiaryField="branch"
-                  placeholder="Select employee or search..."
-                  emptyMessage="No employees found"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Remarks</label>
-                <textarea
-                  name="remarks"
-                  value={formData.remarks}
-                  onChange={handleInputChange}
-                  rows="3"
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-            <button
-              type="button"
-              onClick={() => setIsEditModalOpen(false)}
-              className="px-5 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={updateMutation.isPending}
-              className="px-5 py-2.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {updateMutation.isPending ? 'Updating...' : 'Update Asset'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+      <AssetFormModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title="Edit Asset"
+        onSubmit={handleUpdate}
+        submitLabel={updateMutation.isPending ? 'Updating...' : 'Update Asset'}
+        isSubmitting={updateMutation.isPending}
+        formData={formData}
+        onInputChange={handleInputChange}
+        onVendorChange={handleVendorChange}
+        onEmployeeChange={handleEmployeeChange}
+        categories={categories}
+        vendorOptions={vendorOptions}
+        employeeOptions={employeeOptions}
+        statusOptions={statusOptions}
+        showStatus
+        showBookValue
+        assignmentTitle="Assignment & Status"
+        assignmentSubtitle="Employee assignment and asset status"
+      />
     </div>
   )
 }
