@@ -28,6 +28,13 @@ function BranchPage() {
   const [formData, setFormData] = useState(initialForm)
 
   const resetForm = () => setFormData(initialForm)
+  const getErrorMessage = (error, fallbackMessage) => {
+    if (error.response?.data?.errors) {
+      const errors = error.response.data.errors
+      return Object.values(errors).flat().join('\n')
+    }
+    return error.response?.data?.message || error.message || fallbackMessage
+  }
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -94,7 +101,7 @@ function BranchPage() {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Failed to create branch',
+        text: getErrorMessage(error, 'Failed to create branch'),
       })
     }
   }
@@ -117,7 +124,7 @@ function BranchPage() {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Failed to update branch',
+        text: getErrorMessage(error, 'Failed to update branch'),
       })
     }
   }
