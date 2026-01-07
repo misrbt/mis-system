@@ -85,6 +85,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('assets/{id}/status', [AssetController::class, 'updateStatus']);
     Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
     Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
+    Route::get('assets/totals', [AssetController::class, 'totals']);
     Route::apiResource('assets', AssetController::class);
 
     // Repair routes

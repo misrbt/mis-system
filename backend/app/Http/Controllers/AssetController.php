@@ -104,6 +104,76 @@ class AssetController extends Controller
     }
 
     /**
+     * Return acquisition cost totals grouped by employee for filtered assets.
+     */
+    public function totals(Request $request)
+    {
+        try {
+            $query = Asset::query();
+
+            if ($request->has('branch_id') && $request->branch_id) {
+                $query->whereHas('assignedEmployee', function ($q) use ($request) {
+                    $q->where('branch_id', $request->branch_id);
+                });
+            }
+
+            if ($request->has('category_id') && $request->category_id) {
+                $query->where('asset_category_id', $request->category_id);
+            }
+
+            if ($request->has('status_id') && $request->status_id) {
+                $query->where('status_id', $request->status_id);
+            }
+
+            if ($request->has('vendor_id') && $request->vendor_id) {
+                $query->where('vendor_id', $request->vendor_id);
+            }
+
+            if ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id) {
+                $query->where('assigned_to_employee_id', $request->assigned_to_employee_id);
+            }
+
+            if ($request->has('purchase_date_from') && $request->purchase_date_from) {
+                $query->where('purchase_date', '>=', $request->purchase_date_from);
+            }
+
+            if ($request->has('purchase_date_to') && $request->purchase_date_to) {
+                $query->where('purchase_date', '<=', $request->purchase_date_to);
+            }
+
+            if ($request->has('search') && $request->search) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('asset_name', 'like', "%{$search}%")
+                        ->orWhere('serial_number', 'like', "%{$search}%")
+                        ->orWhere('brand', 'like', "%{$search}%")
+                        ->orWhere('model', 'like', "%{$search}%");
+                });
+            }
+
+            $totals = $query
+                ->selectRaw('assigned_to_employee_id, COALESCE(SUM(acq_cost), 0) as total_acq_cost')
+                ->groupBy('assigned_to_employee_id')
+                ->get()
+                ->map(fn ($row) => [
+                    'employee_id' => $row->assigned_to_employee_id,
+                    'total_acq_cost' => (float) $row->total_acq_cost,
+                ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $totals,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch asset totals',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Store a newly created asset.
      * Automatically assigns "New" status and calculates initial book value.
      */
