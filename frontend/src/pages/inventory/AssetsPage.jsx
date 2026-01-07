@@ -21,6 +21,7 @@ import {
 import apiClient from '../../services/apiClient'
 import AssetFormModal from './assets/AssetFormModal'
 import { getAssetColumns } from './assets/assetColumns'
+import Modal from '../../components/Modal'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
 
@@ -124,6 +125,12 @@ function AssetsPage() {
   const [editingCell, setEditingCell] = useState(null)
   const [viewMode, setViewMode] = useState('table') // 'table' or 'pivot'
   const [showFilters, setShowFilters] = useState(false)
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
+  const [vendorFormData, setVendorFormData] = useState({
+    company_name: '',
+    contact_no: '',
+    address: '',
+  })
 
   // Pivot configuration state
   const [pivotConfig, setPivotConfig] = useState(INITIAL_PIVOT_CONFIG)
@@ -300,6 +307,29 @@ function AssetsPage() {
     },
   })
 
+  const createVendorMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/vendors', data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['vendors'])
+      setIsVendorModalOpen(false)
+      setVendorFormData({
+        company_name: '',
+        contact_no: '',
+        address: '',
+      })
+
+      // Auto-select the newly created vendor
+      if (response.data?.data?.id) {
+        setFormData((prev) => ({ ...prev, vendor_id: response.data.data.id }))
+      }
+
+      notifySuccess('Success!', 'Vendor created successfully')
+    },
+    onError: (error) => {
+      notifyError('Failed to create vendor', error)
+    },
+  })
+
   // Handlers
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target
@@ -377,6 +407,25 @@ function AssetsPage() {
     setFormData(buildFormData(asset))
     setIsEditModalOpen(true)
   }, [])
+
+  const openVendorModal = useCallback(() => {
+    setVendorFormData({
+      company_name: '',
+      contact_no: '',
+      address: '',
+    })
+    setIsVendorModalOpen(true)
+  }, [])
+
+  const handleVendorInputChange = useCallback((e) => {
+    const { name, value } = e.target
+    setVendorFormData((prev) => ({ ...prev, [name]: value }))
+  }, [])
+
+  const handleCreateVendor = useCallback((e) => {
+    e.preventDefault()
+    createVendorMutation.mutate(vendorFormData)
+  }, [createVendorMutation, vendorFormData])
 
   const handleCreate = useCallback((e) => {
     e.preventDefault()
@@ -1354,6 +1403,7 @@ function AssetsPage() {
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
         onGenerateSerial={generateSerialNumber}
+        onAddVendor={openVendorModal}
         categories={categories}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
@@ -1375,6 +1425,7 @@ function AssetsPage() {
         onInputChange={handleInputChange}
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
+        onAddVendor={openVendorModal}
         categories={categories}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
@@ -1384,6 +1435,75 @@ function AssetsPage() {
         assignmentTitle="Assignment & Status"
         assignmentSubtitle="Employee assignment and asset status"
       />
+
+      {/* Add Vendor Modal */}
+      <Modal
+        isOpen={isVendorModalOpen}
+        onClose={() => setIsVendorModalOpen(false)}
+        title="Add New Vendor"
+      >
+        <form onSubmit={handleCreateVendor} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Company Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="company_name"
+              value={vendorFormData.company_name}
+              onChange={handleVendorInputChange}
+              required
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter company name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Contact Number
+            </label>
+            <input
+              type="text"
+              name="contact_no"
+              value={vendorFormData.contact_no}
+              onChange={handleVendorInputChange}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter contact number"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Address
+            </label>
+            <textarea
+              name="address"
+              value={vendorFormData.address}
+              onChange={handleVendorInputChange}
+              rows="3"
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter address"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsVendorModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createVendorMutation.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {createVendorMutation.isPending ? 'Creating...' : 'Create Vendor'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

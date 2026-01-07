@@ -23,6 +23,7 @@ const AssetFormModal = ({
   assignmentSubtitle,
   usePlaceholders = false,
   onGenerateSerial,
+  onAddVendor,
 }) => {
   const placeholders = usePlaceholders
     ? {
@@ -228,17 +229,31 @@ const AssetFormModal = ({
             </div>
 
             <div>
-              <SearchableSelect
-                label="Vendor"
-                options={vendorOptions}
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Vendor</label>
+              <select
+                name="vendor_id"
                 value={formData.vendor_id}
-                onChange={onVendorChange}
-                displayField="name"
-                secondaryField="contact"
-                placeholder="Select vendor or search..."
-                emptyMessage="No vendors found"
-                allowClear={true}
-              />
+                onChange={(e) => {
+                  if (e.target.value === 'ADD_NEW') {
+                    onAddVendor?.()
+                  } else {
+                    onVendorChange(e.target.value)
+                  }
+                }}
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Select vendor</option>
+                {onAddVendor && (
+                  <option value="ADD_NEW" className="font-semibold text-green-600">
+                    + Add New Vendor
+                  </option>
+                )}
+                {vendorOptions?.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
