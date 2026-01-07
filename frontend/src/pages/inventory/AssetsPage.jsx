@@ -667,18 +667,18 @@ function AssetsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">IT Asset Inventory</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">IT Asset Inventory</h1>
           <p className="text-sm text-slate-600 mt-1.5">
             Track and manage all company assets with ease
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2">
+          <div className="inline-flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1 flex-shrink-0">
             <button
               onClick={() => setViewMode('table')}
-              className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+              className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex-1 sm:flex-initial ${
                 viewMode === 'table'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-700 hover:bg-slate-100'
@@ -686,11 +686,11 @@ function AssetsPage() {
               title="Table view"
             >
               <Table2 className="w-4 h-4" />
-              <span>Table</span>
+              <span className="hidden xs:inline">Table</span>
             </button>
             <button
               onClick={() => setViewMode('pivot')}
-              className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+              className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex-1 sm:flex-initial ${
                 viewMode === 'pivot'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-700 hover:bg-slate-100'
@@ -698,41 +698,43 @@ function AssetsPage() {
               title="Pivot view"
             >
               <BarChart3 className="w-4 h-4" />
-              <span>Pivot</span>
+              <span className="hidden xs:inline">Pivot</span>
             </button>
           </div>
           <button
             onClick={() => refetch()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all flex-shrink-0"
+            title="Refresh"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="sm:hidden">Refresh</span>
           </button>
           <button
             onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
+            className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
           >
-            <Plus className="w-5 h-5" />
-            <span>Add Asset</span>
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-sm sm:text-base">Add Asset</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
       {showFilters && viewMode === 'table' && (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <Filter className="w-5 h-5" />
-              Advanced Filters
+            <h3 className="text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="hidden xs:inline">Advanced </span>Filters
             </h3>
             <button
               onClick={() => setShowFilters(false)}
-              className="text-slate-400 hover:text-slate-600"
+              className="text-slate-400 hover:text-slate-600 p-1"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Search</label>
               <input
@@ -832,7 +834,7 @@ function AssetsPage() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            <div className="flex items-end">
+            <div className="flex items-end sm:col-span-2 lg:col-span-1">
               <button
                 onClick={clearFilters}
                 className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 transition-all"
@@ -856,24 +858,24 @@ function AssetsPage() {
 
       {/* Bulk Actions */}
       {selectedCount > 0 && viewMode === 'table' && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <span className="text-sm font-medium text-blue-900">
               {selectedCount} asset(s) selected
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={handleBulkDelete}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 border border-red-300 rounded-lg hover:bg-red-200 transition-all"
+                className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-red-700 bg-red-100 border border-red-300 rounded-lg hover:bg-red-200 transition-all"
               >
                 <Trash2 className="w-4 h-4" />
-                Delete Selected
+                <span className="whitespace-nowrap">Delete Selected</span>
               </button>
               <button
                 onClick={() => setSelectedRows({})}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+                className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
               >
-                Clear Selection
+                <span className="whitespace-nowrap">Clear Selection</span>
               </button>
             </div>
           </div>
@@ -883,15 +885,21 @@ function AssetsPage() {
       {/* Table View */}
       {viewMode === 'table' && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          {/* Mobile scroll hint */}
+          <div className="bg-blue-50 border-b border-blue-200 px-3 py-2 sm:hidden">
+            <p className="text-xs text-blue-800 text-center">
+              ← Swipe left/right to view all columns →
+            </p>
+          </div>
+          <div className="overflow-x-auto -mx-px">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
                       <th
                         key={header.id}
-                        className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider"
+                        className="px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-semibold text-slate-700 uppercase tracking-wider"
                         style={{ width: header.getSize() }}
                       >
                         {header.isPlaceholder ? null : (
@@ -940,7 +948,7 @@ function AssetsPage() {
                       }`}
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-3 text-sm">
+                        <td key={cell.id} className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}
@@ -953,32 +961,37 @@ function AssetsPage() {
 
           {/* Pagination */}
           {!isLoading && table.getRowModel().rows.length > 0 && (
-            <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-700">
-                  Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
+            <div className="px-3 sm:px-4 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-center sm:text-left">
+                <span className="text-xs sm:text-sm text-slate-700">
+                  <span className="hidden sm:inline">Showing </span>
+                  {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-
                   {Math.min(
                     (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
                     table.getFilteredRowModel().rows.length
-                  )}{' '}
-                  of {table.getFilteredRowModel().rows.length} assets
+                  )}
+                  <span className="hidden sm:inline"> of {table.getFilteredRowModel().rows.length} assets</span>
+                  <span className="sm:hidden">/{table.getFilteredRowModel().rows.length}</span>
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => table.previousPage()}
                   disabled={!table.getCanPreviousPage()}
-                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  Previous
+                  <span className="hidden xs:inline">Previous</span>
+                  <span className="xs:hidden">Prev</span>
                 </button>
-                <span className="text-sm text-slate-700">
-                  Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+                <span className="text-xs sm:text-sm text-slate-700 px-1">
+                  <span className="hidden xs:inline">Page </span>
+                  {table.getState().pagination.pageIndex + 1}<span className="hidden xs:inline"> of {table.getPageCount()}</span>
+                  <span className="xs:hidden">/{table.getPageCount()}</span>
                 </span>
                 <button
                   onClick={() => table.nextPage()}
                   disabled={!table.getCanNextPage()}
-                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   Next
                 </button>
@@ -993,33 +1006,33 @@ function AssetsPage() {
       {viewMode === 'pivot' && (
         <div className="space-y-4">
           {/* Pivot Configuration */}
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Pivot Table Configuration
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden xs:inline">Pivot Table </span>Configuration
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
                   onClick={exportPivotToCSV}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 transition-all"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 transition-all"
                   title="Export to CSV"
                 >
                   <Download className="w-4 h-4" />
-                  Export CSV
+                  <span className="hidden xs:inline">Export </span>CSV
                 </button>
                 <button
                   onClick={() => refetch()}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
                   title="Refresh data"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  Refresh
+                  <span className="hidden xs:inline">Refresh</span>
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Row Dimension */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1126,23 +1139,23 @@ function AssetsPage() {
                 configuration.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full border-collapse min-w-[600px]">
                   <thead>
                     <tr className="bg-slate-100 border-b-2 border-slate-300">
-                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider border-r-2 border-slate-300 sticky left-0 bg-slate-100 z-10">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider border-r-2 border-slate-300 sticky left-0 bg-slate-100 z-10">
                         {pivotConfig.rowDimension}
                       </th>
                       {pivotData.columnKeys.map((colKey) => (
                         <th
                           key={colKey}
-                          className="px-4 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wider border-r border-slate-200"
+                          className="px-2 sm:px-4 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider border-r border-slate-200"
                         >
-                          {colKey}
+                          <span className="block truncate max-w-[100px] sm:max-w-none">{colKey}</span>
                         </th>
                       ))}
                       {pivotConfig.showTotals && (
-                        <th className="px-4 py-3 text-center text-xs font-bold text-blue-700 uppercase tracking-wider bg-blue-50 border-l-2 border-blue-300">
+                        <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-blue-700 uppercase tracking-wider bg-blue-50 border-l-2 border-blue-300">
                           Total
                         </th>
                       )}
@@ -1160,8 +1173,8 @@ function AssetsPage() {
                           key={rowKey}
                           className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}
                         >
-                          <td className="px-4 py-3 text-sm font-semibold text-slate-900 border-r-2 border-slate-300 sticky left-0 bg-inherit z-10">
-                            {rowKey}
+                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-semibold text-slate-900 border-r-2 border-slate-300 sticky left-0 bg-inherit z-10">
+                            <span className="block truncate max-w-[120px] sm:max-w-none">{rowKey}</span>
                           </td>
                           {pivotData.columnKeys.map((colKey) => {
                             const value = pivotData.data[rowKey][colKey]
@@ -1170,7 +1183,7 @@ function AssetsPage() {
                             return (
                               <td
                                 key={`${rowKey}-${colKey}`}
-                                className={`px-4 py-3 text-sm text-center border-r border-slate-200 ${
+                                className={`px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-center border-r border-slate-200 ${
                                   hasValue
                                     ? 'text-slate-900 font-medium bg-green-50'
                                     : 'text-slate-400'
@@ -1181,7 +1194,7 @@ function AssetsPage() {
                             )
                           })}
                           {pivotConfig.showTotals && (
-                            <td className="px-4 py-3 text-sm font-bold text-center text-blue-900 bg-blue-50 border-l-2 border-blue-300">
+                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-center text-blue-900 bg-blue-50 border-l-2 border-blue-300">
                               {formatPivotValue(rowTotal)}
                             </td>
                           )}
@@ -1192,7 +1205,7 @@ function AssetsPage() {
                     {/* Totals Row */}
                     {pivotConfig.showTotals && (
                       <tr className="bg-blue-100 border-t-2 border-blue-300 font-bold">
-                        <td className="px-4 py-3 text-sm text-blue-900 border-r-2 border-blue-300 sticky left-0 bg-blue-100 z-10">
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-blue-900 border-r-2 border-blue-300 sticky left-0 bg-blue-100 z-10">
                           Total
                         </td>
                         {pivotData.columnKeys.map((colKey) => {
@@ -1204,14 +1217,14 @@ function AssetsPage() {
                           return (
                             <td
                               key={`total-${colKey}`}
-                              className="px-4 py-3 text-sm text-center text-blue-900 border-r border-blue-200"
+                              className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-center text-blue-900 border-r border-blue-200"
                             >
                               {formatPivotValue(colTotal)}
                             </td>
                           )
                         })}
                         {pivotConfig.showTotals && (
-                          <td className="px-4 py-3 text-sm text-center text-blue-900 bg-blue-200 border-l-2 border-blue-400">
+                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-center text-blue-900 bg-blue-200 border-l-2 border-blue-400">
                             {formatPivotValue(
                               pivotData.rowKeys.reduce(
                                 (sum, rowKey) =>
@@ -1236,30 +1249,30 @@ function AssetsPage() {
 
           {/* Pivot Stats Summary */}
           {pivotData && pivotData.rowKeys.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">Total Assets</div>
-                <div className="text-2xl font-bold text-slate-900">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1">Total Assets</div>
+                <div className="text-xl sm:text-2xl font-bold text-slate-900">
                   {assetsData?.data?.length || 0}
                 </div>
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1 truncate">
                   Unique {pivotConfig.rowDimension}s
                 </div>
-                <div className="text-2xl font-bold text-blue-600">{pivotData.rowKeys.length}</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-600">{pivotData.rowKeys.length}</div>
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1 truncate">
                   Unique {pivotConfig.columnDimension}s
                 </div>
-                <div className="text-2xl font-bold text-green-600">
+                <div className="text-xl sm:text-2xl font-bold text-green-600">
                   {pivotData.columnKeys.length}
                 </div>
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">Data Points</div>
-                <div className="text-2xl font-bold text-purple-600">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1">Data Points</div>
+                <div className="text-xl sm:text-2xl font-bold text-purple-600">
                   {pivotData.rowKeys.length * pivotData.columnKeys.length}
                 </div>
               </div>
