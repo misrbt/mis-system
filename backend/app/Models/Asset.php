@@ -355,9 +355,13 @@ class Asset extends Model
      */
     public function generateBarcode()
     {
-        // Use serial number (asset code) as barcode value
-        // If no serial number, fall back to padded asset ID
-        $barcodeValue = $this->serial_number ?? str_pad($this->id, 8, '0', STR_PAD_LEFT);
+        // Only generate barcode if serial number exists
+        if (!$this->serial_number) {
+            return null;
+        }
+
+        // Use serial number as barcode value
+        $barcodeValue = $this->serial_number;
 
         // Generate CODE128 barcode as SVG
         $generator = new \Picqer\Barcode\BarcodeGeneratorSVG();
