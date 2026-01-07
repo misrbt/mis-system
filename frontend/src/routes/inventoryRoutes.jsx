@@ -1,20 +1,23 @@
+import { lazy } from 'react'
 import { Navigate } from 'react-router-dom'
 import ProtectedRoute from '../components/ProtectedRoute'
-import InventoryHome from '../pages/inventory/home'
-import BranchPage from '../pages/inventory/BranchPage'
-import SectionPage from '../pages/inventory/SectionPage'
-import PositionPage from '../pages/inventory/PositionPage'
-import EmployeePage from '../pages/inventory/EmployeePage'
-import StatusPage from '../pages/inventory/StatusPage'
-import VendorsPage from '../pages/inventory/VendorsPage'
-import AssetCategoryPage from '../pages/inventory/AssetCategoryPage'
-import AssetsPage from '../pages/inventory/AssetsPage'
-import AssetViewPage from '../pages/inventory/AssetViewPage'
-import RepairsPage from '../pages/inventory/RepairsPage'
-import ReportsPage from '../pages/inventory/ReportsPage'
-import AuditLogsPage from '../pages/inventory/AuditLogsPage'
-import MonthlyExpensesPage from '../pages/inventory/MonthlyExpensesPage'
-import InventoryLayout from '../layouts/InventoryLayout'
+
+// Lazy load all inventory pages
+const InventoryLayout = lazy(() => import('../layouts/InventoryLayout'))
+const InventoryHome = lazy(() => import('../pages/inventory/home'))
+const BranchPage = lazy(() => import('../pages/inventory/BranchPage'))
+const SectionPage = lazy(() => import('../pages/inventory/SectionPage'))
+const PositionPage = lazy(() => import('../pages/inventory/PositionPage'))
+const EmployeePage = lazy(() => import('../pages/inventory/EmployeePage'))
+const StatusPage = lazy(() => import('../pages/inventory/StatusPage'))
+const VendorsPage = lazy(() => import('../pages/inventory/VendorsPage'))
+const AssetCategoryPage = lazy(() => import('../pages/inventory/AssetCategoryPage'))
+const AssetsPage = lazy(() => import('../pages/inventory/AssetsPage'))
+const AssetViewPage = lazy(() => import('../pages/inventory/AssetViewPage'))
+const RepairsPage = lazy(() => import('../pages/inventory/RepairsPage'))
+const ReportsPage = lazy(() => import('../pages/inventory/ReportsPage'))
+const AuditLogsPage = lazy(() => import('../pages/inventory/AuditLogsPage'))
+const MonthlyExpensesPage = lazy(() => import('../pages/inventory/MonthlyExpensesPage'))
 
 const inventoryRoutes = {
   path: '/inventory',

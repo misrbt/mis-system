@@ -1,10 +1,13 @@
+import { lazy } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
-import AuthLayout from '../layouts/AuthLayout'
-import Login from '../pages/auth/Login'
-import Register from '../pages/auth/Register'
-import Portal from '../pages/Portal'
 import ProtectedRoute from '../components/ProtectedRoute'
 import inventoryRoutes from './inventoryRoutes'
+
+// Lazy load auth and portal pages
+const AuthLayout = lazy(() => import('../layouts/AuthLayout'))
+const Login = lazy(() => import('../pages/auth/Login'))
+const Register = lazy(() => import('../pages/auth/Register'))
+const Portal = lazy(() => import('../pages/Portal'))
 
 const router = createBrowserRouter([
   // Root redirect to login
