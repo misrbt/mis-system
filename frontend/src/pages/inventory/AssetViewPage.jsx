@@ -99,6 +99,14 @@ function AssetViewPage() {
   // Employee view tab state
   const [employeeViewTab, setEmployeeViewTab] = useState('assets') // 'assets' or 'history'
 
+  // Vendor creation state
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
+  const [vendorFormData, setVendorFormData] = useState({
+    company_name: '',
+    contact_no: '',
+    address: '',
+  })
+
   // Determine view mode based on params
   const isAssetView = !!id
 
@@ -298,6 +306,40 @@ function AssetViewPage() {
       Swal.fire({
         icon: 'error',
         title: 'Error Creating Asset',
+        text: errorMessage,
+        confirmButtonText: 'OK',
+      })
+    },
+  })
+
+  // Vendor creation mutation
+  const createVendorMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/vendors', data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['vendors'])
+      setIsVendorModalOpen(false)
+      setVendorFormData({
+        company_name: '',
+        contact_no: '',
+        address: '',
+      })
+      // Auto-select the newly created vendor
+      if (response.data?.data?.id) {
+        setAddFormData((prev) => ({ ...prev, vendor_id: response.data.data.id }))
+      }
+      Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: 'Vendor created successfully',
+        timer: 2000,
+        showConfirmButton: false,
+      })
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create vendor'
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
         text: errorMessage,
         confirmButtonText: 'OK',
       })
@@ -520,6 +562,21 @@ function AssetViewPage() {
     const numericStatusId = Number(statusId)
     if (Number.isNaN(numericStatusId)) return
     updateStatusMutation.mutate({ assetId, statusId: numericStatusId })
+  }
+
+  // Vendor handlers
+  const openVendorModal = () => {
+    setIsVendorModalOpen(true)
+  }
+
+  const handleVendorInputChange = (e) => {
+    const { name, value } = e.target
+    setVendorFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleCreateVendor = (e) => {
+    e.preventDefault()
+    createVendorMutation.mutate(vendorFormData)
   }
 
   const handleDownloadCode = () => {
@@ -1334,7 +1391,86 @@ function AssetViewPage() {
         onGenerateSerial={generateSerialNumber}
         onSubmit={handleAddAsset}
         isPending={addAssetMutation.isPending}
+        onAddVendor={openVendorModal}
       />
+
+      {/* Vendor Creation Modal */}
+      {isVendorModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+              <h3 className="text-xl font-semibold text-slate-900">Add New Vendor</h3>
+              <button
+                onClick={() => setIsVendorModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateVendor} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Company Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="company_name"
+                  value={vendorFormData.company_name}
+                  onChange={handleVendorInputChange}
+                  required
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter company name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Contact Number
+                </label>
+                <input
+                  type="text"
+                  name="contact_no"
+                  value={vendorFormData.contact_no}
+                  onChange={handleVendorInputChange}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter contact number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Address
+                </label>
+                <textarea
+                  name="address"
+                  value={vendorFormData.address}
+                  onChange={handleVendorInputChange}
+                  rows="3"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter address"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsVendorModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createVendorMutation.isPending}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {createVendorMutation.isPending ? 'Creating...' : 'Create Vendor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal - Mobile Optimized */}
       <DeleteConfirmModal

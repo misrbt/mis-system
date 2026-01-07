@@ -287,23 +287,46 @@ class Asset extends Model
         $acqCost = !is_null($this->acq_cost) ? number_format($this->acq_cost, 2) : 'N/A';
         $bookValue = !is_null($this->book_value) ? number_format($this->book_value, 2) : 'N/A';
 
-        // Professional text payload for QR code (multi-line key/value pairs)
-        $qrData = implode("\n", [
-            'Equipment ID: ' . ($this->category?->code ?? 'N/A'),
-            'Asset Name: ' . ($this->asset_name ?? 'N/A'),
-            'Category: ' . ($this->category?->name ?? 'N/A'),
-            'Serial Number: ' . ($this->serial_number ?? 'N/A'),
-            'Brand: ' . ($this->brand ?? 'N/A'),
-            'Model: ' . ($this->model ?? 'N/A'),
-            'Purchase Date: ' . $purchaseDate,
-            'Warranty Expiration: ' . $warrantyDate,
-            'Vendor: ' . $vendorName,
-            'Status: ' . $statusName,
-            'Assigned To: ' . $assignedTo,
-            'Branch: ' . $branchName,
-            'Acquisition Cost: ' . $acqCost,
-            'Book Value: ' . $bookValue,
-        ]);
+        // Professional formatted text payload for QR code (ASCII compatible)
+        $qrData = "================================\n";
+        $qrData .= "    ASSET INFORMATION\n";
+        $qrData .= "================================\n\n";
+
+        // Basic Information
+        $qrData .= "[BASIC INFO]\n";
+        $qrData .= "--------------------------------\n";
+        $qrData .= "* Equipment ID:\n  " . ($this->category?->code ?? 'N/A') . "\n\n";
+        $qrData .= "* Asset Name:\n  " . ($this->asset_name ?? 'N/A') . "\n\n";
+        $qrData .= "* Category:\n  " . ($this->category?->name ?? 'N/A') . "\n\n";
+        $qrData .= "* Serial Number:\n  " . ($this->serial_number ?? 'N/A') . "\n\n";
+
+        // Product Details
+        $qrData .= "[PRODUCT DETAILS]\n";
+        $qrData .= "--------------------------------\n";
+        $qrData .= "* Brand:\n  " . ($this->brand ?? 'N/A') . "\n\n";
+        $qrData .= "* Model:\n  " . ($this->model ?? 'N/A') . "\n\n";
+
+        // Purchase & Warranty
+        $qrData .= "[PURCHASE & WARRANTY]\n";
+        $qrData .= "--------------------------------\n";
+        $qrData .= "* Purchase Date:\n  " . $purchaseDate . "\n\n";
+        $qrData .= "* Warranty Expiration:\n  " . $warrantyDate . "\n\n";
+        $qrData .= "* Vendor:\n  " . $vendorName . "\n\n";
+
+        // Financial Information
+        $qrData .= "[FINANCIAL INFO]\n";
+        $qrData .= "--------------------------------\n";
+        $qrData .= "* Acquisition Cost:\n  PHP " . $acqCost . "\n\n";
+        $qrData .= "* Book Value:\n  PHP " . $bookValue . "\n\n";
+
+        // Status & Assignment
+        $qrData .= "[STATUS & ASSIGNMENT]\n";
+        $qrData .= "--------------------------------\n";
+        $qrData .= "* Status:\n  " . $statusName . "\n\n";
+        $qrData .= "* Assigned To:\n  " . $assignedTo . "\n\n";
+        $qrData .= "* Branch:\n  " . $branchName . "\n\n";
+
+        $qrData .= "================================";
 
         // Use SVG format to avoid image library dependencies
         $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')

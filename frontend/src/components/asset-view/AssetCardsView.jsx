@@ -282,84 +282,99 @@ const AssetCard = ({
           </div>
 
           {/* Card Body - Asset Details */}
-          <div className="flex-1 p-5 sm:p-7 space-y-4 sm:space-y-5 bg-white">
-            {/* Primary Info Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              {asset.brand && (
-                <InfoCard label="Brand" value={asset.brand} icon="🏢" />
-              )}
-              {asset.model && (
-                <InfoCard label="Model" value={asset.model} icon="📱" />
-              )}
-            </div>
+          <div className="flex-1 p-5 sm:p-7 bg-white flex flex-col">
+            <div className="space-y-4 sm:space-y-5 flex-1">
+              {/* Primary Info Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                {asset.brand && (
+                  <InfoCard label="Brand" value={asset.brand} icon="🏢" />
+                )}
+                {asset.model && (
+                  <InfoCard label="Model" value={asset.model} icon="📱" />
+                )}
+              </div>
 
-            {/* Serial & Purchase Info */}
-            <div className="space-y-2.5">
-              {asset.serial_number && (
-                <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                  <Package className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-slate-500">Serial Number</div>
-                    <div className="text-sm font-mono font-semibold text-slate-900 truncate">{asset.serial_number}</div>
+              {/* Serial & Purchase Info */}
+              <div className="space-y-2.5">
+                {asset.serial_number && (
+                  <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                    <Package className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-slate-500">Serial Number</div>
+                      <div className="text-sm font-mono font-semibold text-slate-900 truncate">{asset.serial_number}</div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {asset.purchase_date && (
-                <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                  <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-xs text-slate-500">Purchase Date</div>
-                    <div className="text-sm font-medium text-slate-900">
-                      {formatDate(asset.purchase_date)}
+                {asset.purchase_date && (
+                  <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                    <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="text-xs text-slate-500">Purchase Date</div>
+                      <div className="text-sm font-medium text-slate-900">
+                        {formatDate(asset.purchase_date)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {asset.book_value && (
+                  <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg border border-green-100">
+                    <div className="flex-1">
+                      <div className="text-xs text-green-600 font-medium">Book Value</div>
+                      <div className="text-sm font-bold text-green-700">
+                        {formatCurrency(asset.book_value)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Additional Details */}
+              <div className="pt-3 border-t border-slate-200 space-y-2">
+                {asset.estimate_life && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      Estimated Life
+                    </span>
+                    <span className="font-semibold text-slate-900">{asset.estimate_life} years</span>
+                  </div>
+                )}
+                {asset.waranty_expiration_date && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5" />
+                      Warranty Expires
+                    </span>
+                    <span className="font-semibold text-slate-900">
+                      {formatDate(asset.waranty_expiration_date)}
+                    </span>
+                  </div>
+                )}
+                {asset.vendor && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Vendor</span>
+                    <span className="font-semibold text-slate-900 truncate ml-2">{asset.vendor.company_name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Remarks */}
+              {asset.remarks && (
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                    <FileText className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-amber-700 mb-1">Notes</div>
+                      <div className="text-sm text-slate-700 line-clamp-3">{asset.remarks}</div>
                     </div>
                   </div>
                 </div>
               )}
-
-              {asset.book_value && (
-                <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg border border-green-100">
-                  <div className="flex-1">
-                    <div className="text-xs text-green-600 font-medium">Book Value</div>
-                    <div className="text-sm font-bold text-green-700">
-                      {formatCurrency(asset.book_value)}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Additional Details */}
-            <div className="pt-3 border-t border-slate-200 space-y-2">
-              {asset.estimate_life && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" />
-                    Estimated Life
-                  </span>
-                  <span className="font-semibold text-slate-900">{asset.estimate_life} years</span>
-                </div>
-              )}
-              {asset.waranty_expiration_date && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5" />
-                    Warranty Expires
-                  </span>
-                  <span className="font-semibold text-slate-900">
-                    {formatDate(asset.waranty_expiration_date)}
-                  </span>
-                </div>
-              )}
-              {asset.vendor && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Vendor</span>
-                  <span className="font-semibold text-slate-900 truncate ml-2">{asset.vendor.company_name}</span>
-                </div>
-              )}
-            </div>
-
-            {/* QR Code / Barcode Section */}
+            {/* QR Code / Barcode Section - Fixed at bottom */}
             {(asset.qr_code || asset.barcode) && (
               <div className="mt-4 pt-4 border-t border-slate-200">
                 {asset.qr_code && asset.barcode ? (
@@ -485,19 +500,6 @@ const AssetCard = ({
                     )}
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Remarks */}
-            {asset.remarks && (
-              <div className="pt-3 border-t border-slate-200">
-                <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-100">
-                  <FileText className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-amber-700 mb-1">Notes</div>
-                    <div className="text-sm text-slate-700 line-clamp-3">{asset.remarks}</div>
-                  </div>
-                </div>
               </div>
             )}
           </div>
