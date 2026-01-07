@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -14,7 +14,6 @@ import {
 import {
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
@@ -131,25 +130,28 @@ function AssetsPage() {
 
   // Filter state
   const [filters, setFilters] = useState(() => ({ ...INITIAL_FILTERS }))
+  const deferredFilters = useDeferredValue(filters)
+  const isFiltering = deferredFilters !== filters
+  const [searchInput, setSearchInput] = useState(INITIAL_FILTERS.search)
 
   // Form state
   const [formData, setFormData] = useState(() => buildFormData())
 
   // Fetch assets with React Query
   const { data: assetsData, isLoading, refetch } = useQuery({
-    queryKey: ['assets', filters],
+    queryKey: ['assets', deferredFilters],
     queryFn: async () => {
-      const params = buildQueryParams(filters)
+      const params = buildQueryParams(deferredFilters)
       const response = await apiClient.get(`/assets?${params}`)
       return response.data
     },
   })
 
   const { data: assetsTotalsData, isLoading: isLoadingTotals } = useQuery({
-    queryKey: ['assets', 'totals', filters],
+    queryKey: ['assets', 'totals', deferredFilters],
     queryFn: async () => {
-      const params = buildQueryParams(filters, { all: '1' })
-      const response = await apiClient.get(`/assets?${params}`)
+      const params = buildQueryParams(deferredFilters)
+      const response = await apiClient.get(`/assets/totals?${params}`)
       return response.data
     },
   })
@@ -197,19 +199,13 @@ function AssetsPage() {
 
   const employeeAcqTotals = useMemo(() => {
     const totals = {}
-    const assets = assetsTotalsData?.data || []
+    const rows = assetsTotalsData?.data || []
 
-    assets.forEach((asset) => {
-      const employeeKey =
-        asset.assigned_to_employee_id ?? asset.assigned_employee?.id ?? 'unassigned'
-
-      if (!Object.prototype.hasOwnProperty.call(totals, employeeKey)) {
-        totals[employeeKey] = 0
-      }
-
-      const value = parseFloat(asset.acq_cost)
+    rows.forEach((row) => {
+      const employeeKey = row.employee_id ?? 'unassigned'
+      const value = parseFloat(row.total_acq_cost)
       if (!Number.isNaN(value)) {
-        totals[employeeKey] += value
+        totals[employeeKey] = value
       }
     })
 
@@ -352,7 +348,24 @@ function AssetsPage() {
 
   const clearFilters = useCallback(() => {
     setFilters({ ...INITIAL_FILTERS })
+    setSearchInput(INITIAL_FILTERS.search)
   }, [])
+
+  useEffect(() => {
+    setSearchInput(filters.search)
+  }, [filters.search])
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setFilters((prev) => (
+        prev.search === searchInput
+          ? prev
+          : { ...prev, search: searchInput }
+      ))
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchInput])
 
   const openAddModal = useCallback(() => {
     setFormData(buildFormData())
@@ -471,7 +484,6 @@ function AssetsPage() {
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     state: {
       rowSelection: selectedRows,
     },
@@ -480,6 +492,7 @@ function AssetsPage() {
   })
 
   const selectedCount = Object.values(selectedRows).filter(Boolean).length
+  const totalAssets = assetsData?.data?.length || 0
 
   // Group assets by employee
   // Pivot table calculation
@@ -588,7 +601,10 @@ function AssetsPage() {
     }
   }, [assetsData, pivotConfig])
 
-  const pivotData = useMemo(() => calculatePivotData(), [calculatePivotData])
+  const pivotData = useMemo(() => {
+    if (viewMode !== 'pivot') return null
+    return calculatePivotData()
+  }, [calculatePivotData, viewMode])
 
   // Handle pivot config changes
   const handlePivotConfigChange = (field, value) => {
@@ -720,30 +736,35 @@ function AssetsPage() {
       {/* Filters */}
       {showFilters && viewMode === 'table' && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <Filter className="w-5 h-5" />
-              Advanced Filters
-            </h3>
-            <button
-              onClick={() => setShowFilters(false)}
-              className="text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Search</label>
-              <input
-                type="text"
-                name="search"
-                value={filters.search}
-                onChange={handleFilterChange}
-                placeholder="Asset name, serial, brand..."
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <Filter className="w-5 h-5" />
+                Advanced Filters
+              </h3>
+              <div className="flex items-center gap-3">
+                {isFiltering && (
+                  <span className="text-xs text-slate-500">Updating...</span>
+                )}
+                <button
+                  onClick={() => setShowFilters(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Search</label>
+                <input
+                  type="text"
+                  name="search"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Asset name, serial, brand..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Branch</label>
               <select
@@ -956,12 +977,12 @@ function AssetsPage() {
             <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-700">
-                  Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
+                  Showing {totalAssets === 0 ? 0 : table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
                   {Math.min(
                     (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                    table.getFilteredRowModel().rows.length
+                    totalAssets
                   )}{' '}
-                  of {table.getFilteredRowModel().rows.length} assets
+                  of {totalAssets} assets
                 </span>
               </div>
               <div className="flex items-center gap-2">
