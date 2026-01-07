@@ -267,7 +267,7 @@ function VendorsPage() {
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Address <span className="text-red-500">*</span>
+              Address
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -278,7 +278,6 @@ function VendorsPage() {
                 name="address"
                 value={formData.address}
                 onChange={handleInputChange}
-                required
                 className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="Enter address"
               />
@@ -353,7 +352,7 @@ function VendorsPage() {
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Address <span className="text-red-500">*</span>
+              Address
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -364,7 +363,6 @@ function VendorsPage() {
                 name="address"
                 value={formData.address}
                 onChange={handleInputChange}
-                required
                 className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="Enter address"
               />
