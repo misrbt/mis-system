@@ -326,4 +326,103 @@ class AssetMovementController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Bulk transfer multiple assets to one employee
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function bulkTransfer(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'asset_ids' => 'required|array|min:1',
+            'asset_ids.*' => 'required|exists:assets,id',
+            'to_employee_id' => 'required|exists:employee,id',
+            'reason' => 'required|string|min:10',
+            'remarks' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $assetIds = $request->asset_ids;
+            $toEmployeeId = $request->to_employee_id;
+            $reason = $request->reason;
+            $remarks = $request->remarks;
+
+            $transferredAssets = [];
+            $failedAssets = [];
+
+            foreach ($assetIds as $assetId) {
+                try {
+                    $asset = Asset::findOrFail($assetId);
+
+                    // Update asset assignment
+                    $asset->assigned_to_employee_id = $toEmployeeId;
+                    $asset->save();
+
+                    // Get the movement created by observer and update it with reason
+                    $movement = AssetMovement::where('asset_id', $assetId)
+                        ->latest('created_at')
+                        ->first();
+
+                    if ($movement) {
+                        $movement->update([
+                            'reason' => $reason,
+                            'remarks' => $remarks,
+                        ]);
+                    }
+
+                    $asset->load([
+                        'category',
+                        'vendor',
+                        'status',
+                        'assignedEmployee.branch',
+                        'assignedEmployee.position',
+                    ]);
+
+                    $transferredAssets[] = $asset;
+                } catch (\Exception $e) {
+                    $failedAssets[] = [
+                        'asset_id' => $assetId,
+                        'error' => $e->getMessage(),
+                    ];
+                }
+            }
+
+            DB::commit();
+
+            $responseMessage = count($transferredAssets) . ' asset(s) transferred successfully';
+            if (count($failedAssets) > 0) {
+                $responseMessage .= ', ' . count($failedAssets) . ' failed';
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $responseMessage,
+                'data' => [
+                    'transferred' => $transferredAssets,
+                    'failed' => $failedAssets,
+                    'total_transferred' => count($transferredAssets),
+                    'total_failed' => count($failedAssets),
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to transfer assets',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

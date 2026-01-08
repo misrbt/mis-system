@@ -134,4 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/return', [AssetMovementController::class, 'returnAsset']);
         Route::post('/update-status', [AssetMovementController::class, 'updateStatus']);
     });
+
+    // Bulk transfer route (outside the {id} prefix)
+    Route::post('assets/movements/bulk-transfer', [AssetMovementController::class, 'bulkTransfer']);
 });

@@ -15,13 +15,27 @@ class ReportController extends Controller
     {
         try {
             $query = $this->buildAssetQuery($request);
-            $assets = $query->get();
+            $includeGrouped = $request->has('include_grouped')
+                ? filter_var($request->input('include_grouped'), FILTER_VALIDATE_BOOLEAN)
+                : true;
+            $includeSummary = $request->has('include_summary')
+                ? filter_var($request->input('include_summary'), FILTER_VALIDATE_BOOLEAN)
+                : true;
+            $limit = (int) $request->input('limit', 0);
 
-            // Group assets by employee
-            $groupedByEmployee = $this->groupAssetsByEmployee($assets);
+            $totalCount = (clone $query)->count();
 
-            // Calculate summary statistics
-            $summary = $this->calculateSummary($assets);
+            $assetsQuery = clone $query;
+            if ($limit > 0) {
+                $assetsQuery->limit($limit);
+            }
+            $assets = $assetsQuery->get();
+
+            // Group assets by employee (optional)
+            $groupedByEmployee = $includeGrouped ? $this->groupAssetsByEmployee($assets) : [];
+
+            // Calculate summary statistics (optional)
+            $summary = $includeSummary ? $this->calculateSummary($assets) : null;
 
             return response()->json([
                 'success' => true,
@@ -29,6 +43,10 @@ class ReportController extends Controller
                     'assets' => $assets,
                     'grouped_by_employee' => $groupedByEmployee,
                     'summary' => $summary,
+                    'meta' => [
+                        'total_count' => $totalCount,
+                        'limit' => $limit > 0 ? $limit : null,
+                    ],
                 ],
             ], 200);
         } catch (\Exception $e) {

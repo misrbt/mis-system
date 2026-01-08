@@ -12,7 +12,8 @@ function SearchableSelect({
   tertiaryField,
   emptyMessage = 'No results found',
   allowClear = true,
-  required = false
+  required = false,
+  isLoading = false
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -171,37 +172,49 @@ function SearchableSelect({
 
           {/* Options List */}
           <div className="overflow-y-auto max-h-64">
-            {filteredOptions.length === 0 ? (
+            {isLoading ? (
+              <div className="px-4 py-8 text-center text-slate-500 text-sm">
+                <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+                <p>Loading employees...</p>
+              </div>
+            ) : filteredOptions.length === 0 ? (
               <div className="px-4 py-8 text-center text-slate-500 text-sm">
                 <User className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                 {emptyMessage}
               </div>
             ) : (
-              filteredOptions.map((option, index) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => handleSelect(option)}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                  className={`w-full px-4 py-2.5 text-left hover:bg-blue-50 transition-colors flex flex-col ${
-                    highlightedIndex === index ? 'bg-blue-50' : ''
-                  } ${
-                    value === option.id ? 'bg-blue-100 border-l-4 border-blue-500' : ''
-                  }`}
-                >
-                  <span className="text-sm font-medium text-slate-900">
-                    {option[displayField]}
-                  </span>
-                  {secondaryField && option[secondaryField] && (
-                    <span className="text-xs text-slate-600 mt-0.5">
-                      {option[secondaryField]}
-                      {tertiaryField && option[tertiaryField] &&
-                        ` • ${option[tertiaryField]}`
-                      }
+              <>
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+                  <p className="text-xs text-slate-600">
+                    Showing {filteredOptions.length} of {options.length} {filteredOptions.length === 1 ? 'employee' : 'employees'}
+                  </p>
+                </div>
+                {filteredOptions.map((option, index) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => handleSelect(option)}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    className={`w-full px-4 py-2.5 text-left hover:bg-blue-50 transition-colors flex flex-col ${
+                      highlightedIndex === index ? 'bg-blue-50' : ''
+                    } ${
+                      value === option.id ? 'bg-blue-100 border-l-4 border-blue-500' : ''
+                    }`}
+                  >
+                    <span className="text-sm font-medium text-slate-900">
+                      {option[displayField]}
                     </span>
-                  )}
-                </button>
-              ))
+                    {secondaryField && option[secondaryField] && (
+                      <span className="text-xs text-slate-600 mt-0.5">
+                        {option[secondaryField]}
+                        {tertiaryField && option[tertiaryField] &&
+                          ` • ${option[tertiaryField]}`
+                        }
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </>
             )}
           </div>
         </div>

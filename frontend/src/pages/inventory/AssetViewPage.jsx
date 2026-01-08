@@ -25,6 +25,7 @@ import {
   QrCode,
   Barcode,
   MessageSquare,
+  Search,
 } from 'lucide-react'
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
@@ -107,6 +108,12 @@ function AssetViewPage() {
     address: '',
   })
 
+  // Multi-select state for bulk operations
+  const [selectedAssets, setSelectedAssets] = useState([])
+  const [isBulkTransferModalOpen, setIsBulkTransferModalOpen] = useState(false)
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
+
   // Determine view mode based on params
   const isAssetView = !!id
 
@@ -181,6 +188,31 @@ function AssetViewPage() {
 
   // Fetch dropdown data using custom hook (consolidated)
   const { categories, statuses, vendors, statusColorMap, isLoading: isLoadingDropdowns } = useAssetDropdownData()
+
+  // Fetch employees for bulk transfer
+  const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
+    queryKey: ['employees'],
+    queryFn: async () => {
+      const response = await apiClient.get('/employees')
+      return response.data
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+  const employees = employeesData?.data || []
+
+  // Filter employees based on search
+  const filteredEmployees = employees.filter((employee) => {
+    if (!employeeSearch) return true
+    const searchLower = employeeSearch.toLowerCase()
+    return (
+      employee.fullname?.toLowerCase().includes(searchLower) ||
+      employee.firstname?.toLowerCase().includes(searchLower) ||
+      employee.lastname?.toLowerCase().includes(searchLower) ||
+      employee.branch?.branch_name?.toLowerCase().includes(searchLower) ||
+      employee.position?.position_name?.toLowerCase().includes(searchLower) ||
+      employee.email?.toLowerCase().includes(searchLower)
+    )
+  })
 
   const isLoading = isLoadingAsset || isLoadingEmployee || isLoadingAssets || isLoadingDropdowns
 
@@ -340,6 +372,42 @@ function AssetViewPage() {
       Swal.fire({
         icon: 'error',
         title: 'Error',
+        text: errorMessage,
+        confirmButtonText: 'OK',
+      })
+    },
+  })
+
+  // Bulk transfer mutation
+  const bulkTransferMutation = useMutation({
+    mutationFn: async ({ assetIds, employeeId }) => {
+      const response = await apiClient.post('/assets/movements/bulk-transfer', {
+        asset_ids: assetIds,
+        to_employee_id: employeeId,
+        reason: 'Bulk transfer',
+        remarks: `Transferred ${assetIds.length} asset(s) in bulk operation`,
+      })
+      return response.data
+    },
+    onSuccess: async () => {
+      await invalidateAssetRelatedQueries(id, employeeId, actualEmployeeId)
+      setIsBulkTransferModalOpen(false)
+      setSelectedAssets([])
+      setEmployeeSearch('')
+      setSelectedEmployeeId('')
+      Swal.fire({
+        icon: 'success',
+        title: 'Assets Transferred',
+        text: 'Selected assets have been transferred successfully',
+        timer: 2000,
+        showConfirmButton: false,
+      })
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to transfer assets'
+      Swal.fire({
+        icon: 'error',
+        title: 'Transfer Failed',
         text: errorMessage,
         confirmButtonText: 'OK',
       })
@@ -579,6 +647,50 @@ function AssetViewPage() {
     createVendorMutation.mutate(vendorFormData)
   }
 
+  // Multi-select handlers
+  const handleSelectAsset = (assetId) => {
+    setSelectedAssets((prev) =>
+      prev.includes(assetId)
+        ? prev.filter((id) => id !== assetId)
+        : [...prev, assetId]
+    )
+  }
+
+  const handleSelectAll = (assets) => {
+    if (selectedAssets.length === assets?.length) {
+      setSelectedAssets([])
+    } else {
+      setSelectedAssets(assets?.map((asset) => asset.id) || [])
+    }
+  }
+
+  const handleBulkTransfer = () => {
+    if (selectedAssets.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Assets Selected',
+        text: 'Please select at least one asset to transfer',
+      })
+      return
+    }
+    setIsBulkTransferModalOpen(true)
+  }
+
+  const handleSubmitBulkTransfer = (targetEmployeeId) => {
+    if (!targetEmployeeId) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Employee Selected',
+        text: 'Please select an employee to transfer the assets to',
+      })
+      return
+    }
+    bulkTransferMutation.mutate({
+      assetIds: selectedAssets,
+      employeeId: targetEmployeeId,
+    })
+  }
+
   const handleDownloadCode = () => {
     if (!codeModal?.src) return
     const link = document.createElement('a')
@@ -729,33 +841,35 @@ function AssetViewPage() {
 
         {/* Sticky Header */}
         <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
             {/* Back button and Asset info */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                 <button
                   onClick={() => navigate(-1)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="shrink-0 p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </button>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900 leading-snug break-words">
                     {asset.brand} {asset.model}
                   </h1>
-                  <p className="text-sm text-gray-600">Serial: {asset.serial_number}</p>
+                  <p className="text-xs sm:text-sm text-gray-600 break-words">
+                    Serial: {asset.serial_number}
+                  </p>
                 </div>
               </div>
 
               {/* Quick Actions */}
-              <div className="flex gap-2 items-center">
+              <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 w-full sm:w-auto">
                 <div className="relative">
-                  <button
-                    onClick={() => setStatusPickerFor(statusPickerFor === asset.id ? null : asset.id)}
-                    className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
-                  >
-                    <span
-                      className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-semibold border"
+                <button
+                  onClick={() => setStatusPickerFor(statusPickerFor === asset.id ? null : asset.id)}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
+                >
+                  <span
+                    className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-semibold border"
                       style={{
                         backgroundColor: statusColorMap[asset?.status_id] || '#E2E8F0',
                         color: statusColorMap[asset?.status_id] ? '#fff' : '#1e293b',
@@ -764,30 +878,47 @@ function AssetViewPage() {
                     >
                       {asset?.status?.name || 'Status'}
                     </span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-                  {statusPickerFor === asset.id && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
-                      <select
-                        value={asset?.status_id || ''}
-                        onChange={(e) => {
-                          handleQuickStatusChange(asset.id, e.target.value)
-                          setStatusPickerFor(null)
-                        }}
-                        className="w-full px-3 py-2 text-sm border-0 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select status</option>
-                        {statuses.map((status) => (
-                          <option key={status.id} value={status.id}>{status.name}</option>
-                        ))}
-                      </select>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {statusPickerFor === asset.id && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
+                    <div className="max-h-56 overflow-y-auto py-1">
+                      {statuses.length ? (
+                        statuses.map((status) => {
+                          const isActive = status.id === asset?.status_id
+                          return (
+                            <button
+                              key={status.id}
+                              type="button"
+                              onClick={() => {
+                                handleQuickStatusChange(asset.id, status.id)
+                                setStatusPickerFor(null)
+                              }}
+                              className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                                isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="inline-flex items-center gap-2">
+                                <span
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: statusColorMap[status.id] || '#94a3b8' }}
+                                />
+                                <span>{status.name}</span>
+                              </span>
+                            </button>
+                          )
+                        })
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-slate-500">No statuses</div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+              </div>
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
                   disabled={!currentEmployee}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2 bg-blue-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
                   <ArrowRight className="w-4 h-4" />
                   Transfer
@@ -795,14 +926,14 @@ function AssetViewPage() {
                 <button
                   onClick={() => setIsReturnModalOpen(true)}
                   disabled={!currentEmployee}
-                  className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2 bg-orange-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
                   <CornerUpLeft className="w-4 h-4" />
                   Return
                 </button>
                 <button
                   onClick={() => setIsStatusModalOpen(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2 bg-indigo-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Update Status
@@ -811,40 +942,40 @@ function AssetViewPage() {
             </div>
 
             {/* Statistics Cards */}
-            <div className="grid grid-cols-4 gap-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
                 <div className="flex items-center gap-2 text-blue-600 mb-1">
                   <Users className="w-4 h-4" />
                   <span className="text-xs font-medium">Assignments</span>
                 </div>
-                <p className="text-2xl font-bold text-blue-900">
+                <p className="text-xl sm:text-2xl font-bold text-blue-900">
                   {statistics?.assignment_count || 0}
                 </p>
               </div>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4">
                 <div className="flex items-center gap-2 text-purple-600 mb-1">
                   <ArrowRight className="w-4 h-4" />
                   <span className="text-xs font-medium">Transfers</span>
                 </div>
-                <p className="text-2xl font-bold text-purple-900">
+                <p className="text-xl sm:text-2xl font-bold text-purple-900">
                   {statistics?.transfer_count || 0}
                 </p>
               </div>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4">
                 <div className="flex items-center gap-2 text-red-600 mb-1">
                   <Wrench className="w-4 h-4" />
                   <span className="text-xs font-medium">Repairs</span>
                 </div>
-                <p className="text-2xl font-bold text-red-900">
+                <p className="text-xl sm:text-2xl font-bold text-red-900">
                   {statistics?.repair_count || 0}
                 </p>
               </div>
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 sm:p-4">
                 <div className="flex items-center gap-2 text-indigo-600 mb-1">
                   <Activity className="w-4 h-4" />
                   <span className="text-xs font-medium">Status Changes</span>
                 </div>
-                <p className="text-2xl font-bold text-indigo-900">
+                <p className="text-xl sm:text-2xl font-bold text-indigo-900">
                   {statistics?.status_change_count || 0}
                 </p>
               </div>
@@ -853,19 +984,19 @@ function AssetViewPage() {
         </div>
 
         {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-          <div className="grid grid-cols-12 gap-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 sm:mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
             {/* Left Column - Asset Info */}
-            <div className="col-span-4 space-y-6">
+            <div className="lg:col-span-4 space-y-4 sm:space-y-6">
               {/* Current Assignment Card */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <User className="w-5 h-5 text-blue-600" />
                   Current Assignment
                 </h3>
                 {currentEmployee ? (
                   <div className="space-y-3">
-                    <div className="flex items-start gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                       <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600">
                         <User className="w-6 h-6" />
                       </div>
@@ -913,22 +1044,22 @@ function AssetViewPage() {
               </div>
 
               {/* Current Status & Details Card */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Activity className="w-5 h-5 text-indigo-600" />
                   Asset Details
                 </h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                     <span className="text-sm text-gray-600">Status</span>
                     <span className="font-medium text-gray-900">{currentStatus?.name || 'N/A'}</span>
                   </div>
-                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                     <span className="text-sm text-gray-600">Category</span>
                     <span className="font-medium text-gray-900">{asset.category?.name || 'N/A'}</span>
                   </div>
                   {asset.purchase_date && (
-                    <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                       <span className="text-sm text-gray-600">Purchase Date</span>
                       <span className="font-medium text-gray-900">
                         {new Date(asset.purchase_date).toLocaleDateString()}
@@ -936,7 +1067,7 @@ function AssetViewPage() {
                     </div>
                   )}
                   {asset.acq_cost && (
-                    <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                       <span className="text-sm text-gray-600">Acquisition Cost</span>
                       <span className="font-medium text-gray-900">
                         ₱{parseFloat(asset.acq_cost).toLocaleString()}
@@ -944,7 +1075,7 @@ function AssetViewPage() {
                     </div>
                   )}
                   {asset.book_value !== null && (
-                    <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                       <span className="text-sm text-gray-600">Book Value</span>
                       <span className="font-medium text-gray-900">
                         ₱{parseFloat(asset.book_value).toLocaleString()}
@@ -952,13 +1083,13 @@ function AssetViewPage() {
                     </div>
                   )}
                   {asset.vendor && (
-                    <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                       <span className="text-sm text-gray-600">Vendor</span>
                       <span className="font-medium text-gray-900">{asset.vendor.company_name}</span>
                     </div>
                   )}
                   {asset.warranty_expiration && (
-                    <div className="flex items-center justify-between py-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2">
                       <span className="text-sm text-gray-600">Warranty Expiration</span>
                       <span className="font-medium text-gray-900">
                         {new Date(asset.warranty_expiration).toLocaleDateString()}
@@ -970,14 +1101,14 @@ function AssetViewPage() {
             </div>
 
             {/* Right Column - Movement History */}
-            <div className="col-span-8">
+            <div className="lg:col-span-8">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 {/* Tab Navigation */}
                 <div className="border-b border-gray-200">
-                  <div className="flex gap-0">
+                  <div className="flex flex-col sm:flex-row gap-0">
                     <button
                       onClick={() => setActiveTab('timeline')}
-                      className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
+                      className={`flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium border-b-2 transition-colors ${
                         activeTab === 'timeline'
                           ? 'border-blue-600 text-blue-600'
                           : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -988,7 +1119,7 @@ function AssetViewPage() {
                     </button>
                     <button
                       onClick={() => setActiveTab('assignments')}
-                      className={`flex items-center gap-2 px-6 py-4 font-medium border-b-2 transition-colors ${
+                      className={`flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium border-b-2 transition-colors ${
                         activeTab === 'assignments'
                           ? 'border-blue-600 text-blue-600'
                           : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -1001,7 +1132,7 @@ function AssetViewPage() {
                 </div>
 
                 {/* Tab Content */}
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {activeTab === 'timeline' && (
                     <AssetMovementTimeline
                       movements={movements}
@@ -1303,6 +1434,34 @@ function AssetViewPage() {
                     </button>
                   </div>
 
+              {/* Multi-select Toolbar - Only show in cards view */}
+              {viewMode === 'cards' && selectedAssets && (
+                <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedAssets.length === employeeAssets?.length && employeeAssets?.length > 0}
+                      onChange={() => handleSelectAll(employeeAssets)}
+                      className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className="text-sm font-medium text-slate-700">
+                      {selectedAssets.length > 0
+                        ? `${selectedAssets.length} asset${selectedAssets.length > 1 ? 's' : ''} selected`
+                        : 'Select All'}
+                    </span>
+                  </div>
+                  {selectedAssets.length > 0 && (
+                    <button
+                      onClick={handleBulkTransfer}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      Bulk Transfer
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Cards View - Mobile Optimized */}
               {viewMode === 'cards' && (
                 <AssetCardsView
@@ -1315,6 +1474,8 @@ function AssetViewPage() {
                   statusColorMap={statusColorMap}
                   statusPickerFor={statusPickerFor}
                   showCodesFor={showCodesFor}
+                  selectedAssets={selectedAssets}
+                  onSelectAsset={handleSelectAsset}
                   onEditClick={handleEditClick}
                   onSaveEdit={() => handleSaveEdit()}
                   onCancelEdit={handleCancelEdit}
@@ -1468,6 +1629,136 @@ function AssetViewPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Transfer Modal */}
+      {isBulkTransferModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col" style={{ maxHeight: '500px' }}>
+            <div className="px-6 py-4 border-b border-slate-200">
+              <h3 className="text-xl font-semibold text-slate-900">
+                Transfer {selectedAssets.length} Asset{selectedAssets.length > 1 ? 's' : ''}
+              </h3>
+            </div>
+            <div className="p-6 flex-1">
+              <p className="text-sm text-slate-600 mb-4">
+                Search and select an employee to transfer the selected assets to:
+              </p>
+
+              {/* Search & Select Employee */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Employee Name
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Type employee name to search..."
+                    value={employeeSearch}
+                    onChange={(e) => {
+                      setEmployeeSearch(e.target.value)
+                      setSelectedEmployeeId('') // Clear selection when typing
+                    }}
+                    className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+
+                {/* Dropdown Results */}
+                {employeeSearch && !selectedEmployeeId && (
+                  <div className="absolute z-[100] w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                    {isLoadingEmployees ? (
+                      <div className="p-4 text-center text-slate-500">
+                        <div className="animate-spin w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+                        <p className="text-sm">Loading...</p>
+                      </div>
+                    ) : filteredEmployees.length > 0 ? (
+                      filteredEmployees.map((employee) => (
+                        <button
+                          key={employee.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedEmployeeId(employee.id)
+                            setEmployeeSearch(employee.fullname)
+                          }}
+                          className="w-full px-4 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0"
+                        >
+                          <p className="text-sm font-medium text-slate-900">{employee.fullname}</p>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-slate-500">
+                        <p className="text-sm">No employees found</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Employee Details */}
+              {selectedEmployeeId && (() => {
+                const selectedEmployee = employees.find(emp => emp.id === selectedEmployeeId)
+                return selectedEmployee ? (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex-shrink-0">
+                        <User className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-base font-semibold text-slate-900 mb-2">{selectedEmployee.fullname}</h4>
+                        <div className="space-y-1.5">
+                          {selectedEmployee.position?.position_name && (
+                            <div className="flex items-center gap-2 text-sm text-slate-700">
+                              <Users className="w-4 h-4 text-slate-500" />
+                              <span className="font-medium">Position:</span>
+                              <span>{selectedEmployee.position.position_name}</span>
+                            </div>
+                          )}
+                          {selectedEmployee.branch?.branch_name && (
+                            <div className="flex items-center gap-2 text-sm text-slate-700">
+                              <MapPin className="w-4 h-4 text-slate-500" />
+                              <span className="font-medium">Branch:</span>
+                              <span>{selectedEmployee.branch.branch_name}</span>
+                            </div>
+                          )}
+                          {selectedEmployee.email && (
+                            <div className="flex items-center gap-2 text-sm text-slate-700">
+                              <MessageSquare className="w-4 h-4 text-slate-500" />
+                              <span className="font-medium">Email:</span>
+                              <span className="truncate">{selectedEmployee.email}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null
+              })()}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBulkTransferModalOpen(false)
+                  setEmployeeSearch('')
+                  setSelectedEmployeeId('')
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmitBulkTransfer(selectedEmployeeId)}
+                disabled={bulkTransferMutation.isPending || !selectedEmployeeId}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bulkTransferMutation.isPending ? 'Transferring...' : 'Transfer Assets'}
+              </button>
+            </div>
           </div>
         </div>
       )}

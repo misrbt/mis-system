@@ -27,7 +27,7 @@ function Portal() {
   const portals = [
     {
       id: 'inventory',
-      name: 'IT Inventory System',
+      name: 'IT INVENTORY SYSTEM',
       description: 'Manage IT assets, equipment, and inventory tracking across all branches',
       icon: Monitor,
       color: 'from-blue-500 to-blue-600',

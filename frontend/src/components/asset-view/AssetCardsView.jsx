@@ -1,9 +1,3 @@
-/**
- * Asset Cards View Component
- * Displays assets in a card grid layout with inline editing
- * Extracted from AssetViewPage.jsx (505 lines reduced to reusable component)
- */
-
 import React from 'react'
 import {
   Package,
@@ -44,6 +38,8 @@ const AssetCard = ({
   statusColorMap,
   showStatusPicker,
   showCodes,
+  isSelected,
+  onSelect,
   onEdit,
   onSave,
   onCancel,
@@ -75,13 +71,34 @@ const AssetCard = ({
     onCardClick?.()
   }
 
+  const bookValueNumber = Number.parseFloat(asset?.book_value)
+  const isBookValueOne =
+    Number.isFinite(bookValueNumber) && Math.round(bookValueNumber * 100) / 100 === 1
+
   return (
     <div
-      className={`group relative bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-300 h-full flex flex-col ${
+      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 h-full flex flex-col ${
+        isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200'
+      } ${
         !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1 cursor-pointer' : ''
       }`}
       onClick={handleCardClick}
     >
+      {/* Selection Checkbox */}
+      {onSelect && !isEditing && (
+        <div className="absolute top-3 right-3 z-20">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => {
+              e.stopPropagation()
+              onSelect()
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          />
+        </div>
+      )}
       {/* View Movement Overlay - Only shown on hover in view mode */}
       {!isEditing && (
         <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 pointer-events-none z-10 flex items-center justify-center">
@@ -319,10 +336,16 @@ const AssetCard = ({
                 )}
 
                 {asset.book_value && (
-                  <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg border border-green-100">
+                  <div
+                    className={`flex items-center gap-2 p-2.5 rounded-lg border ${
+                      isBookValueOne ? 'bg-gray-200 border-slate-200' : 'bg-green-50 border-green-100'
+                    }`}
+                  >
                     <div className="flex-1">
-                      <div className="text-xs text-green-600 font-medium">Book Value</div>
-                      <div className="text-sm font-bold text-green-700">
+                      <div className={`text-xs font-medium ${isBookValueOne ? 'text-slate-600' : 'text-green-600'}`}>
+                        Book Value
+                      </div>
+                      <div className={`text-sm font-bold ${isBookValueOne ? 'text-slate-700' : 'text-green-700'}`}>
                         {formatCurrency(asset.book_value)}
                       </div>
                     </div>
@@ -538,6 +561,8 @@ const AssetCardsView = ({
   statusColorMap,
   statusPickerFor,
   showCodesFor,
+  selectedAssets,
+  onSelectAsset,
   onEditClick,
   onSaveEdit,
   onCancelEdit,
@@ -550,6 +575,8 @@ const AssetCardsView = ({
   onCardClick,
   isPending,
 }) => {
+  const isSelected = (assetId) => selectedAssets?.includes(assetId)
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
       {assets.map((asset) => (
@@ -564,6 +591,8 @@ const AssetCardsView = ({
           statusColorMap={statusColorMap}
           showStatusPicker={statusPickerFor === asset.id}
           showCodes={showCodesFor[asset.id]}
+          isSelected={isSelected(asset.id)}
+          onSelect={onSelectAsset ? () => onSelectAsset(asset.id) : undefined}
           onEdit={() => onEditClick(asset)}
           onSave={onSaveEdit}
           onCancel={onCancelEdit}

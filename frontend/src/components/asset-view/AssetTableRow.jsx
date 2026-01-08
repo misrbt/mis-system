@@ -85,17 +85,34 @@ const AssetTableRow = ({
             <ChevronDown className="w-3 h-3" />
           </button>
           {showStatusPicker && (
-            <div className="absolute right-0 mt-2 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
-              <select
-                value={asset.status_id || ''}
-                onChange={(e) => onStatusChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm border-0 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Select status</option>
-                {statuses.map((status) => (
-                  <option key={status.id} value={status.id}>{status.name}</option>
-                ))}
-              </select>
+            <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
+              <div className="max-h-56 overflow-y-auto py-1">
+                {statuses.length ? (
+                  statuses.map((status) => {
+                    const isActive = status.id === asset.status_id
+                    return (
+                      <button
+                        key={status.id}
+                        type="button"
+                        onClick={() => onStatusChange(status.id)}
+                        className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                          isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: statusColorMap[status.id] || '#94a3b8' }}
+                          />
+                          <span>{status.name}</span>
+                        </span>
+                      </button>
+                    )
+                  })
+                ) : (
+                  <div className="px-3 py-2 text-sm text-slate-500">No statuses</div>
+                )}
+              </div>
             </div>
           )}
         </div>

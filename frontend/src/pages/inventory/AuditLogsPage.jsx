@@ -36,6 +36,8 @@ import {
   getSortedRowModel,
   useReactTable,
   getExpandedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
 } from '@tanstack/react-table'
 import auditLogService from '../../services/auditLogService'
 import Swal from 'sweetalert2'
@@ -181,6 +183,8 @@ function AuditLogsPage() {
     pageIndex: 0,
     pageSize: 50,
   })
+  const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
+  const [mobileSorting, setMobileSorting] = useState([{ id: 'movement_date', desc: true }])
 
   // Fetch audit logs for table view (regular pagination)
   const {
@@ -425,6 +429,45 @@ function AuditLogsPage() {
     pageCount: meta.last_page || 1,
     onPaginationChange: setPagination,
   })
+
+  // Mobile columns for simpler filtering
+  const mobileColumns = useMemo(
+    () => [
+      { accessorKey: 'movement_date', header: 'Date' },
+      { accessorKey: 'movement_type', header: 'Action Type' },
+      { accessorKey: 'description', header: 'Description' },
+    ],
+    []
+  )
+
+  // Mobile table with client-side pagination
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const mobileTable = useReactTable({
+    data: movements,
+    columns: mobileColumns,
+    state: {
+      globalFilter: mobileGlobalFilter,
+      sorting: mobileSorting,
+    },
+    onGlobalFilterChange: setMobileGlobalFilter,
+    onSortingChange: setMobileSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  })
+
+  const mobileSortId = mobileSorting[0]?.id || ''
+  const mobileSortDesc = mobileSorting[0]?.desc || false
+  const mobilePagination = mobileTable.getState().pagination
+  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
+  const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
   // Handle filter changes
   const handleFilterChange = (key, value) => {
@@ -947,12 +990,111 @@ function AuditLogsPage() {
 
       {/* Table View */}
       {viewMode === 'table' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id}>
+        <div className="space-y-4">
+          {/* Mobile Cards */}
+          <div className="sm:hidden space-y-3">
+            {movements.length === 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 text-center text-sm text-slate-600">
+                No activities found
+              </div>
+            ) : (
+              movements.map((movement) => {
+                const styles = getMovementStyles(movement.movement_type)
+                const Icon = getMovementIconComponent(movement.movement_type)
+                const performedBy = movement.performed_by
+                const initials = getUserInitials(performedBy?.name)
+
+                return (
+                  <div key={movement.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-9 h-9 rounded-full ${styles.bg} ${styles.border} flex items-center justify-center`}>
+                          <Icon className={`w-4 h-4 ${styles.icon}`} />
+                        </div>
+                        <div>
+                          <div className={`text-xs font-semibold px-2 py-1 rounded ${styles.bg} ${styles.text} border ${styles.border}`}>
+                            {movement.movement_type.replace(/_/g, ' ').toUpperCase()}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(movement.movement_date).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      {performedBy && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                            {initials}
+                          </div>
+                          <span className="text-sm font-medium text-slate-800">{performedBy.name}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-sm text-slate-800 font-semibold">{movement.description}</div>
+                    {movement.asset && (
+                      <div className="text-sm text-slate-600">
+                        <span className="font-medium">{movement.asset.asset_name}</span>
+                        {movement.asset.serial_number && (
+                          <span className="text-slate-500"> • {movement.asset.serial_number}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {movement.metadata?.changed_fields?.length > 0 && (
+                      <div className="space-y-2 border-t border-slate-100 pt-2">
+                        <div className="text-xs font-semibold text-slate-500 uppercase">Changes</div>
+                        <div className="space-y-1.5">
+                          {movement.metadata.changed_fields.slice(0, 3).map((change, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+                              <span className="font-semibold text-slate-700">{change.field.replace(/_/g, ' ')}</span>
+                              <span className="text-slate-600">
+                                <span className="line-through text-slate-400 mr-1">{String(change.old_value || '—')}</span>
+                                <ChevronRight className="w-3 h-3 inline text-slate-400" />
+                                <span className="ml-1 font-semibold text-emerald-700">{String(change.new_value || '—')}</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
+
+            {/* Mobile pagination */}
+            {movements.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 p-3 flex items-center justify-between text-sm text-slate-700">
+                <span>
+                  Page {pagination.pageIndex + 1} of {meta.last_page || 1}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                    className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                    className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hidden sm:block">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
                       <th
                         key={header.id}
@@ -1035,6 +1177,7 @@ function AuditLogsPage() {
                 )}
               </tbody>
             </table>
+          </div>
           </div>
 
           {/* Pagination */}
