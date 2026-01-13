@@ -9,6 +9,7 @@ use App\Http\Controllers\StatusController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetCategoryController;
+use App\Http\Controllers\AssetComponentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RepairController;
@@ -86,6 +87,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
     Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
     Route::apiResource('assets', AssetController::class);
+
+    // Asset Component routes (for Desktop PC components)
+    Route::prefix('assets/{assetId}/components')->group(function () {
+        Route::get('/', [AssetComponentController::class, 'index']);
+        Route::post('/', [AssetComponentController::class, 'store']);
+    });
+    Route::prefix('asset-components')->group(function () {
+        Route::get('/', [AssetComponentController::class, 'all']); // Get all components
+        Route::get('/{id}', [AssetComponentController::class, 'show']);
+        Route::get('/{id}/movements', [AssetComponentController::class, 'movements']); // Get component movements
+        Route::put('/{id}', [AssetComponentController::class, 'update']);
+        Route::delete('/{id}', [AssetComponentController::class, 'destroy']);
+        Route::post('/{id}/transfer', [AssetComponentController::class, 'transfer']);
+        Route::post('/{id}/generate-qr-code', [AssetComponentController::class, 'generateQRCode']);
+    });
 
     // Repair routes
     Route::get('repairs/{id}/remarks', [RepairController::class, 'getRemarks']);

@@ -134,6 +134,7 @@ function AssetsPage() {
 
   // Form state
   const [formData, setFormData] = useState(() => buildFormData())
+  const [components, setComponents] = useState([])
 
   // Fetch assets with React Query
   const { data: assetsData, isLoading, refetch } = useQuery({
@@ -251,6 +252,7 @@ function AssetsPage() {
       queryClient.invalidateQueries(['assets'])
       notifySuccess('Success', 'Asset created successfully')
       setIsAddModalOpen(false)
+      setComponents([]) // Reset components after successful creation
     },
     onError: (error) => {
       notifyError('Failed to create asset', error)
@@ -345,6 +347,14 @@ function AssetsPage() {
     })
   }, [formData.asset_category_id, categories])
 
+  const generateComponentSerialNumber = useCallback((componentId) => {
+    // Generate unique serial number for component using COMP prefix
+    const serialNumber = buildSerialNumber('COMP')
+    setComponents(prev => prev.map(c =>
+      c.id === componentId ? { ...c, serial_number: serialNumber } : c
+    ))
+  }, [])
+
   const handleFilterChange = useCallback((e) => {
     const { name, value } = e.target
     setFilters((prev) => ({ ...prev, [name]: value }))
@@ -356,6 +366,7 @@ function AssetsPage() {
 
   const openAddModal = useCallback(() => {
     setFormData(buildFormData())
+    setComponents([]) // Reset components for new asset
     setIsAddModalOpen(true)
   }, [])
 
@@ -365,10 +376,62 @@ function AssetsPage() {
     setIsEditModalOpen(true)
   }, [])
 
+<<<<<<< Updated upstream
+=======
+  const openVendorModal = useCallback(() => {
+    setVendorFormData({
+      company_name: '',
+      contact_no: '',
+      address: '',
+    })
+    setIsVendorModalOpen(true)
+  }, [])
+
+  const handleVendorInputChange = useCallback((e) => {
+    const { name, value } = e.target
+    setVendorFormData((prev) => ({ ...prev, [name]: value }))
+  }, [])
+
+  const handleCreateVendor = useCallback((e) => {
+    e.preventDefault()
+    createVendorMutation.mutate(vendorFormData)
+  }, [createVendorMutation, vendorFormData])
+
+  // Component handlers for Desktop PC
+  const handleComponentAdd = useCallback(() => {
+    setComponents(prev => [...prev, {
+      id: Date.now(),
+      component_type: 'system_unit',
+      component_name: '',
+      brand: '',
+      model: '',
+      serial_number: '',
+      status_id: '',
+      acq_cost: '',
+      remarks: '',
+    }])
+  }, [])
+
+  const handleComponentRemove = useCallback((id) => {
+    setComponents(prev => prev.filter(c => c.id !== id))
+  }, [])
+
+  const handleComponentChange = useCallback((id, field, value) => {
+    setComponents(prev => prev.map(c =>
+      c.id === id ? { ...c, [field]: value } : c
+    ))
+  }, [])
+
+>>>>>>> Stashed changes
   const handleCreate = useCallback((e) => {
     e.preventDefault()
-    createMutation.mutate(formData)
-  }, [createMutation, formData])
+    // Include components in payload if Desktop PC category
+    const payload = {
+      ...formData,
+      components: components.filter(c => c.component_name.trim() !== '')
+    }
+    createMutation.mutate(payload)
+  }, [createMutation, formData, components])
 
   const handleUpdate = useCallback((e) => {
     e.preventDefault()
@@ -1281,6 +1344,11 @@ function AssetsPage() {
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
         onGenerateSerial={generateSerialNumber}
+<<<<<<< Updated upstream
+=======
+        onGenerateComponentSerial={generateComponentSerialNumber}
+        onAddVendor={openVendorModal}
+>>>>>>> Stashed changes
         categories={categories}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
@@ -1288,6 +1356,10 @@ function AssetsPage() {
         assignmentTitle="Assignment & Remarks"
         assignmentSubtitle="Employee assignment and additional notes"
         usePlaceholders
+        components={components}
+        onComponentAdd={handleComponentAdd}
+        onComponentRemove={handleComponentRemove}
+        onComponentChange={handleComponentChange}
       />
 
       {/* Edit Modal - Similar to Add Modal */}

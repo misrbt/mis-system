@@ -96,6 +96,13 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
+            'pooling' => true,
+            'pool_size' => env('DB_POOL_SIZE', 5),
+            'max_connections' => env('DB_MAX_CONNECTIONS', 10),
+            'options' => [
+                \PDO::ATTR_TIMEOUT => 5,
+                \PDO::ATTR_PERSISTENT => false,
+            ],
         ],
 
         'sqlsrv' => [

@@ -17,8 +17,20 @@ function AuthLayout() {
         </div>
       </main>
 
-      {/* Footer */}
-      <Footer variant="light" />
+      {/* Simple footer for mobile */}
+      <div className="sm:hidden py-4 px-4 text-center relative z-10 space-y-1 bg-white/80 backdrop-blur-sm">
+        <p className="text-xs text-slate-600">
+          Designed and Developed by <span className="font-medium text-slate-700">Augustin Maputol</span>
+        </p>
+        <p className="text-xs text-slate-500">
+          © {new Date().getFullYear()} MIS System. All rights reserved.
+        </p>
+      </div>
+
+      {/* Full Footer for desktop */}
+      <div className="hidden sm:block">
+        <Footer variant="light" />
+      </div>
     </div>
   )
 }

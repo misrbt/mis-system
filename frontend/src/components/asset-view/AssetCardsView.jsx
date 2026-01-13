@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 /**
  * Asset Cards View Component
  * Displays assets in a card grid layout with inline editing
@@ -5,6 +6,10 @@
  */
 
 import React from 'react'
+=======
+import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+>>>>>>> Stashed changes
 import {
   Package,
   Calendar,
@@ -17,11 +22,16 @@ import {
   Clock,
   FileText,
   ChevronDown,
+  ChevronUp,
   QrCode,
   Barcode,
   Eye,
+  Cpu,
+  Monitor,
+  Keyboard,
 } from 'lucide-react'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
+import apiClient from '../../services/apiClient'
 
 // Small helper component for info cards
 const InfoCard = ({ label, value, icon }) => (
@@ -56,6 +66,40 @@ const AssetCard = ({
   onCardClick,
   isPending,
 }) => {
+  // State to track if codes section is expanded (default: collapsed/hidden)
+  const [isCodesExpanded, setIsCodesExpanded] = useState(false)
+  const [isComponentsExpanded, setIsComponentsExpanded] = useState(false)
+
+  // Check if asset is Desktop PC
+  const isDesktopPC = asset.category?.name?.toLowerCase().includes('desktop') ||
+                      asset.category?.name?.toLowerCase().includes('pc')
+
+  // Fetch components for Desktop PC assets
+  const { data: componentsData } = useQuery({
+    queryKey: ['asset-components', asset.id],
+    queryFn: async () => {
+      const response = await apiClient.get(`/assets/${asset.id}/components`)
+      return response.data
+    },
+    enabled: isDesktopPC && !isEditing,
+  })
+
+  const components = componentsData?.data || []
+
+  // Component type icons
+  const getComponentIcon = (type) => {
+    switch (type) {
+      case 'system_unit':
+        return <Cpu className="w-4 h-4" />
+      case 'monitor':
+        return <Monitor className="w-4 h-4" />
+      case 'keyboard_mouse':
+        return <Keyboard className="w-4 h-4" />
+      default:
+        return <Package className="w-4 h-4" />
+    }
+  }
+
   const handleCardClick = (e) => {
     // Don't navigate if in edit mode
     if (isEditing) {
@@ -327,8 +371,84 @@ const AssetCard = ({
                   </div>
                 </div>
               )}
+
+              {/* Desktop PC Components Section - Collapsible */}
+              {isDesktopPC && components.length > 0 && (
+                <div className="pt-3 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setIsComponentsExpanded(!isComponentsExpanded)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors mb-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-amber-600" />
+                      <span>Desktop PC Components ({components.length})</span>
+                    </div>
+                    {isComponentsExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-amber-600" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-amber-600" />
+                    )}
+                  </button>
+
+                  {isComponentsExpanded && (
+                    <div className="space-y-2">
+                      {components.map((component) => (
+                        <div
+                          key={component.id}
+                          className="bg-white border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-start gap-2 mb-2">
+                            <div className="text-blue-600 mt-0.5">
+                              {getComponentIcon(component.component_type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-slate-900 text-sm truncate">
+                                {component.component_name}
+                              </div>
+                              <span className="inline-block text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full mt-1">
+                                {component.component_type.replace('_', ' ').toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 text-xs">
+                            {component.brand && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-600">Brand:</span>
+                                <span className="font-medium text-slate-900">{component.brand}</span>
+                              </div>
+                            )}
+                            {component.model && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-600">Model:</span>
+                                <span className="font-medium text-slate-900">{component.model}</span>
+                              </div>
+                            )}
+                            {component.serial_number && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-600">Serial:</span>
+                                <span className="font-mono text-slate-900">{component.serial_number}</span>
+                              </div>
+                            )}
+                            {component.status && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-600">Status:</span>
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                  {component.status.name}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
+<<<<<<< Updated upstream
             {/* Additional Details */}
             <div className="pt-3 border-t border-slate-200 space-y-2">
               {asset.estimate_life && (
@@ -360,12 +480,35 @@ const AssetCard = ({
             </div>
 
             {/* QR Code / Barcode Section */}
+=======
+            {/* QR Code / Barcode Section - Collapsible */}
+>>>>>>> Stashed changes
             {(asset.qr_code || asset.barcode) && (
               <div className="mt-4 pt-4 border-t border-slate-200">
-                {asset.qr_code && asset.barcode ? (
-                  <div className="space-y-3">
-                    {/* Toggle Tabs */}
-                    <div className="flex items-center justify-center border-b border-slate-200">
+                {/* Toggle Button to Show/Hide Codes */}
+                <button
+                  type="button"
+                  onClick={() => setIsCodesExpanded(!isCodesExpanded)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors mb-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <QrCode className="w-4 h-4 text-slate-600" />
+                    <span>QR Code & Barcode</span>
+                  </div>
+                  {isCodesExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                  )}
+                </button>
+
+                {/* Codes Content - Only shown when expanded */}
+                {isCodesExpanded && (
+                  <>
+                    {asset.qr_code && asset.barcode ? (
+                      <div className="space-y-3">
+                        {/* Toggle Tabs */}
+                        <div className="flex items-center justify-center border-b border-slate-200">
                       <div className="inline-flex">
                         <button
                           type="button"
@@ -485,6 +628,8 @@ const AssetCard = ({
                     )}
                   </div>
                 )}
+                </>
+              )}
               </div>
             )}
 

@@ -39,6 +39,7 @@ import RepairFormModal from '../../components/RepairFormModal'
 import CodeDisplayModal from '../../components/CodeDisplayModal'
 import AssetCardsView from '../../components/asset-view/AssetCardsView'
 import AssetTableView from '../../components/asset-view/AssetTableView'
+import AssetComponentsSection from '../../components/asset-view/AssetComponentsSection'
 import AddAssetModal from '../../components/asset-view/AddAssetModal'
 import DeleteConfirmModal from '../../components/asset-view/DeleteConfirmModal'
 import EmployeeHeader from '../../components/asset-view/EmployeeHeader'
@@ -87,6 +88,7 @@ function AssetViewPage() {
     remarks: '',
     assigned_to_employee_id: '',
   })
+  const [components, setComponents] = useState([])
 
   // Movement tracking state (for individual asset view)
   const [activeTab, setActiveTab] = useState('timeline') // 'timeline' or 'assignments'
@@ -265,6 +267,7 @@ function AssetViewPage() {
       })
 
       setShowAddModal(false)
+      setComponents([]) // Reset components after successful creation
       setAddFormData({
         asset_name: '',
         asset_category_id: '',
@@ -394,6 +397,31 @@ function AssetViewPage() {
     setAddFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  // Component handlers for Desktop PC
+  const handleComponentAdd = () => {
+    setComponents(prev => [...prev, {
+      id: Date.now(),
+      component_type: 'system_unit',
+      component_name: '',
+      brand: '',
+      model: '',
+      serial_number: '',
+      status_id: '',
+      acq_cost: '',
+      remarks: '',
+    }])
+  }
+
+  const handleComponentRemove = (id) => {
+    setComponents(prev => prev.filter(c => c.id !== id))
+  }
+
+  const handleComponentChange = (id, field, value) => {
+    setComponents(prev => prev.map(c =>
+      c.id === id ? { ...c, [field]: value } : c
+    ))
+  }
+
   const generateSerialNumber = () => {
     // Get selected category
     const selectedCategory = categories.find(cat => cat.id == addFormData.asset_category_id)
@@ -414,6 +442,14 @@ function AssetViewPage() {
     }
 
     setAddFormData(prev => ({ ...prev, serial_number: serialGenRef.current.serialNumber }))
+  }
+
+  const generateComponentSerialNumber = (componentId) => {
+    // Generate unique serial number for component using COMP prefix
+    const serialNumber = buildSerialNumber('COMP')
+    setComponents(prev => prev.map(c =>
+      c.id === componentId ? { ...c, serial_number: serialNumber } : c
+    ))
   }
 
   const handleAddAsset = () => {
@@ -437,6 +473,8 @@ function AssetViewPage() {
       // Convert numeric strings to numbers
       acq_cost: addFormData.acq_cost ? Number(addFormData.acq_cost) : null,
       estimate_life: addFormData.estimate_life ? Number(addFormData.estimate_life) : null,
+      // Include components if any (for Desktop PC)
+      components: components.filter(c => c.component_name.trim() !== ''),
     }
     addAssetMutation.mutate(dataToSubmit)
   }
@@ -469,6 +507,7 @@ function AssetViewPage() {
       remarks: '',
       assigned_to_employee_id: actualEmployeeId,
     })
+    setComponents([]) // Reset components when opening modal
     setShowAddModal(true)
   }
 
@@ -912,6 +951,13 @@ function AssetViewPage() {
               </div>
             </div>
 
+            {/* Components Section - Only for Desktop PC */}
+            {asset && (asset.category?.name?.toLowerCase().includes('desktop') || asset.category?.name?.toLowerCase().includes('pc')) && (
+              <div className="lg:col-span-12 mb-6">
+                <AssetComponentsSection assetId={asset.id} asset={asset} statuses={statuses} />
+              </div>
+            )}
+
             {/* Right Column - Movement History */}
             <div className="col-span-8">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -1220,8 +1266,8 @@ function AssetViewPage() {
                     onAddClick={openAddModal}
                   />
 
-                  {/* View Mode Tabs - Mobile Optimized */}
-                  <div className="flex items-center gap-1 sm:gap-2 mb-6 border-b border-slate-200 overflow-x-auto">
+                  {/* View Mode Tabs - Hidden on Mobile */}
+                  <div className="hidden sm:flex items-center gap-1 sm:gap-2 mb-6 border-b border-slate-200 overflow-x-auto">
                     <button
                       onClick={() => setViewMode('cards')}
                       className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 border-b-2 transition-colors whitespace-nowrap touch-manipulation ${
@@ -1331,9 +1377,19 @@ function AssetViewPage() {
         onInputChange={handleAddInputChange}
         categories={categories}
         vendors={vendors}
+        statuses={statuses}
         onGenerateSerial={generateSerialNumber}
+        onGenerateComponentSerial={generateComponentSerialNumber}
         onSubmit={handleAddAsset}
         isPending={addAssetMutation.isPending}
+<<<<<<< Updated upstream
+=======
+        onAddVendor={openVendorModal}
+        components={components}
+        onComponentAdd={handleComponentAdd}
+        onComponentRemove={handleComponentRemove}
+        onComponentChange={handleComponentChange}
+>>>>>>> Stashed changes
       />
 
       {/* Delete Confirmation Modal - Mobile Optimized */}

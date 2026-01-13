@@ -54,9 +54,9 @@ function Register() {
   return (
     <div className="w-full">
       {/* Logo and Header */}
-      <div className="text-center mb-8">
-        <div className="flex justify-center mb-4">
-          <div className="w-28 h-28 sm:w-32 sm:h-32 lg:w-40 lg:h-40">
+      <div className="text-center mb-6 sm:mb-8">
+        <div className="flex justify-center mb-3 sm:mb-4">
+          <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40">
             <img
               src={Logo}
               alt="MIS System Logo"
@@ -64,33 +64,33 @@ function Register() {
             />
           </div>
         </div>
-        <p className="text-slate-500 text-sm">Management Information System</p>
+        <p className="text-slate-500 text-xs sm:text-sm">Management Information System</p>
       </div>
 
       {/* Register Form Card */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl border border-slate-200 p-5 sm:p-6">
         {/* Card Header */}
-        <div className="text-center mb-4">
-          <h2 className="text-xl font-semibold text-slate-800">Create Account</h2>
-          <p className="text-slate-500 text-sm mt-0.5">Join the MIS System</p>
+        <div className="text-center mb-4 sm:mb-5">
+          <h2 className="text-lg sm:text-xl font-semibold text-slate-800">Create Account</h2>
+          <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Join the MIS System</p>
         </div>
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm flex items-start gap-2">
+          <div className="mb-3 p-2.5 sm:p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs sm:text-sm flex items-start gap-2">
             <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-2.5 sm:space-y-3">
           {/* Full Name Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-1.5">
               Full Name
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none">
                 <User className="h-4 w-4 text-slate-400" />
               </div>
               <input
@@ -99,7 +99,7 @@ function Register() {
                   required: 'Full name is required',
                   minLength: { value: 2, message: 'Name must be at least 2 characters' },
                 })}
-                className={`w-full pl-10 pr-3 py-2.5 bg-slate-50 border ${
+                className={`w-full pl-9 sm:pl-10 pr-3 py-2 sm:py-2.5 text-sm sm:text-base bg-slate-50 border ${
                   errors.name ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'
                 } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
                 placeholder="John Doe"
@@ -112,11 +112,11 @@ function Register() {
 
           {/* Username Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-1.5">
               Username
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none">
                 <AtSign className="h-4 w-4 text-slate-400" />
               </div>
               <input
@@ -129,7 +129,7 @@ function Register() {
                     message: 'Letters, numbers, dashes and underscores only',
                   },
                 })}
-                className={`w-full pl-10 pr-3 py-2.5 bg-slate-50 border ${
+                className={`w-full pl-9 sm:pl-10 pr-3 py-2 sm:py-2.5 text-sm sm:text-base bg-slate-50 border ${
                   errors.username ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'
                 } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
                 placeholder="johndoe"
@@ -142,11 +142,11 @@ function Register() {
 
           {/* Email Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-1.5">
               Email Address
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none">
                 <Mail className="h-4 w-4 text-slate-400" />
               </div>
               <input
@@ -158,7 +158,7 @@ function Register() {
                     message: 'Invalid email address',
                   },
                 })}
-                className={`w-full pl-10 pr-3 py-2.5 bg-slate-50 border ${
+                className={`w-full pl-9 sm:pl-10 pr-3 py-2 sm:py-2.5 text-sm sm:text-base bg-slate-50 border ${
                   errors.email ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'
                 } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
                 placeholder="john.doe@company.com"
@@ -171,11 +171,11 @@ function Register() {
 
           {/* Password Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-1.5">
               Password
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none">
                 <Lock className="h-4 w-4 text-slate-400" />
               </div>
               <input
@@ -188,7 +188,7 @@ function Register() {
                     message: 'Password must meet all requirements',
                   },
                 })}
-                className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 border ${
+                className={`w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2 sm:py-2.5 text-sm sm:text-base bg-slate-50 border ${
                   errors.password ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'
                 } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
                 placeholder="Create a strong password"
@@ -196,7 +196,7 @@ function Register() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute inset-y-0 right-0 pr-2.5 sm:pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -219,11 +219,11 @@ function Register() {
 
           {/* Confirm Password Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-1.5">
               Confirm Password
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none">
                 <Lock className="h-4 w-4 text-slate-400" />
               </div>
               <input
@@ -232,7 +232,7 @@ function Register() {
                   required: 'Please confirm your password',
                   validate: (value) => value === password || 'Passwords do not match',
                 })}
-                className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 border ${
+                className={`w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2 sm:py-2.5 text-sm sm:text-base bg-slate-50 border ${
                   errors.confirmPassword ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'
                 } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
                 placeholder="Confirm your password"
@@ -240,7 +240,7 @@ function Register() {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute inset-y-0 right-0 pr-2.5 sm:pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
               >
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -254,7 +254,7 @@ function Register() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 mt-2"
+            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-semibold rounded-lg shadow-lg shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 mt-2"
           >
             {isLoading ? (
               <>
@@ -270,8 +270,8 @@ function Register() {
           </button>
         </form>
 
-        {/* Divider */}
-        <div className="mt-4 pt-4 border-t border-slate-200">
+        {/* Divider - Hidden on mobile */}
+        <div className="hidden sm:block mt-4 pt-4 border-t border-slate-200">
           <p className="text-center text-slate-500 text-sm">
             Already have an account?{' '}
             <Link
