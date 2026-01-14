@@ -1600,14 +1600,11 @@ function AssetViewPage() {
         onGenerateComponentSerial={generateComponentSerialNumber}
         onSubmit={handleAddAsset}
         isPending={addAssetMutation.isPending}
-<<<<<<< HEAD
         components={components}
         onComponentAdd={handleComponentAdd}
         onComponentRemove={handleComponentRemove}
         onComponentChange={handleComponentChange}
-=======
         onAddVendor={openVendorModal}
->>>>>>> main
       />
 
       {/* Vendor Creation Modal */}

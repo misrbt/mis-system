@@ -38,8 +38,6 @@ import {
   getSortedRowModel,
   useReactTable,
   getExpandedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
 } from '@tanstack/react-table'
 import auditLogService from '../../services/auditLogService'
 import Swal from 'sweetalert2'
@@ -442,12 +440,8 @@ function AuditLogsPage() {
     []
   )
 
-<<<<<<< HEAD
-
-=======
   // Mobile table with client-side pagination
   // eslint-disable-next-line react-hooks/incompatible-library
->>>>>>> main
   const mobileTable = useReactTable({
     data: movements,
     columns: mobileColumns,
@@ -994,67 +988,6 @@ function AuditLogsPage() {
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* Main content */}
-      {viewMode === 'table' ? (
-        <div className="space-y-3 sm:space-y-4">
-          {/* Mobile Cards */}
-          <div className="sm:hidden space-y-2">
-            {/* Mobile Search and Sort Controls */}
-            {movements.length > 0 && (
-              <div className="bg-white rounded-lg border border-slate-200 p-3 space-y-2">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    value={mobileGlobalFilter}
-                    onChange={(e) => setMobileGlobalFilter(e.target.value)}
-                    placeholder="Search activities..."
-                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-
-                {/* Sort */}
-                <div className="flex items-center gap-2">
-                  <select
-                    value={mobileSortId}
-                    onChange={(e) => setMobileSorting([{ id: e.target.value, desc: mobileSortDesc }])}
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    <option value="movement_date">Date</option>
-                    <option value="movement_type">Action Type</option>
-                    <option value="description">Description</option>
-                  </select>
-                  <button
-                    onClick={() => setMobileSorting([{ id: mobileSortId, desc: !mobileSortDesc }])}
-                    className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    {mobileSortDesc ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                  </button>
-                </div>
-
-                {/* Results count */}
-                <div className="text-xs text-slate-600">
-                  Showing {mobileStart}-{mobileEnd} of {mobileFilteredCount} activities
-                </div>
-              </div>
-            )}
-
-            {/* Cards */}
-            {isLoading ? (
-              <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
-                <span className="text-xs text-slate-600">Loading activities...</span>
-              </div>
-            ) : mobileFilteredCount === 0 ? (
-              <div className="bg-white rounded-lg border border-slate-200 p-6 text-center text-sm text-slate-600">
-                {mobileGlobalFilter ? 'No activities match your search' : 'No activities found'}
-              </div>
-            ) : (
-              mobileTable.getRowModel().rows.map((row) => {
-                const movement = row.original
-=======
       {/* Table View */}
       {viewMode === 'table' && (
         <div className="space-y-4">
@@ -1066,27 +999,12 @@ function AuditLogsPage() {
               </div>
             ) : (
               movements.map((movement) => {
->>>>>>> main
                 const styles = getMovementStyles(movement.movement_type)
                 const Icon = getMovementIconComponent(movement.movement_type)
                 const performedBy = movement.performed_by
                 const initials = getUserInitials(performedBy?.name)
 
                 return (
-<<<<<<< HEAD
-                  <div key={movement.id} className="bg-white rounded-lg border border-slate-200 shadow-sm p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-full ${styles.bg} ${styles.border} flex items-center justify-center`}>
-                          <Icon className={`w-4 h-4 ${styles.icon}`} />
-                        </div>
-                        <div>
-                          <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${styles.bg} ${styles.text} border ${styles.border}`}>
-                            {movement.movement_type.replace(/_/g, ' ').toUpperCase()}
-                          </div>
-                          <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-0.5">
-                            <Clock className="w-3 h-3" />
-=======
                   <div key={movement.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">
@@ -1099,25 +1017,16 @@ function AuditLogsPage() {
                           </div>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
                             <Clock className="w-3.5 h-3.5" />
->>>>>>> main
                             {new Date(movement.movement_date).toLocaleString()}
                           </div>
                         </div>
                       </div>
                       {performedBy && (
-<<<<<<< HEAD
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-bold shadow-sm">
-                            {initials}
-                          </div>
-                          <span className="text-xs font-medium text-slate-800 hidden sm:inline">{performedBy.name}</span>
-=======
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
                             {initials}
                           </div>
                           <span className="text-sm font-medium text-slate-800">{performedBy.name}</span>
->>>>>>> main
                         </div>
                       )}
                     </div>
@@ -1133,18 +1042,6 @@ function AuditLogsPage() {
                     )}
 
                     {movement.metadata?.changed_fields?.length > 0 && (
-<<<<<<< HEAD
-                      <div className="space-y-1.5 border-t border-slate-100 pt-2">
-                        <div className="text-[10px] font-semibold text-slate-500 uppercase">Changes</div>
-                        <div className="space-y-1">
-                          {movement.metadata.changed_fields.slice(0, 3).map((change, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-[10px] bg-slate-50 border border-slate-200 rounded px-2 py-1">
-                              <span className="font-semibold text-slate-700">{change.field.replace(/_/g, ' ')}</span>
-                              <span className="text-slate-600">
-                                <span className="line-through text-slate-400 mr-0.5">{String(change.old_value || '—')}</span>
-                                <ChevronRight className="w-2.5 h-2.5 inline text-slate-400" />
-                                <span className="ml-0.5 font-semibold text-emerald-700">{String(change.new_value || '—')}</span>
-=======
                       <div className="space-y-2 border-t border-slate-100 pt-2">
                         <div className="text-xs font-semibold text-slate-500 uppercase">Changes</div>
                         <div className="space-y-1.5">
@@ -1155,7 +1052,6 @@ function AuditLogsPage() {
                                 <span className="line-through text-slate-400 mr-1">{String(change.old_value || '—')}</span>
                                 <ChevronRight className="w-3 h-3 inline text-slate-400" />
                                 <span className="ml-1 font-semibold text-emerald-700">{String(change.new_value || '—')}</span>
->>>>>>> main
                               </span>
                             </div>
                           ))}
@@ -1166,9 +1062,6 @@ function AuditLogsPage() {
                 )
               })
             )}
-<<<<<<< HEAD
-=======
-
             {/* Mobile pagination */}
             {movements.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 p-3 flex items-center justify-between text-sm text-slate-700">
@@ -1193,7 +1086,6 @@ function AuditLogsPage() {
                 </div>
               </div>
             )}
->>>>>>> main
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hidden sm:block">
@@ -1366,7 +1258,8 @@ function AuditLogsPage() {
             </div>
           )}
         </div>
-      ) : (
+      )}
+      {viewMode === 'timeline' && (
         <div className="space-y-4">
           {isLoading ? (
             <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">

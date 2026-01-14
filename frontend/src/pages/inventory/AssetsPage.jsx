@@ -464,7 +464,6 @@ function AssetsPage() {
     setIsEditModalOpen(true)
   }, [])
 
-<<<<<<< HEAD
   // Component handlers for Desktop PC
   const handleComponentAdd = useCallback(() => {
     setComponents(prev => [...prev, {
@@ -489,7 +488,7 @@ function AssetsPage() {
       c.id === id ? { ...c, [field]: value } : c
     ))
   }, [])
-=======
+
   const openVendorModal = useCallback(() => {
     setVendorFormData({
       company_name: '',
@@ -508,8 +507,6 @@ function AssetsPage() {
     e.preventDefault()
     createVendorMutation.mutate(vendorFormData)
   }, [createVendorMutation, vendorFormData])
-
->>>>>>> main
   const handleCreate = useCallback((e) => {
     e.preventDefault()
     // Include components in payload if Desktop PC category
@@ -1805,11 +1802,8 @@ function AssetsPage() {
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
         onGenerateSerial={generateSerialNumber}
-<<<<<<< HEAD
         onGenerateComponentSerial={generateComponentSerialNumber}
-=======
         onAddVendor={openVendorModal}
->>>>>>> main
         categories={categories}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}

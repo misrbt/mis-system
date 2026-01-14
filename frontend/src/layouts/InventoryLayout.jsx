@@ -38,11 +38,7 @@ function InventoryLayout() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <InventoryNavBar user={user} onLogout={logout} />
 
-<<<<<<< HEAD
-      <main className="flex-1 pt-32 md:pt-36 pb-24 sm:pb-24">
-=======
       <main className="flex-1 pt-32 md:pt-36 pb-28 md:pb-24">
->>>>>>> main
         <div className={`w-full mx-auto px-4 py-6 sm:px-6 lg:py-6 lg:px-8 ${contentMaxWidth}`}>
           <Outlet />
         </div>

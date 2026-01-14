@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /**
  * Asset Cards View Component
  * Displays assets in a card grid layout with inline editing
@@ -6,9 +5,6 @@
 
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-=======
-import React from 'react'
->>>>>>> main
 import {
   Package,
   Calendar,
@@ -521,41 +517,7 @@ const AssetCard = ({
               )}
             </div>
 
-<<<<<<< HEAD
-            {/* Additional Details */}
-            <div className="pt-3 border-t border-slate-200 space-y-2">
-              {asset.estimate_life && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" />
-                    Estimated Life
-                  </span>
-                  <span className="font-semibold text-slate-900">{asset.estimate_life} years</span>
-                </div>
-              )}
-              {asset.waranty_expiration_date && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5" />
-                    Warranty Expires
-                  </span>
-                  <span className="font-semibold text-slate-900">
-                    {formatDate(asset.waranty_expiration_date)}
-                  </span>
-                </div>
-              )}
-              {asset.vendor && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Vendor</span>
-                  <span className="font-semibold text-slate-900 truncate ml-2">{asset.vendor.company_name}</span>
-                </div>
-              )}
-            </div>
-
             {/* QR Code / Barcode Section - Collapsible */}
-=======
-            {/* QR Code / Barcode Section - Fixed at bottom */}
->>>>>>> main
             {(asset.qr_code || asset.barcode) && (
               <div className="mt-4 pt-4 border-t border-slate-200">
                 {/* Toggle Button to Show/Hide Codes */}
