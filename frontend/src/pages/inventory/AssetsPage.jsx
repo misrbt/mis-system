@@ -376,27 +376,6 @@ function AssetsPage() {
     setIsEditModalOpen(true)
   }, [])
 
-<<<<<<< Updated upstream
-=======
-  const openVendorModal = useCallback(() => {
-    setVendorFormData({
-      company_name: '',
-      contact_no: '',
-      address: '',
-    })
-    setIsVendorModalOpen(true)
-  }, [])
-
-  const handleVendorInputChange = useCallback((e) => {
-    const { name, value } = e.target
-    setVendorFormData((prev) => ({ ...prev, [name]: value }))
-  }, [])
-
-  const handleCreateVendor = useCallback((e) => {
-    e.preventDefault()
-    createVendorMutation.mutate(vendorFormData)
-  }, [createVendorMutation, vendorFormData])
-
   // Component handlers for Desktop PC
   const handleComponentAdd = useCallback(() => {
     setComponents(prev => [...prev, {
@@ -421,8 +400,6 @@ function AssetsPage() {
       c.id === id ? { ...c, [field]: value } : c
     ))
   }, [])
-
->>>>>>> Stashed changes
   const handleCreate = useCallback((e) => {
     e.preventDefault()
     // Include components in payload if Desktop PC category
@@ -1344,11 +1321,7 @@ function AssetsPage() {
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
         onGenerateSerial={generateSerialNumber}
-<<<<<<< Updated upstream
-=======
         onGenerateComponentSerial={generateComponentSerialNumber}
-        onAddVendor={openVendorModal}
->>>>>>> Stashed changes
         categories={categories}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}

@@ -38,13 +38,8 @@ function InventoryLayout() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <InventoryNavBar user={user} onLogout={logout} />
 
-<<<<<<< Updated upstream
-      <main className="flex-1 pt-32 md:pt-36 pb-16 md:pb-12">
-        <div className={`w-full mx-auto px-4 py-4 sm:px-6 lg:py-4 lg:px-8 ${contentMaxWidth}`}>
-=======
       <main className="flex-1 pt-32 md:pt-36 pb-24 sm:pb-24">
         <div className={`w-full mx-auto px-4 py-6 sm:px-6 lg:py-6 lg:px-8 ${contentMaxWidth}`}>
->>>>>>> Stashed changes
           <Outlet />
         </div>
       </main>

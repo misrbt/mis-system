@@ -18,14 +18,10 @@ const AddAssetModal = ({
   onGenerateComponentSerial,
   onSubmit,
   isPending,
-<<<<<<< Updated upstream
-=======
-  onAddVendor,
   components = [],
   onComponentAdd,
   onComponentRemove,
   onComponentChange,
->>>>>>> Stashed changes
 }) => {
   if (!isOpen) return null
 

@@ -23,15 +23,11 @@ const AssetFormModal = ({
   assignmentSubtitle,
   usePlaceholders = false,
   onGenerateSerial,
-<<<<<<< Updated upstream
-=======
   onGenerateComponentSerial,
-  onAddVendor,
   components = [],
   onComponentAdd,
   onComponentRemove,
   onComponentChange,
->>>>>>> Stashed changes
 }) => {
   const placeholders = usePlaceholders
     ? {

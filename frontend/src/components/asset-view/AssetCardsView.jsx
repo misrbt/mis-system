@@ -1,15 +1,10 @@
-<<<<<<< Updated upstream
 /**
  * Asset Cards View Component
  * Displays assets in a card grid layout with inline editing
- * Extracted from AssetViewPage.jsx (505 lines reduced to reusable component)
  */
 
-import React from 'react'
-=======
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
->>>>>>> Stashed changes
 import {
   Package,
   Calendar,
@@ -448,7 +443,6 @@ const AssetCard = ({
               )}
             </div>
 
-<<<<<<< Updated upstream
             {/* Additional Details */}
             <div className="pt-3 border-t border-slate-200 space-y-2">
               {asset.estimate_life && (
@@ -479,10 +473,7 @@ const AssetCard = ({
               )}
             </div>
 
-            {/* QR Code / Barcode Section */}
-=======
             {/* QR Code / Barcode Section - Collapsible */}
->>>>>>> Stashed changes
             {(asset.qr_code || asset.barcode) && (
               <div className="mt-4 pt-4 border-t border-slate-200">
                 {/* Toggle Button to Show/Hide Codes */}

@@ -33,6 +33,8 @@ import {
 import {
   flexRender,
   getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   getExpandedRowModel,
@@ -181,6 +183,8 @@ function AuditLogsPage() {
     pageIndex: 0,
     pageSize: 50,
   })
+  const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
+  const [mobileSorting, setMobileSorting] = useState([{ id: 'movement_date', desc: true }])
 
   // Fetch audit logs for table view (regular pagination)
   const {
@@ -426,8 +430,6 @@ function AuditLogsPage() {
     onPaginationChange: setPagination,
   })
 
-<<<<<<< Updated upstream
-=======
   // Mobile columns for simpler filtering
   const mobileColumns = useMemo(
     () => [
@@ -466,7 +468,6 @@ function AuditLogsPage() {
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
->>>>>>> Stashed changes
   // Handle filter changes
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
@@ -986,16 +987,8 @@ function AuditLogsPage() {
         </div>
       </div>
 
-      {/* Table View */}
-      {viewMode === 'table' && (
-<<<<<<< Updated upstream
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id}>
-=======
+      {/* Main content */}
+      {viewMode === 'table' ? (
         <div className="space-y-3 sm:space-y-4">
           {/* Mobile Cards */}
           <div className="sm:hidden space-y-2">
@@ -1124,7 +1117,6 @@ function AuditLogsPage() {
                 <thead className="bg-slate-50 border-b border-slate-200">
                   {table.getHeaderGroups().map((headerGroup) => (
                     <tr key={headerGroup.id}>
->>>>>>> Stashed changes
                     {headerGroup.headers.map((header) => (
                       <th
                         key={header.id}
@@ -1208,6 +1200,7 @@ function AuditLogsPage() {
               </tbody>
             </table>
           </div>
+          </div>
 
           {/* Pagination */}
           {movements.length > 0 && (
@@ -1288,10 +1281,7 @@ function AuditLogsPage() {
             </div>
           )}
         </div>
-      )}
-
-      {/* Timeline View */}
-      {viewMode === 'timeline' && (
+      ) : (
         <div className="space-y-4">
           {isLoading ? (
             <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
@@ -1443,4 +1433,4 @@ function AuditLogsPage() {
   )
 }
 
-export default AuditLogsPage
+export default AuditLogsPage;

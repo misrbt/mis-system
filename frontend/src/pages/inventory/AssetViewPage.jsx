@@ -1382,14 +1382,10 @@ function AssetViewPage() {
         onGenerateComponentSerial={generateComponentSerialNumber}
         onSubmit={handleAddAsset}
         isPending={addAssetMutation.isPending}
-<<<<<<< Updated upstream
-=======
-        onAddVendor={openVendorModal}
         components={components}
         onComponentAdd={handleComponentAdd}
         onComponentRemove={handleComponentRemove}
         onComponentChange={handleComponentChange}
->>>>>>> Stashed changes
       />
 
       {/* Delete Confirmation Modal - Mobile Optimized */}
