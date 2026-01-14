@@ -84,6 +84,14 @@ class Asset extends Model
     }
 
     /**
+     * Components relationship (for Desktop PC assets)
+     */
+    public function components()
+    {
+        return $this->hasMany(AssetComponent::class, 'parent_asset_id');
+    }
+
+    /**
      * Movement Statistics Helpers
      */
     public function getAssignmentCount()

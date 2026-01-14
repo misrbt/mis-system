@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
+use App\Models\AssetComponent;
 use App\Models\Employee;
 use App\Models\Status;
 use App\Services\InventoryAuditLogService;
@@ -204,6 +205,28 @@ class AssetController extends Controller
             ], 422);
         }
 
+        // Add component validation if components are provided
+        if ($request->has('components')) {
+            $componentValidator = Validator::make($request->all(), [
+                'components' => 'array',
+                'components.*.component_type' => 'required|in:system_unit,monitor,keyboard_mouse,other',
+                'components.*.component_name' => 'required|string|max:255',
+                'components.*.brand' => 'nullable|string|max:255',
+                'components.*.model' => 'nullable|string|max:255',
+                'components.*.serial_number' => 'nullable|string|max:255|unique:asset_components,serial_number',
+                'components.*.acq_cost' => 'nullable|numeric|min:0',
+                'components.*.remarks' => 'nullable|string',
+            ]);
+
+            if ($componentValidator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Component validation failed',
+                    'errors' => $componentValidator->errors(),
+                ], 422);
+            }
+        }
+
         try {
             $data = $request->except(['status_id', 'book_value']); // Remove status and book_value from request
 
@@ -266,6 +289,38 @@ class AssetController extends Controller
             // Refresh the asset to get the generated QR code and barcode
             $asset->refresh();
 
+            // Create components if provided (for Desktop PC assets)
+            $createdComponents = [];
+            if ($request->has('components') && is_array($request->components)) {
+                foreach ($request->components as $componentData) {
+                    $component = AssetComponent::create([
+                        'parent_asset_id' => $asset->id,
+                        'component_type' => $componentData['component_type'],
+                        'component_name' => $componentData['component_name'],
+                        'brand' => $componentData['brand'] ?? null,
+                        'model' => $componentData['model'] ?? null,
+                        'serial_number' => $componentData['serial_number'] ?? null,
+                        'acq_cost' => $componentData['acq_cost'] ?? null,
+                        'status_id' => $asset->status_id, // Inherit parent status initially
+                        'assigned_to_employee_id' => $asset->assigned_to_employee_id, // Inherit parent assignment
+                        'remarks' => $componentData['remarks'] ?? null,
+                    ]);
+
+                    // Generate codes for component (non-blocking)
+                    try {
+                        $component->generateAndSaveQRCode();
+                        $component->generateAndSaveBarcode();
+                    } catch (\Exception $e) {
+                        Log::warning("Failed to generate codes for component {$component->id}: " . $e->getMessage());
+                    }
+
+                    $createdComponents[] = $component;
+                }
+
+                // Load components relationship
+                $asset->load('components');
+            }
+
             // Load relationships
             $asset->load([
                 'category',
@@ -281,6 +336,7 @@ class AssetController extends Controller
                 'message' => "Asset created successfully with status \"{$statusName}\"",
                 'data' => $asset,
                 'depreciation_info' => $bookValueCalc,
+                'components_created' => count($createdComponents),
             ], 201);
         } catch (\Exception $e) {
             return response()->json([

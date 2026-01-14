@@ -76,7 +76,7 @@ function Portal() {
       <PortalNavbar user={user} onLogout={handleLogout} />
 
       {/* Main Content */}
-      <main className="flex-1 relative z-10 pt-20 pb-24">
+      <main className="flex-1 relative z-10 pt-20 pb-24 sm:pb-24">
         {/* Hero Section */}
         <div className="max-w-4xl mx-auto px-6 sm:px-8 lg:px-12 pt-16 pb-12">
           <div className="text-center max-w-3xl mx-auto mb-16">
@@ -142,8 +142,18 @@ function Portal() {
         </div>
       </main>
 
-      {/* Footer */}
-      <Footer variant="light" />
+      {/* Simple footer for mobile - Fixed at bottom */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 py-3 px-4 text-center bg-white border-t border-slate-200 space-y-0.5 z-10">
+        <p className="text-xs text-slate-500">
+          Designed and Developed by <span className="font-medium text-slate-600">Augustin Maputol</span>
+        </p>
+        <p className="text-xs text-slate-400">
+          © {new Date().getFullYear()} MIS System. All rights reserved.
+        </p>
+      </div>
+
+      {/* Full Footer for desktop */}
+      <Footer variant="light" className="hidden sm:block" />
 
       <style>{`
         @keyframes blob {

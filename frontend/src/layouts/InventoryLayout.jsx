@@ -44,9 +44,20 @@ function InventoryLayout() {
         </div>
       </main>
 
+      {/* Simple footer for mobile - Fixed at bottom */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 py-3 px-4 text-center bg-white border-t border-slate-200 space-y-0.5 z-10">
+        <p className="text-xs text-slate-500">
+          Designed and Developed by <span className="font-medium text-slate-600">Augustin Maputol</span>
+        </p>
+        <p className="text-xs text-slate-400">
+          © {new Date().getFullYear()} MIS System. All rights reserved.
+        </p>
+      </div>
+
+      {/* Full Footer for desktop */}
       <Footer
         variant="light"
-        className="mt-auto"
+        className="mt-auto hidden sm:block"
         maxWidth={contentMaxWidth}
         horizontalPadding="px-4 sm:px-6 lg:px-8"
       />
