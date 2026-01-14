@@ -86,6 +86,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('assets/{id}/status', [AssetController::class, 'updateStatus']);
     Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
     Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
+    Route::get('assets/totals', [AssetController::class, 'totals']);
     Route::apiResource('assets', AssetController::class);
 
     // Asset Component routes (for Desktop PC components)
@@ -149,4 +150,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/return', [AssetMovementController::class, 'returnAsset']);
         Route::post('/update-status', [AssetMovementController::class, 'updateStatus']);
     });
+
+    // Bulk transfer route (outside the {id} prefix)
+    Route::post('assets/movements/bulk-transfer', [AssetMovementController::class, 'bulkTransfer']);
 });

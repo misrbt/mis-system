@@ -1,5 +1,5 @@
 // @react-compiler-disable
-import { useState } from 'react'
+import { useState, useDeferredValue } from 'react'
 import PropTypes from 'prop-types'
 import {
   useReactTable,
@@ -14,13 +14,14 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Ch
 function DataTable({ columns, data, pageSize = 10, showGlobalFilter = true, loading = false }) {
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState([])
+  const deferredGlobalFilter = useDeferredValue(globalFilter)
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
     state: {
-      globalFilter,
+      globalFilter: deferredGlobalFilter,
       sorting,
     },
     onGlobalFilterChange: setGlobalFilter,

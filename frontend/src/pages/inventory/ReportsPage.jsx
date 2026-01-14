@@ -27,12 +27,11 @@ const normalizeArrayResponse = (data) => {
 }
 
 function ReportsPage() {
-  const today = new Date().toISOString().split('T')[0]
   const [searchParams, setSearchParams] = useSearchParams()
   const [showFilters, setShowFilters] = useState(true)
   const [filters, setFilters] = useState({
     report_date_from: '',
-    report_date_to: today,
+    report_date_to: '',
     branch_id: '',
     status_id: '',
   })

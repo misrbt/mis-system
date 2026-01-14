@@ -1,6 +1,13 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Wrench } from 'lucide-react'
+import { Wrench, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  getPaginationRowModel,
+} from '@tanstack/react-table'
 import Modal from '../../components/Modal'
 import DataTable from '../../components/DataTable'
 import RepairFilters from '../../components/repairs/RepairFilters'
@@ -50,6 +57,8 @@ function RepairsPage() {
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false)
   const [isInRepairModalOpen, setIsInRepairModalOpen] = useState(false)
   const [isRemarksModalOpen, setIsRemarksModalOpen] = useState(false)
+  const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
+  const [mobileSorting, setMobileSorting] = useState([])
 
   const { data: repairsData, isLoading } = useQuery({
     queryKey: ['repairs', filters],
@@ -80,6 +89,7 @@ function RepairsPage() {
 
   const assets = normalizeArrayResponse(assetsData)
   const vendors = normalizeArrayResponse(vendorsData)
+  const repairsList = Array.isArray(repairsData?.data) ? repairsData.data : []
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateRepair(id, data),
@@ -315,6 +325,44 @@ function RepairsPage() {
     () => getRepairColumns(handleStatusChange, openEditModal, handleDelete, getStatusBadge, openRemarksModal),
     [handleDelete, handleStatusChange, openEditModal, openRemarksModal]
   )
+  const mobileColumns = useMemo(
+    () => [
+      { accessorKey: 'asset.asset_name', header: 'Asset' },
+      { accessorKey: 'vendor.company_name', header: 'Vendor' },
+      { accessorKey: 'repair_date', header: 'Repair Date' },
+      { accessorKey: 'expected_return_date', header: 'Expected Return' },
+      { accessorKey: 'repair_cost', header: 'Cost' },
+      { accessorKey: 'status', header: 'Status' },
+    ],
+    []
+  )
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const mobileTable = useReactTable({
+    data: repairsList,
+    columns: mobileColumns,
+    state: {
+      globalFilter: mobileGlobalFilter,
+      sorting: mobileSorting,
+    },
+    onGlobalFilterChange: setMobileGlobalFilter,
+    onSortingChange: setMobileSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  })
+  const mobileSortId = mobileSorting[0]?.id || ''
+  const mobileSortDesc = mobileSorting[0]?.desc || false
+  const mobilePagination = mobileTable.getState().pagination
+  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
+  const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
   return (
     <div className="space-y-6">
@@ -373,7 +421,233 @@ function RepairsPage() {
         </div>
       )}
 
-      <DataTable columns={columns} data={repairsData?.data || []} loading={isLoading} pageSize={10} />
+      {/* Mobile Cards */}
+      <div className="space-y-3 sm:hidden">
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={mobileGlobalFilter ?? ''}
+              onChange={(e) => setMobileGlobalFilter(e.target.value)}
+              placeholder="Search repairs..."
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={mobileSortId}
+              onChange={(e) => {
+                const nextId = e.target.value
+                setMobileSorting(nextId ? [{ id: nextId, desc: false }] : [])
+              }}
+              className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Sort by</option>
+              <option value="asset.asset_name">Asset</option>
+              <option value="vendor.company_name">Vendor</option>
+              <option value="repair_date">Repair Date</option>
+              <option value="expected_return_date">Expected Return</option>
+              <option value="repair_cost">Cost</option>
+              <option value="status">Status</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                if (!mobileSortId) return
+                setMobileSorting([{ id: mobileSortId, desc: !mobileSortDesc }])
+              }}
+              disabled={!mobileSortId}
+              className="px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {mobileSortDesc ? 'Z-A' : 'A-Z'}
+            </button>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 text-center text-slate-500">
+            Loading repairs...
+          </div>
+        ) : mobileFilteredCount === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 text-center text-slate-500">
+            No repairs found.
+          </div>
+        ) : (
+          mobileTable.getRowModel().rows.map((row) => {
+            const repair = row.original
+            const status = repair.status
+            const nextStatus = {
+              Pending: 'In Repair',
+              'In Repair': 'Completed',
+              Completed: 'Returned',
+            }[status]
+            const statusDisplay = {
+              'In Repair': 'Under Repair',
+            }[status] || status
+            const nextStatusDisplay = {
+              'In Repair': 'Under Repair',
+            }[nextStatus] || nextStatus
+            const repairCost = repair.repair_cost
+              ? `P${Number(repair.repair_cost).toLocaleString('en-PH', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}`
+              : 'N/A'
+
+            return (
+              <div key={repair.id} className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 truncate">
+                      {repair.asset?.asset_name || 'N/A'}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1 truncate">
+                      {repair.asset?.category?.name || 'N/A'}
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(
+                      status
+                    )}`}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    <span className="leading-none">{statusDisplay}</span>
+                  </span>
+                </div>
+
+                {nextStatus && (
+                  <div className="mt-2">
+                    <button
+                      onClick={() => handleStatusChange(repair, nextStatus)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors"
+                      title={`Change status to ${nextStatusDisplay}`}
+                    >
+                      <span className="text-[10px] uppercase tracking-wide text-slate-400">Next</span>
+                      <span>{nextStatusDisplay}</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <div className="text-slate-500">Vendor</div>
+                    <div className="font-medium text-slate-700 truncate">
+                      {repair.vendor?.company_name || 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-500">Repair Date</div>
+                    <div className="font-medium text-slate-700">
+                      {repair.repair_date ? new Date(repair.repair_date).toLocaleDateString() : 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-500">Expected Return</div>
+                    <div className="font-medium text-slate-700">
+                      {repair.expected_return_date
+                        ? new Date(repair.expected_return_date).toLocaleDateString()
+                        : 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-500">Cost</div>
+                    <div className="font-semibold text-slate-900">{repairCost}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => openRemarksModal(repair)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 rounded-lg hover:bg-slate-100 transition-all duration-200"
+                    title="View remarks history"
+                  >
+                    <span>Remarks</span>
+                  </button>
+                  <button
+                    onClick={() => openEditModal(repair)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all duration-200"
+                    title="Edit repair"
+                  >
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    onClick={() => handleDelete(repair)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-all duration-200"
+                    title="Delete repair"
+                  >
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
+
+        {!isLoading && mobileFilteredCount > 0 && (
+          <div className="bg-white rounded-lg border border-slate-200 px-3 py-3 space-y-2">
+            <div className="text-xs text-slate-600 text-center">
+              Showing {mobileStart} to {mobileEnd} of {mobileFilteredCount} entries
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <select
+                value={mobilePagination.pageSize}
+                onChange={(e) => mobileTable.setPageSize(Number(e.target.value))}
+                className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {[10, 20, 30, 40, 50].map((size) => (
+                  <option key={size} value={size}>
+                    {size} per page
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => mobileTable.setPageIndex(0)}
+                  disabled={!mobileTable.getCanPreviousPage()}
+                  className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="First page"
+                >
+                  <ChevronsLeft className="w-4 h-4 text-slate-600" />
+                </button>
+                <button
+                  onClick={() => mobileTable.previousPage()}
+                  disabled={!mobileTable.getCanPreviousPage()}
+                  className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4 text-slate-600" />
+                </button>
+                <span className="text-xs text-slate-700 px-1">
+                  {mobilePagination.pageIndex + 1} of {mobileTable.getPageCount()}
+                </span>
+                <button
+                  onClick={() => mobileTable.nextPage()}
+                  disabled={!mobileTable.getCanNextPage()}
+                  className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-4 h-4 text-slate-600" />
+                </button>
+                <button
+                  onClick={() => mobileTable.setPageIndex(mobileTable.getPageCount() - 1)}
+                  disabled={!mobileTable.getCanNextPage()}
+                  className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Last page"
+                >
+                  <ChevronsRight className="w-4 h-4 text-slate-600" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Data Table */}
+      <div className="hidden sm:block">
+        <DataTable columns={columns} data={repairsList} loading={isLoading} pageSize={10} />
+      </div>
 
       {isEditModalOpen && selectedRepair && (
         <Modal

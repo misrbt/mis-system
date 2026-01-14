@@ -178,7 +178,7 @@ function InventoryNavBarContent({ user, onLogout, location }) {
 
                 {/* Desktop/Laptop Full Title */}
                 <div className="hidden md:block">
-                  <h1 className="text-lg font-bold text-slate-800 leading-tight">IT Inventory System</h1>
+                  <h1 className="text-lg font-bold text-slate-800 leading-tight">IT INVENTORY SYSTEM</h1>
                   <p className="text-xs text-slate-500 leading-tight">RBT Bank Asset Management</p>
                 </div>
               </div>

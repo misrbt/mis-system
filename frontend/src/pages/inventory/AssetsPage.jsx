@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -10,6 +10,16 @@ import {
   RefreshCw,
   Table2,
   BarChart3,
+  Users,
+  LayoutGrid,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Eye,
+  History,
+  Edit,
 } from 'lucide-react'
 import {
   flexRender,
@@ -22,8 +32,10 @@ import {
 import apiClient from '../../services/apiClient'
 import AssetFormModal from './assets/AssetFormModal'
 import { getAssetColumns } from './assets/assetColumns'
+import Modal from '../../components/Modal'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
+import { formatCurrency, formatDate } from '../../utils/assetFormatters'
 
 const normalizeArrayResponse = (data) => {
   if (Array.isArray(data?.data)) return data.data
@@ -123,14 +135,55 @@ function AssetsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedAsset, setSelectedAsset] = useState(null)
   const [editingCell, setEditingCell] = useState(null)
-  const [viewMode, setViewMode] = useState('table') // 'table' or 'pivot'
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+      return 'cards'
+    }
+    return 'table'
+  }) // 'table' | 'pivot' | 'cards'
   const [showFilters, setShowFilters] = useState(false)
+  const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
+  const [mobileSorting, setMobileSorting] = useState([])
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
+  const isTableView = viewMode === 'table'
+  const [vendorFormData, setVendorFormData] = useState({
+    company_name: '',
+    contact_no: '',
+    address: '',
+  })
 
   // Pivot configuration state
   const [pivotConfig, setPivotConfig] = useState(INITIAL_PIVOT_CONFIG)
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const smallQuery = window.matchMedia('(max-width: 639px)')
+    const largeQuery = window.matchMedia('(min-width: 640px)')
+    const syncViewMode = () => {
+      if (smallQuery.matches && viewMode !== 'cards') {
+        setViewMode('cards')
+      }
+      if (largeQuery.matches && viewMode === 'cards') {
+        setViewMode('table')
+      }
+    }
+
+    syncViewMode()
+
+    smallQuery.addEventListener('change', syncViewMode)
+    largeQuery.addEventListener('change', syncViewMode)
+    return () => {
+      smallQuery.removeEventListener('change', syncViewMode)
+      largeQuery.removeEventListener('change', syncViewMode)
+    }
+  }, [viewMode])
+
   // Filter state
   const [filters, setFilters] = useState(() => ({ ...INITIAL_FILTERS }))
+  const deferredFilters = useDeferredValue(filters)
+  const isFiltering = deferredFilters !== filters
+  const [searchInput, setSearchInput] = useState(INITIAL_FILTERS.search)
+  const deferredMobileGlobalFilter = useDeferredValue(mobileGlobalFilter)
 
   // Form state
   const [formData, setFormData] = useState(() => buildFormData())
@@ -138,21 +191,22 @@ function AssetsPage() {
 
   // Fetch assets with React Query
   const { data: assetsData, isLoading, refetch } = useQuery({
-    queryKey: ['assets', filters],
+    queryKey: ['assets', deferredFilters],
     queryFn: async () => {
-      const params = buildQueryParams(filters)
+      const params = buildQueryParams(deferredFilters)
       const response = await apiClient.get(`/assets?${params}`)
       return response.data
     },
   })
 
   const { data: assetsTotalsData, isLoading: isLoadingTotals } = useQuery({
-    queryKey: ['assets', 'totals', filters],
+    queryKey: ['assets', 'totals', deferredFilters],
     queryFn: async () => {
-      const params = buildQueryParams(filters, { all: '1' })
-      const response = await apiClient.get(`/assets?${params}`)
+      const params = buildQueryParams(deferredFilters)
+      const response = await apiClient.get(`/assets/totals?${params}`)
       return response.data
     },
+    enabled: isTableView,
   })
 
   // Fetch filter options
@@ -198,19 +252,13 @@ function AssetsPage() {
 
   const employeeAcqTotals = useMemo(() => {
     const totals = {}
-    const assets = assetsTotalsData?.data || []
+    const rows = assetsTotalsData?.data || []
 
-    assets.forEach((asset) => {
-      const employeeKey =
-        asset.assigned_to_employee_id ?? asset.assigned_employee?.id ?? 'unassigned'
-
-      if (!Object.prototype.hasOwnProperty.call(totals, employeeKey)) {
-        totals[employeeKey] = 0
-      }
-
-      const value = parseFloat(asset.acq_cost)
+    rows.forEach((row) => {
+      const employeeKey = row.employee_id ?? 'unassigned'
+      const value = parseFloat(row.total_acq_cost)
       if (!Number.isNaN(value)) {
-        totals[employeeKey] += value
+        totals[employeeKey] = value
       }
     })
 
@@ -306,6 +354,29 @@ function AssetsPage() {
     },
   })
 
+  const createVendorMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/vendors', data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['vendors'])
+      setIsVendorModalOpen(false)
+      setVendorFormData({
+        company_name: '',
+        contact_no: '',
+        address: '',
+      })
+
+      // Auto-select the newly created vendor
+      if (response.data?.data?.id) {
+        setFormData((prev) => ({ ...prev, vendor_id: response.data.data.id }))
+      }
+
+      notifySuccess('Success!', 'Vendor created successfully')
+    },
+    onError: (error) => {
+      notifyError('Failed to create vendor', error)
+    },
+  })
+
   // Handlers
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target
@@ -362,7 +433,24 @@ function AssetsPage() {
 
   const clearFilters = useCallback(() => {
     setFilters({ ...INITIAL_FILTERS })
+    setSearchInput(INITIAL_FILTERS.search)
   }, [])
+
+  useEffect(() => {
+    setSearchInput(filters.search)
+  }, [filters.search])
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setFilters((prev) => (
+        prev.search === searchInput
+          ? prev
+          : { ...prev, search: searchInput }
+      ))
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchInput])
 
   const openAddModal = useCallback(() => {
     setFormData(buildFormData())
@@ -376,6 +464,7 @@ function AssetsPage() {
     setIsEditModalOpen(true)
   }, [])
 
+<<<<<<< HEAD
   // Component handlers for Desktop PC
   const handleComponentAdd = useCallback(() => {
     setComponents(prev => [...prev, {
@@ -400,6 +489,27 @@ function AssetsPage() {
       c.id === id ? { ...c, [field]: value } : c
     ))
   }, [])
+=======
+  const openVendorModal = useCallback(() => {
+    setVendorFormData({
+      company_name: '',
+      contact_no: '',
+      address: '',
+    })
+    setIsVendorModalOpen(true)
+  }, [])
+
+  const handleVendorInputChange = useCallback((e) => {
+    const { name, value } = e.target
+    setVendorFormData((prev) => ({ ...prev, [name]: value }))
+  }, [])
+
+  const handleCreateVendor = useCallback((e) => {
+    e.preventDefault()
+    createVendorMutation.mutate(vendorFormData)
+  }, [createVendorMutation, vendorFormData])
+
+>>>>>>> main
   const handleCreate = useCallback((e) => {
     e.preventDefault()
     // Include components in payload if Desktop PC category
@@ -470,26 +580,11 @@ function AssetsPage() {
   )
 
   // Table columns definition
-  const columns = useMemo(
-    () =>
-      getAssetColumns({
-        editingCell,
-        setEditingCell,
-        employeeOptions,
-        handleInlineEdit,
-        employeeAcqTotals,
-        isLoadingTotals,
-        categories,
-        statusOptions,
-        statusColorMap,
-        navigate,
-        openEditModal,
-        handleDelete,
-        emptyValue: EMPTY_VALUE,
-        currencyPrefix: CURRENCY_PREFIX,
-      }),
-    [
+  const columns = useMemo(() => {
+    if (!isTableView) return []
+    return getAssetColumns({
       editingCell,
+      setEditingCell,
       employeeOptions,
       handleInlineEdit,
       employeeAcqTotals,
@@ -500,18 +595,65 @@ function AssetsPage() {
       navigate,
       openEditModal,
       handleDelete,
-    ]
+      emptyValue: EMPTY_VALUE,
+      currencyPrefix: CURRENCY_PREFIX,
+    })
+  }, [
+    editingCell,
+    employeeOptions,
+    handleInlineEdit,
+    employeeAcqTotals,
+    isLoadingTotals,
+    categories,
+    statusOptions,
+    statusColorMap,
+    navigate,
+    openEditModal,
+    handleDelete,
+    isTableView,
+  ])
+  const mobileColumns = useMemo(
+    () => [
+      { accessorKey: 'asset_name', header: 'Asset' },
+      { accessorKey: 'serial_number', header: 'Serial' },
+      {
+        id: 'employee',
+        header: 'Employee',
+        accessorFn: (row) => row.assigned_employee?.fullname || row.assignedEmployee?.fullname || '',
+      },
+      {
+        id: 'category',
+        header: 'Category',
+        accessorFn: (row) => row.category?.name || row.category?.category_name || '',
+      },
+      {
+        id: 'vendor',
+        header: 'Vendor',
+        accessorFn: (row) => row.vendor?.company_name || '',
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        accessorFn: (row) => row.status?.name || '',
+      },
+      { accessorKey: 'purchase_date', header: 'Purchase Date' },
+      { accessorKey: 'acq_cost', header: 'Acq Cost' },
+      { accessorKey: 'book_value', header: 'Book Value' },
+    ],
+    []
   )
+
+  const assetsList = Array.isArray(assetsData?.data) ? assetsData.data : []
+  const isMobileView = viewMode === 'cards'
 
   // Table instance
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
-    data: assetsData?.data || [],
+    data: isTableView ? assetsList : [],
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     state: {
       rowSelection: selectedRows,
     },
@@ -519,7 +661,37 @@ function AssetsPage() {
     enableRowSelection: true,
   })
 
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const mobileTable = useReactTable({
+    data: isMobileView ? assetsList : [],
+    columns: mobileColumns,
+    state: {
+      globalFilter: deferredMobileGlobalFilter,
+      sorting: mobileSorting,
+    },
+    onGlobalFilterChange: setMobileGlobalFilter,
+    onSortingChange: setMobileSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  })
+  const mobileSortId = mobileSorting[0]?.id || ''
+  const mobileSortDesc = mobileSorting[0]?.desc || false
+  const mobilePagination = mobileTable.getState().pagination
+  const mobileFilteredCount = deferredMobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : assetsList.length
+  const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
+  const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
+
   const selectedCount = Object.values(selectedRows).filter(Boolean).length
+  const totalAssets = assetsList.length
 
   // Group assets by employee
   // Pivot table calculation
@@ -628,7 +800,10 @@ function AssetsPage() {
     }
   }, [assetsData, pivotConfig])
 
-  const pivotData = useMemo(() => calculatePivotData(), [calculatePivotData])
+  const pivotData = useMemo(() => {
+    if (viewMode !== 'pivot') return null
+    return calculatePivotData()
+  }, [calculatePivotData, viewMode])
 
   // Handle pivot config changes
   const handlePivotConfigChange = (field, value) => {
@@ -707,70 +882,104 @@ function AssetsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">IT Asset Inventory</h1>
-          <p className="text-sm text-slate-600 mt-1.5">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">IT Asset Inventory</h1>
+          <p className="text-xs sm:text-sm text-slate-600 mt-1 sm:mt-1.5">
             Track and manage all company assets with ease
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1">
+        <div className="flex flex-col gap-2">
+          {/* View mode and refresh buttons row */}
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1 flex-1 sm:flex-initial sm:ml-auto">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`hidden sm:inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex-1 sm:flex-initial ${
+                  viewMode === 'table'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+                title="Table view"
+              >
+                <Table2 className="w-4 h-4" />
+                <span className="xs:inline">Table</span>
+              </button>
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex-1 sm:flex-initial sm:hidden ${
+                  viewMode === 'cards'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+                title="Card view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+                <span className="xs:inline">Cards</span>
+              </button>
+              <button
+                onClick={() => setViewMode('pivot')}
+                className={`hidden sm:inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex-1 sm:flex-initial ${
+                  viewMode === 'pivot'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+                title="Pivot view"
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span className="xs:inline">Pivot</span>
+              </button>
+            </div>
             <button
-              onClick={() => setViewMode('table')}
-              className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                viewMode === 'table'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-              title="Table view"
+              onClick={() => refetch()}
+              className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+              title="Refresh"
             >
-              <Table2 className="w-4 h-4" />
-              <span>Table</span>
-            </button>
-            <button
-              onClick={() => setViewMode('pivot')}
-              className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                viewMode === 'pivot'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-              title="Pivot view"
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span>Pivot</span>
+              <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
-          <button
-            onClick={() => refetch()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Asset</span>
-          </button>
+
+          {/* Action buttons row */}
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3 lg:gap-4">
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Asset</span>
+            </button>
+            <button
+              onClick={() => navigate('/inventory/employee-list')}
+              className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
+            >
+              <Users className="w-4 h-4" />
+              <span>View Employees</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Filters */}
-      {showFilters && viewMode === 'table' && (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+      {showFilters && viewMode !== 'pivot' && (
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <Filter className="w-5 h-5" />
-              Advanced Filters
+            <h3 className="text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="hidden xs:inline">Advanced </span>Filters
             </h3>
-            <button
-              onClick={() => setShowFilters(false)}
-              className="text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2 sm:gap-3">
+              {isFiltering && (
+                <span className="text-xs text-slate-500 hidden xs:inline">Updating...</span>
+              )}
+              <button
+                onClick={() => setShowFilters(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+                aria-label="Close filters"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
@@ -778,8 +987,8 @@ function AssetsPage() {
               <input
                 type="text"
                 name="search"
-                value={filters.search}
-                onChange={handleFilterChange}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Asset name, serial, brand..."
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
@@ -872,7 +1081,7 @@ function AssetsPage() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            <div className="flex items-end">
+            <div className="flex items-end sm:col-span-2 lg:col-span-1">
               <button
                 onClick={clearFilters}
                 className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 transition-all"
@@ -884,10 +1093,10 @@ function AssetsPage() {
         </div>
       )}
 
-      {!showFilters && viewMode === 'table' && (
+      {!showFilters && viewMode !== 'pivot' && (
         <button
           onClick={() => setShowFilters(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 w-full sm:w-auto"
         >
           <Filter className="w-4 h-4" />
           Show Filters
@@ -896,24 +1105,24 @@ function AssetsPage() {
 
       {/* Bulk Actions */}
       {selectedCount > 0 && viewMode === 'table' && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-blue-900">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+          <div className="flex flex-col gap-3">
+            <span className="text-sm font-medium text-blue-900 text-center xs:text-left">
               {selectedCount} asset(s) selected
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col xs:flex-row items-stretch gap-2">
               <button
                 onClick={handleBulkDelete}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 border border-red-300 rounded-lg hover:bg-red-200 transition-all"
+                className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-red-700 bg-red-100 border border-red-300 rounded-lg hover:bg-red-200 transition-all flex-1 xs:flex-initial"
               >
                 <Trash2 className="w-4 h-4" />
-                Delete Selected
+                <span className="whitespace-nowrap">Delete Selected</span>
               </button>
               <button
                 onClick={() => setSelectedRows({})}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+                className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all flex-1 xs:flex-initial"
               >
-                Clear Selection
+                <span className="whitespace-nowrap">Clear Selection</span>
               </button>
             </div>
           </div>
@@ -923,15 +1132,21 @@ function AssetsPage() {
       {/* Table View */}
       {viewMode === 'table' && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          {/* Mobile scroll hint */}
+          <div className="bg-blue-50 border-b border-blue-200 px-3 py-2 sm:hidden">
+            <p className="text-xs text-blue-800 text-center">
+              ← Swipe left/right to view all columns →
+            </p>
+          </div>
+          <div className="overflow-x-auto -mx-px">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
                       <th
                         key={header.id}
-                        className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider"
+                        className="px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-semibold text-slate-700 uppercase tracking-wider"
                         style={{ width: header.getSize() }}
                       >
                         {header.isPlaceholder ? null : (
@@ -980,7 +1195,7 @@ function AssetsPage() {
                       }`}
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-3 text-sm">
+                        <td key={cell.id} className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}
@@ -993,35 +1208,304 @@ function AssetsPage() {
 
           {/* Pagination */}
           {!isLoading && table.getRowModel().rows.length > 0 && (
-            <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-700">
-                  Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
-                  {Math.min(
-                    (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                    table.getFilteredRowModel().rows.length
-                  )}{' '}
-                  of {table.getFilteredRowModel().rows.length} assets
-                </span>
+            <div className="px-3 sm:px-4 py-3 border-t border-slate-200">
+              <div className="flex flex-col xs:flex-row items-center justify-between gap-3">
+                {/* Results info */}
+                <div className="text-xs sm:text-sm text-slate-700 text-center xs:text-left">
+                  <span className="hidden sm:inline">Showing </span>
+                  <span className="font-semibold">
+                    {totalAssets === 0 ? 0 : table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}
+                  </span>
+                  <span className="hidden xs:inline">-</span>
+                  <span className="xs:hidden"> to </span>
+                  <span className="font-semibold">
+                    {Math.min(
+                      (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+                      totalAssets
+                    )}
+                  </span>
+                  <span className="hidden xs:inline"> of </span>
+                  <span className="xs:hidden"> / </span>
+                  <span className="font-semibold">{totalAssets}</span>
+                  <span className="hidden sm:inline"> assets</span>
+                </div>
+
+                {/* Pagination controls */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    <span className="hidden xs:inline">Previous</span>
+                    <span className="xs:hidden">Prev</span>
+                  </button>
+                  <span className="text-xs sm:text-sm text-slate-700 px-1 sm:px-2 whitespace-nowrap">
+                    <span className="hidden sm:inline">Page </span>
+                    <span className="font-semibold">{table.getState().pagination.pageIndex + 1}</span>
+                    <span className="hidden sm:inline"> of </span>
+                    <span className="sm:hidden"> / </span>
+                    <span className="font-semibold">{table.getPageCount()}</span>
+                  </span>
+                  <button
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => table.previousPage()}
-                  disabled={!table.getCanPreviousPage()}
-                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewMode === 'cards' && (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={mobileGlobalFilter ?? ''}
+                onChange={(e) => setMobileGlobalFilter(e.target.value)}
+                placeholder="Search assets..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={mobileSortId}
+                onChange={(e) => {
+                  const nextId = e.target.value
+                  setMobileSorting(nextId ? [{ id: nextId, desc: false }] : [])
+                }}
+                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Sort by</option>
+                <option value="asset_name">Asset Name</option>
+                <option value="serial_number">Serial</option>
+                <option value="employee">Employee</option>
+                <option value="category">Category</option>
+                <option value="vendor">Vendor</option>
+                <option value="status">Status</option>
+                <option value="purchase_date">Purchase Date</option>
+                <option value="acq_cost">Acq Cost</option>
+                <option value="book_value">Book Value</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!mobileSortId) return
+                  setMobileSorting([{ id: mobileSortId, desc: !mobileSortDesc }])
+                }}
+                disabled={!mobileSortId}
+                className="px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {mobileSortDesc ? 'Z-A' : 'A-Z'}
+              </button>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-center">
+                <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+                <span className="ml-2 text-slate-600">Loading assets...</span>
+              </div>
+            </div>
+          ) : mobileFilteredCount === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 text-center text-slate-500">
+              No assets found. Try adjusting your filters or add a new asset.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {mobileTable.getRowModel().rows.map((row) => {
+                const asset = row.original
+                const assignedEmployeeId =
+                  asset.assigned_to_employee_id ?? asset.assigned_employee?.id
+                const hasEmployee = Boolean(assignedEmployeeId)
+                const statusId = asset.status_id ?? asset.status?.id
+                const statusColor = statusColorMap[statusId] || '#e2e8f0'
+                const statusTextColor = statusColorMap[statusId] ? '#fff' : '#1e293b'
+                const categoryLabel =
+                  asset.category?.name || asset.category?.category_name || EMPTY_VALUE
+                const brandModel = [asset.brand, asset.model].filter(Boolean).join(' ')
+                const serialLabel = asset.serial_number || EMPTY_VALUE
+                const purchaseLabel = asset.purchase_date ? formatDate(asset.purchase_date) : EMPTY_VALUE
+                const vendorLabel = asset.vendor?.company_name || EMPTY_VALUE
+                const acqCostLabel =
+                  asset.acq_cost !== null && asset.acq_cost !== undefined && asset.acq_cost !== ''
+                    ? formatCurrency(asset.acq_cost)
+                    : EMPTY_VALUE
+                const bookValueLabel =
+                  asset.book_value !== null && asset.book_value !== undefined && asset.book_value !== ''
+                    ? formatCurrency(asset.book_value)
+                    : EMPTY_VALUE
+
+                return (
+                  <div key={asset.id} className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-900 truncate">
+                          {asset.asset_name}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1 truncate">
+                          {brandModel || EMPTY_VALUE}
+                        </div>
+                      </div>
+                      <span
+                        className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border"
+                        style={{
+                          backgroundColor: statusColor,
+                          color: statusTextColor,
+                          borderColor: statusColor,
+                        }}
+                      >
+                        {asset.status?.name || 'Status'}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <div className="text-slate-500">Serial</div>
+                        <div className="font-medium text-slate-700 truncate">{serialLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">Category</div>
+                        <div className="font-medium text-slate-700 truncate">{categoryLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">Purchase</div>
+                        <div className="font-medium text-slate-700">{purchaseLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">Vendor</div>
+                        <div className="font-medium text-slate-700 truncate">{vendorLabel}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <div className="text-slate-500">Acq. Cost</div>
+                        <div className="font-semibold text-blue-700">{acqCostLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">Book Value</div>
+                        <div className="font-semibold text-green-700">{bookValueLabel}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          if (hasEmployee) {
+                            navigate(`/inventory/employees/${assignedEmployeeId}/assets`)
+                          } else {
+                            Swal.fire({
+                              icon: 'info',
+                              title: 'Not Assigned',
+                              text: 'This asset is not assigned to any employee',
+                            })
+                          }
+                        }}
+                        disabled={!hasEmployee}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+                          hasEmployee
+                            ? 'text-green-700 bg-green-50 hover:bg-green-100'
+                            : 'text-gray-400 bg-gray-50 cursor-not-allowed opacity-50'
+                        }`}
+                        title={hasEmployee ? "View employee's all assets" : 'Asset not assigned'}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Employee</span>
+                      </button>
+                      <button
+                        onClick={() => navigate(`/inventory/assets/${asset.id}`)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-all duration-200"
+                        title="View asset timeline & history"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                        <span>View</span>
+                      </button>
+                      <button
+                        onClick={() => openEditModal(asset)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all duration-200"
+                        title="Edit asset"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(asset)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-all duration-200"
+                        title="Delete asset"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {!isLoading && mobileFilteredCount > 0 && (
+            <div className="bg-white rounded-lg border border-slate-200 px-3 py-3 space-y-2">
+              <div className="text-xs text-slate-600 text-center">
+                Showing {mobileStart} to {mobileEnd} of {mobileFilteredCount} entries
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <select
+                  value={mobilePagination.pageSize}
+                  onChange={(e) => mobileTable.setPageSize(Number(e.target.value))}
+                  className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  Previous
-                </button>
-                <span className="text-sm text-slate-700">
-                  Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-                </span>
-                <button
-                  onClick={() => table.nextPage()}
-                  disabled={!table.getCanNextPage()}
-                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
+                  {[10, 20, 30, 40, 50].map((size) => (
+                    <option key={size} value={size}>
+                      {size} per page
+                    </option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => mobileTable.setPageIndex(0)}
+                    disabled={!mobileTable.getCanPreviousPage()}
+                    className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="First page"
+                  >
+                    <ChevronsLeft className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <button
+                    onClick={() => mobileTable.previousPage()}
+                    disabled={!mobileTable.getCanPreviousPage()}
+                    className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Previous page"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <span className="text-xs text-slate-700 px-1">
+                    {mobilePagination.pageIndex + 1} of {mobileTable.getPageCount()}
+                  </span>
+                  <button
+                    onClick={() => mobileTable.nextPage()}
+                    disabled={!mobileTable.getCanNextPage()}
+                    className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Next page"
+                  >
+                    <ChevronRight className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <button
+                    onClick={() => mobileTable.setPageIndex(mobileTable.getPageCount() - 1)}
+                    disabled={!mobileTable.getCanNextPage()}
+                    className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Last page"
+                  >
+                    <ChevronsRight className="w-4 h-4 text-slate-600" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1033,33 +1517,33 @@ function AssetsPage() {
       {viewMode === 'pivot' && (
         <div className="space-y-4">
           {/* Pivot Configuration */}
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Pivot Table Configuration
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden xs:inline">Pivot Table </span>Configuration
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
                   onClick={exportPivotToCSV}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 transition-all"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 transition-all"
                   title="Export to CSV"
                 >
                   <Download className="w-4 h-4" />
-                  Export CSV
+                  <span className="hidden xs:inline">Export </span>CSV
                 </button>
                 <button
                   onClick={() => refetch()}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
                   title="Refresh data"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  Refresh
+                  <span className="hidden xs:inline">Refresh</span>
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Row Dimension */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1166,23 +1650,23 @@ function AssetsPage() {
                 configuration.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full border-collapse min-w-[600px]">
                   <thead>
                     <tr className="bg-slate-100 border-b-2 border-slate-300">
-                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider border-r-2 border-slate-300 sticky left-0 bg-slate-100 z-10">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider border-r-2 border-slate-300 sticky left-0 bg-slate-100 z-10">
                         {pivotConfig.rowDimension}
                       </th>
                       {pivotData.columnKeys.map((colKey) => (
                         <th
                           key={colKey}
-                          className="px-4 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wider border-r border-slate-200"
+                          className="px-2 sm:px-4 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider border-r border-slate-200"
                         >
-                          {colKey}
+                          <span className="block truncate max-w-[100px] sm:max-w-none">{colKey}</span>
                         </th>
                       ))}
                       {pivotConfig.showTotals && (
-                        <th className="px-4 py-3 text-center text-xs font-bold text-blue-700 uppercase tracking-wider bg-blue-50 border-l-2 border-blue-300">
+                        <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-blue-700 uppercase tracking-wider bg-blue-50 border-l-2 border-blue-300">
                           Total
                         </th>
                       )}
@@ -1200,8 +1684,8 @@ function AssetsPage() {
                           key={rowKey}
                           className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}
                         >
-                          <td className="px-4 py-3 text-sm font-semibold text-slate-900 border-r-2 border-slate-300 sticky left-0 bg-inherit z-10">
-                            {rowKey}
+                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-semibold text-slate-900 border-r-2 border-slate-300 sticky left-0 bg-inherit z-10">
+                            <span className="block truncate max-w-[120px] sm:max-w-none">{rowKey}</span>
                           </td>
                           {pivotData.columnKeys.map((colKey) => {
                             const value = pivotData.data[rowKey][colKey]
@@ -1210,7 +1694,7 @@ function AssetsPage() {
                             return (
                               <td
                                 key={`${rowKey}-${colKey}`}
-                                className={`px-4 py-3 text-sm text-center border-r border-slate-200 ${
+                                className={`px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-center border-r border-slate-200 ${
                                   hasValue
                                     ? 'text-slate-900 font-medium bg-green-50'
                                     : 'text-slate-400'
@@ -1221,7 +1705,7 @@ function AssetsPage() {
                             )
                           })}
                           {pivotConfig.showTotals && (
-                            <td className="px-4 py-3 text-sm font-bold text-center text-blue-900 bg-blue-50 border-l-2 border-blue-300">
+                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-center text-blue-900 bg-blue-50 border-l-2 border-blue-300">
                               {formatPivotValue(rowTotal)}
                             </td>
                           )}
@@ -1232,7 +1716,7 @@ function AssetsPage() {
                     {/* Totals Row */}
                     {pivotConfig.showTotals && (
                       <tr className="bg-blue-100 border-t-2 border-blue-300 font-bold">
-                        <td className="px-4 py-3 text-sm text-blue-900 border-r-2 border-blue-300 sticky left-0 bg-blue-100 z-10">
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-blue-900 border-r-2 border-blue-300 sticky left-0 bg-blue-100 z-10">
                           Total
                         </td>
                         {pivotData.columnKeys.map((colKey) => {
@@ -1244,14 +1728,14 @@ function AssetsPage() {
                           return (
                             <td
                               key={`total-${colKey}`}
-                              className="px-4 py-3 text-sm text-center text-blue-900 border-r border-blue-200"
+                              className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-center text-blue-900 border-r border-blue-200"
                             >
                               {formatPivotValue(colTotal)}
                             </td>
                           )
                         })}
                         {pivotConfig.showTotals && (
-                          <td className="px-4 py-3 text-sm text-center text-blue-900 bg-blue-200 border-l-2 border-blue-400">
+                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-center text-blue-900 bg-blue-200 border-l-2 border-blue-400">
                             {formatPivotValue(
                               pivotData.rowKeys.reduce(
                                 (sum, rowKey) =>
@@ -1276,30 +1760,30 @@ function AssetsPage() {
 
           {/* Pivot Stats Summary */}
           {pivotData && pivotData.rowKeys.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">Total Assets</div>
-                <div className="text-2xl font-bold text-slate-900">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1">Total Assets</div>
+                <div className="text-xl sm:text-2xl font-bold text-slate-900">
                   {assetsData?.data?.length || 0}
                 </div>
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1 truncate">
                   Unique {pivotConfig.rowDimension}s
                 </div>
-                <div className="text-2xl font-bold text-blue-600">{pivotData.rowKeys.length}</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-600">{pivotData.rowKeys.length}</div>
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1 truncate">
                   Unique {pivotConfig.columnDimension}s
                 </div>
-                <div className="text-2xl font-bold text-green-600">
+                <div className="text-xl sm:text-2xl font-bold text-green-600">
                   {pivotData.columnKeys.length}
                 </div>
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                <div className="text-sm text-slate-600 mb-1">Data Points</div>
-                <div className="text-2xl font-bold text-purple-600">
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                <div className="text-xs sm:text-sm text-slate-600 mb-1">Data Points</div>
+                <div className="text-xl sm:text-2xl font-bold text-purple-600">
                   {pivotData.rowKeys.length * pivotData.columnKeys.length}
                 </div>
               </div>
@@ -1321,7 +1805,11 @@ function AssetsPage() {
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
         onGenerateSerial={generateSerialNumber}
+<<<<<<< HEAD
         onGenerateComponentSerial={generateComponentSerialNumber}
+=======
+        onAddVendor={openVendorModal}
+>>>>>>> main
         categories={categories}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
@@ -1347,6 +1835,7 @@ function AssetsPage() {
         onInputChange={handleInputChange}
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
+        onAddVendor={openVendorModal}
         categories={categories}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
@@ -1356,6 +1845,75 @@ function AssetsPage() {
         assignmentTitle="Assignment & Status"
         assignmentSubtitle="Employee assignment and asset status"
       />
+
+      {/* Add Vendor Modal */}
+      <Modal
+        isOpen={isVendorModalOpen}
+        onClose={() => setIsVendorModalOpen(false)}
+        title="Add New Vendor"
+      >
+        <form onSubmit={handleCreateVendor} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Company Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="company_name"
+              value={vendorFormData.company_name}
+              onChange={handleVendorInputChange}
+              required
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter company name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Contact Number
+            </label>
+            <input
+              type="text"
+              name="contact_no"
+              value={vendorFormData.contact_no}
+              onChange={handleVendorInputChange}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter contact number"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Address
+            </label>
+            <textarea
+              name="address"
+              value={vendorFormData.address}
+              onChange={handleVendorInputChange}
+              rows="3"
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter address"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsVendorModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createVendorMutation.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {createVendorMutation.isPending ? 'Creating...' : 'Create Vendor'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

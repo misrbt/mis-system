@@ -18,10 +18,14 @@ const AddAssetModal = ({
   onGenerateComponentSerial,
   onSubmit,
   isPending,
+<<<<<<< HEAD
   components = [],
   onComponentAdd,
   onComponentRemove,
   onComponentChange,
+=======
+  onAddVendor,
+>>>>>>> main
 }) => {
   if (!isOpen) return null
 
@@ -358,10 +362,21 @@ const AddAssetModal = ({
             <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Vendor</label>
             <select
               value={formData.vendor_id}
-              onChange={(e) => onInputChange('vendor_id', e.target.value)}
+              onChange={(e) => {
+                if (e.target.value === 'ADD_NEW') {
+                  onAddVendor?.()
+                } else {
+                  onInputChange('vendor_id', e.target.value)
+                }
+              }}
               className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
             >
               <option value="">Select Vendor</option>
+              {onAddVendor && (
+                <option value="ADD_NEW" className="font-semibold text-green-600">
+                  + Add New Vendor
+                </option>
+              )}
               {vendors.map((vendor) => (
                 <option key={vendor.id} value={vendor.id}>{vendor.company_name}</option>
               ))}

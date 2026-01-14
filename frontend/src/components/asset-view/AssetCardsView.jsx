@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /**
  * Asset Cards View Component
  * Displays assets in a card grid layout with inline editing
@@ -5,6 +6,9 @@
 
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+=======
+import React from 'react'
+>>>>>>> main
 import {
   Package,
   Calendar,
@@ -49,6 +53,8 @@ const AssetCard = ({
   statusColorMap,
   showStatusPicker,
   showCodes,
+  isSelected,
+  onSelect,
   onEdit,
   onSave,
   onCancel,
@@ -114,13 +120,34 @@ const AssetCard = ({
     onCardClick?.()
   }
 
+  const bookValueNumber = Number.parseFloat(asset?.book_value)
+  const isBookValueOne =
+    Number.isFinite(bookValueNumber) && Math.round(bookValueNumber * 100) / 100 === 1
+
   return (
     <div
-      className={`group relative bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-300 h-full flex flex-col ${
+      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 h-full flex flex-col ${
+        isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200'
+      } ${
         !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1 cursor-pointer' : ''
       }`}
       onClick={handleCardClick}
     >
+      {/* Selection Checkbox */}
+      {onSelect && !isEditing && (
+        <div className="absolute top-3 right-3 z-20">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => {
+              e.stopPropagation()
+              onSelect()
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-5 h-5 rounded border-2 border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          />
+        </div>
+      )}
       {/* View Movement Overlay - Only shown on hover in view mode */}
       {!isEditing && (
         <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 pointer-events-none z-10 flex items-center justify-center">
@@ -321,47 +348,98 @@ const AssetCard = ({
           </div>
 
           {/* Card Body - Asset Details */}
-          <div className="flex-1 p-5 sm:p-7 space-y-4 sm:space-y-5 bg-white">
-            {/* Primary Info Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              {asset.brand && (
-                <InfoCard label="Brand" value={asset.brand} icon="🏢" />
-              )}
-              {asset.model && (
-                <InfoCard label="Model" value={asset.model} icon="📱" />
-              )}
-            </div>
+          <div className="flex-1 p-5 sm:p-7 bg-white flex flex-col">
+            <div className="space-y-4 sm:space-y-5 flex-1">
+              {/* Primary Info Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                {asset.brand && (
+                  <InfoCard label="Brand" value={asset.brand} icon="🏢" />
+                )}
+                {asset.model && (
+                  <InfoCard label="Model" value={asset.model} icon="📱" />
+                )}
+              </div>
 
-            {/* Serial & Purchase Info */}
-            <div className="space-y-2.5">
-              {asset.serial_number && (
-                <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                  <Package className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-slate-500">Serial Number</div>
-                    <div className="text-sm font-mono font-semibold text-slate-900 truncate">{asset.serial_number}</div>
-                  </div>
-                </div>
-              )}
-
-              {asset.purchase_date && (
-                <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                  <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-xs text-slate-500">Purchase Date</div>
-                    <div className="text-sm font-medium text-slate-900">
-                      {formatDate(asset.purchase_date)}
+              {/* Serial & Purchase Info */}
+              <div className="space-y-2.5">
+                {asset.serial_number && (
+                  <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                    <Package className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-slate-500">Serial Number</div>
+                      <div className="text-sm font-mono font-semibold text-slate-900 truncate">{asset.serial_number}</div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {asset.book_value && (
-                <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg border border-green-100">
-                  <div className="flex-1">
-                    <div className="text-xs text-green-600 font-medium">Book Value</div>
-                    <div className="text-sm font-bold text-green-700">
-                      {formatCurrency(asset.book_value)}
+                {asset.purchase_date && (
+                  <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                    <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="text-xs text-slate-500">Purchase Date</div>
+                      <div className="text-sm font-medium text-slate-900">
+                        {formatDate(asset.purchase_date)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {asset.book_value && (
+                  <div
+                    className={`flex items-center gap-2 p-2.5 rounded-lg border ${
+                      isBookValueOne ? 'bg-gray-200 border-slate-200' : 'bg-green-50 border-green-100'
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <div className={`text-xs font-medium ${isBookValueOne ? 'text-slate-600' : 'text-green-600'}`}>
+                        Book Value
+                      </div>
+                      <div className={`text-sm font-bold ${isBookValueOne ? 'text-slate-700' : 'text-green-700'}`}>
+                        {formatCurrency(asset.book_value)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Additional Details */}
+              <div className="pt-3 border-t border-slate-200 space-y-2">
+                {asset.estimate_life && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      Estimated Life
+                    </span>
+                    <span className="font-semibold text-slate-900">{asset.estimate_life} years</span>
+                  </div>
+                )}
+                {asset.waranty_expiration_date && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5" />
+                      Warranty Expires
+                    </span>
+                    <span className="font-semibold text-slate-900">
+                      {formatDate(asset.waranty_expiration_date)}
+                    </span>
+                  </div>
+                )}
+                {asset.vendor && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Vendor</span>
+                    <span className="font-semibold text-slate-900 truncate ml-2">{asset.vendor.company_name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Remarks */}
+              {asset.remarks && (
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                    <FileText className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-amber-700 mb-1">Notes</div>
+                      <div className="text-sm text-slate-700 line-clamp-3">{asset.remarks}</div>
                     </div>
                   </div>
                 </div>
@@ -443,6 +521,7 @@ const AssetCard = ({
               )}
             </div>
 
+<<<<<<< HEAD
             {/* Additional Details */}
             <div className="pt-3 border-t border-slate-200 space-y-2">
               {asset.estimate_life && (
@@ -474,6 +553,9 @@ const AssetCard = ({
             </div>
 
             {/* QR Code / Barcode Section - Collapsible */}
+=======
+            {/* QR Code / Barcode Section - Fixed at bottom */}
+>>>>>>> main
             {(asset.qr_code || asset.barcode) && (
               <div className="mt-4 pt-4 border-t border-slate-200">
                 {/* Toggle Button to Show/Hide Codes */}
@@ -623,19 +705,6 @@ const AssetCard = ({
               )}
               </div>
             )}
-
-            {/* Remarks */}
-            {asset.remarks && (
-              <div className="pt-3 border-t border-slate-200">
-                <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-100">
-                  <FileText className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-amber-700 mb-1">Notes</div>
-                    <div className="text-sm text-slate-700 line-clamp-3">{asset.remarks}</div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Action Buttons */}
@@ -672,6 +741,8 @@ const AssetCardsView = ({
   statusColorMap,
   statusPickerFor,
   showCodesFor,
+  selectedAssets,
+  onSelectAsset,
   onEditClick,
   onSaveEdit,
   onCancelEdit,
@@ -684,6 +755,8 @@ const AssetCardsView = ({
   onCardClick,
   isPending,
 }) => {
+  const isSelected = (assetId) => selectedAssets?.includes(assetId)
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
       {assets.map((asset) => (
@@ -698,6 +771,8 @@ const AssetCardsView = ({
           statusColorMap={statusColorMap}
           showStatusPicker={statusPickerFor === asset.id}
           showCodes={showCodesFor[asset.id]}
+          isSelected={isSelected(asset.id)}
+          onSelect={onSelectAsset ? () => onSelectAsset(asset.id) : undefined}
           onEdit={() => onEditClick(asset)}
           onSave={onSaveEdit}
           onCancel={onCancelEdit}

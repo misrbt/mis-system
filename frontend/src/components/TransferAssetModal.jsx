@@ -17,7 +17,7 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
   const [errors, setErrors] = useState({})
 
   // Fetch employees
-  const { data: employeesData } = useQuery({
+  const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
     queryKey: ['employees'],
     queryFn: async () => (await fetchEmployeesRequest()).data,
     enabled: isOpen,
@@ -215,6 +215,7 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
             tertiaryField="branch_name"
             emptyMessage="No employees found"
             required
+            isLoading={isLoadingEmployees}
           />
           {errors.to_employee_id && (
             <div className="flex items-center gap-1 mt-1 text-sm text-red-600">

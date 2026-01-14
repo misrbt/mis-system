@@ -39,7 +39,7 @@ class VendorController extends Controller
         $validator = Validator::make($request->all(), [
             'company_name' => 'required|string|max:255|unique:vendors,company_name',
             'contact_no' => 'required|string|max:255',
-            'address' => 'required|string|max:500',
+            'address' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -96,7 +96,7 @@ class VendorController extends Controller
         $validator = Validator::make($request->all(), [
             'company_name' => 'required|string|max:255|unique:vendors,company_name,' . $id,
             'contact_no' => 'required|string|max:255',
-            'address' => 'required|string|max:500',
+            'address' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {

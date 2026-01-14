@@ -24,6 +24,10 @@ return [
         'http://127.0.0.1:5173',
         'http://localhost:5174',
         'http://127.0.0.1:5174',
+        'https://mis.rbtbank.com',
+        'http://mis.rbtbank.com',
+        'https://192.168.0.213',
+        'http://192.168.0.213',
     ],
 
     'allowed_origins_patterns' => [],
