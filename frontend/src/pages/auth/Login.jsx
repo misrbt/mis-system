@@ -34,27 +34,38 @@ function Login() {
 
   return (
     <div className="w-full">
-      {/* Logo and Header */}
-      <div className="text-center mb-8">
-        <div className="flex justify-center mb-4">
-          <div className="w-28 h-28 sm:w-32 sm:h-32 lg:w-40 lg:h-40">
-            <img
-              src={Logo}
-              alt="MIS System Logo"
-              className="w-full h-full object-cover"
-            />
+      <div className="space-y-6 sm:space-y-8 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center lg:gap-10 xl:gap-14 lg:space-y-0">
+        {/* Logo and Header */}
+        <div className="text-center lg:text-left">
+          <div className="flex justify-center lg:justify-start mb-4 sm:mb-6">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 lg:w-32 lg:h-32">
+              <img
+                src={Logo}
+                alt="MIS System Logo"
+                className="w-full h-full object-cover"
+              />
+            </div>
           </div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-800">
+            Welcome back
+          </h1>
+          <p className="text-slate-500 text-sm sm:text-base mt-2">
+            Management Information System
+          </p>
+          <p className="text-slate-500 text-sm sm:text-base mt-3 max-w-md lg:max-w-lg lg:mt-4">
+            Sign in to manage assets, requests, and reports from one secure portal.
+          </p>
         </div>
-        <p className="text-slate-500 text-sm">Management Information System</p>
-      </div>
 
-      {/* Login Form Card */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
-        {/* Card Header */}
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-semibold text-slate-800">Sign In</h2>
-          <p className="text-slate-500 text-sm mt-1">Sign in to your account to continue</p>
-        </div>
+        {/* Login Form Card */}
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8 lg:p-10">
+          {/* Card Header */}
+          <div className="text-center lg:text-left mb-6">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-800">Sign In</h2>
+            <p className="text-slate-500 text-sm sm:text-base mt-1">
+              Sign in to your account to continue
+            </p>
+          </div>
 
         {/* Error Alert */}
         {error && (
@@ -64,10 +75,10 @@ function Login() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-5">
           {/* Email/Username Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">
               Email or Username
             </label>
             <div className="relative">
@@ -79,9 +90,9 @@ function Login() {
                 {...register('login', {
                   required: 'Email or username is required',
                 })}
-                className={`w-full pl-10 pr-3 py-3 bg-slate-50 border ${
+                className={`w-full pl-10 pr-3 py-2.5 sm:py-3 bg-slate-50 border ${
                   errors.login ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'
-                } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
+                } rounded-lg text-sm sm:text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
                 placeholder="Enter your email or username"
               />
             </div>
@@ -92,7 +103,7 @@ function Login() {
 
           {/* Password Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">
               Password
             </label>
             <div className="relative">
@@ -104,9 +115,9 @@ function Login() {
                 {...register('password', {
                   required: 'Password is required',
                 })}
-                className={`w-full pl-10 pr-10 py-3 bg-slate-50 border ${
+                className={`w-full pl-10 pr-10 py-2.5 sm:py-3 bg-slate-50 border ${
                   errors.password ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'
-                } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
+                } rounded-lg text-sm sm:text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200`}
                 placeholder="Enter your password"
               />
               <button
@@ -126,7 +137,7 @@ function Login() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full py-3 sm:py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-semibold rounded-lg shadow-lg shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>
@@ -144,7 +155,7 @@ function Login() {
 
         {/* Divider */}
         <div className="mt-6 pt-6 border-t border-slate-200">
-          <p className="text-center text-slate-500 text-sm">
+          <p className="text-center text-slate-500 text-sm sm:text-base">
             Don't have an account?{' '}
             <Link
               to="/auth/register"
@@ -156,6 +167,7 @@ function Login() {
         </div>
       </div>
     </div>
+  </div>
   )
 }
 

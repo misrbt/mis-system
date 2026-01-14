@@ -52,7 +52,7 @@ function Register() {
   ]
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-md sm:max-w-lg mx-auto">
       {/* Logo and Header */}
       <div className="text-center mb-8">
         <div className="flex justify-center mb-4">
