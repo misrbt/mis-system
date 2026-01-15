@@ -208,7 +208,6 @@ function EmployeePage() {
     []
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const mobileTable = useReactTable({
     data: employees,
     columns: mobileColumns,

@@ -38,6 +38,8 @@ import ReturnAssetModal from '../../components/ReturnAssetModal'
 import StatusUpdateModal from '../../components/StatusUpdateModal'
 import RepairFormModal from '../../components/RepairFormModal'
 import CodeDisplayModal from '../../components/CodeDisplayModal'
+import CodeModal from './asset-view/CodeModal'
+import IndividualAssetView from './asset-view/IndividualAssetView'
 import AssetCardsView from '../../components/asset-view/AssetCardsView'
 import AssetTableView from '../../components/asset-view/AssetTableView'
 import AssetComponentsSection from '../../components/asset-view/AssetComponentsSection'
@@ -269,19 +271,59 @@ function AssetViewPage() {
   // Delete asset mutation
   const deleteAssetMutation = useMutation({
     mutationFn: async (assetId) => {
-      const response = await apiClient.delete(`/assets/${assetId}`)
+      if (!assetId) {
+        throw new Error('Invalid asset id')
+      }
+      const numericId = Number(assetId)
+      // Delete attached components first to avoid FK failures; ignore per-component failures
+      try {
+        const compsRes = await apiClient.get(`/assets/${numericId}/components`)
+        const comps = compsRes.data?.data || []
+        if (Array.isArray(comps) && comps.length) {
+          await Promise.allSettled(
+            comps.map((comp) => apiClient.delete(`/asset-components/${comp.id}`))
+          )
+        }
+      } catch (err) {
+        // If components fetch fails, continue to attempt deletion; backend may still allow it
+        console.warn('Component cleanup before asset delete failed', err)
+      }
+
+      const response = await apiClient.delete(`/assets/${numericId}`)
       return response.data
     },
     onSuccess: async () => {
-      await invalidateAssetRelatedQueries(id, employeeId, actualEmployeeId)
+      await Promise.all([
+        invalidateAssetRelatedQueries(id, employeeId, actualEmployeeId),
+        queryClient.invalidateQueries({ queryKey: ['employeeAssets', actualEmployeeId] }),
+        queryClient.invalidateQueries({ queryKey: ['assets'] }),
+      ])
 
-      // Navigate back to assets list after deleting in asset view
       if (id) {
         navigate('/inventory/assets')
       }
 
+      setSelectedAssets((prev) =>
+        deleteTarget?.id ? prev.filter((assetId) => assetId !== deleteTarget.id) : prev
+      )
       setShowDeleteModal(false)
       setDeleteTarget(null)
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Asset Deleted',
+        text: 'Asset has been deleted successfully',
+        timer: 2000,
+        showConfirmButton: false,
+      })
+    },
+    onError: (error) => {
+      Swal.fire({
+        icon: 'error',
+        title: 'Delete Failed',
+        text: error.response?.data?.message || 'Failed to delete asset',
+        confirmButtonText: 'OK',
+      })
     },
   })
 
@@ -324,15 +366,11 @@ function AssetViewPage() {
       })
     },
     onError: (error) => {
-
-
-      // Extract detailed error messages
       let errorMessage = 'Failed to create asset'
-      if (error.response?.data?.errors) {
-        // Laravel validation errors
+      if (error.response && error.response.data && error.response.data.errors) {
         const errors = error.response.data.errors
         errorMessage = Object.values(errors).flat().join('\n')
-      } else if (error.response?.data?.message) {
+      } else if (error.response && error.response.data && error.response.data.message) {
         errorMessage = error.response.data.message
       } else if (error.message) {
         errorMessage = error.message
@@ -770,6 +808,75 @@ function AssetViewPage() {
     )
   }
 
+  if (isAssetView && !employeeId) {
+    if (!asset) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen">
+          <Package className="w-16 h-16 text-gray-400 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-700">Asset Not Found</h2>
+          <button
+            onClick={() => navigate('/inventory/assets')}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Back to Assets
+          </button>
+        </div>
+      )
+    }
+
+    return (
+      <>
+        <CodeModal
+          codeModal={codeModal}
+          onClose={() => setCodeModal(null)}
+          onDownload={handleDownloadCode}
+          onPrint={handlePrintCode}
+        />
+        <IndividualAssetView
+          asset={asset}
+          statistics={statistics}
+          movements={movements}
+          assignments={assignments}
+          isLoadingMovements={isLoadingMovements}
+          isLoadingAssignments={isLoadingAssignments}
+          statuses={statuses}
+          statusColorMap={statusColorMap}
+          statusPickerFor={statusPickerFor}
+          onStatusPickerToggle={(assetId) => setStatusPickerFor(statusPickerFor === assetId ? null : assetId)}
+          onQuickStatusChange={handleQuickStatusChange}
+          onBack={() => navigate(-1)}
+          onOpenTransfer={() => setIsTransferModalOpen(true)}
+          onOpenReturn={() => setIsReturnModalOpen(true)}
+          onOpenStatusUpdate={() => setIsStatusModalOpen(true)}
+          onOpenRepair={() => setIsRepairModalOpen(true)}
+          onCloseTransfer={() => setIsTransferModalOpen(false)}
+          onCloseReturn={() => setIsReturnModalOpen(false)}
+          onCloseStatusUpdate={() => setIsStatusModalOpen(false)}
+          onCloseRepair={() => {
+            setIsRepairModalOpen(false)
+            setRepairModalAssetId(null)
+          }}
+          isTransferModalOpen={isTransferModalOpen}
+          isReturnModalOpen={isReturnModalOpen}
+          isStatusModalOpen={isStatusModalOpen}
+          isRepairModalOpen={isRepairModalOpen}
+          repairModalAsset={repairModalAsset || asset}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          navigateToEmployeeAssets={(empId) => navigate(`/inventory/employees/${empId}/assets`)}
+        />
+      </>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
   // Individual Asset View with Movement Tracking
   if (isAssetView && !employeeId) {
     if (!asset) {
@@ -1109,7 +1216,7 @@ function AssetViewPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                       <span className="text-sm text-gray-600">Acquisition Cost</span>
                       <span className="font-medium text-gray-900">
-                        ₱{parseFloat(asset.acq_cost).toLocaleString()}
+                        PHP {parseFloat(asset.acq_cost).toLocaleString()}
                       </span>
                     </div>
                   )}
@@ -1117,7 +1224,7 @@ function AssetViewPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                       <span className="text-sm text-gray-600">Book Value</span>
                       <span className="font-medium text-gray-900">
-                        ₱{parseFloat(asset.book_value).toLocaleString()}
+                        PHP {parseFloat(asset.book_value).toLocaleString()}
                       </span>
                     </div>
                   )}
@@ -1142,7 +1249,7 @@ function AssetViewPage() {
             {/* Components Section - Only for Desktop PC */}
             {asset && (asset.category?.name?.toLowerCase().includes('desktop') || asset.category?.name?.toLowerCase().includes('pc')) && (
               <div className="lg:col-span-12 mb-6">
-                <AssetComponentsSection assetId={asset.id} asset={asset} statuses={statuses} />
+                <AssetComponentsSection assetId={asset.id} statuses={statuses} />
               </div>
             )}
 
@@ -1540,9 +1647,7 @@ function AssetViewPage() {
                   {viewMode === 'table' && (
                     <AssetTableView
                       assets={employeeAssets}
-                      categories={categories}
                       statuses={statuses}
-                      vendors={vendors}
                       statusColorMap={statusColorMap}
                       statusPickerFor={statusPickerFor}
                       totalEmployeeAcqCost={totalEmployeeAcqCost}
@@ -2086,3 +2191,4 @@ function InfoCard({ label, value, icon }) {
 }
 
 export default AssetViewPage
+

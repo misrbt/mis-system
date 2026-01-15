@@ -658,7 +658,6 @@ function AssetsPage() {
     enableRowSelection: true,
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const mobileTable = useReactTable({
     data: isMobileView ? assetsList : [],
     columns: mobileColumns,

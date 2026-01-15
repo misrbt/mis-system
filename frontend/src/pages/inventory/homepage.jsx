@@ -103,7 +103,6 @@ function InventoryHome() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedBranch, setSelectedBranch] = useState('all')
   const [selectedDateRange, setSelectedDateRange] = useState('30')
-  const [selectedStatuses, setSelectedStatuses] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -277,15 +276,6 @@ function InventoryHome() {
     orange: 'from-orange-500 to-orange-600',
     slate: 'from-slate-500 to-slate-600',
     indigo: 'from-indigo-500 to-indigo-600',
-  }
-
-  // Status filter chips
-  const statusFilters = ['Available', 'Assigned', 'Under Repair', 'Retired']
-
-  const toggleStatus = (status) => {
-    setSelectedStatuses(prev =>
-      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
-    )
   }
 
   // Pagination

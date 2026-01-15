@@ -214,7 +214,6 @@ function VendorsPage() {
     []
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const mobileTable = useReactTable({
     data: vendors,
     columns: mobileColumns,

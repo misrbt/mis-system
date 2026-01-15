@@ -4,7 +4,7 @@ import { Package, Plus, Edit, Trash2, QrCode, ArrowRight, Barcode, X, Save } fro
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 
-function AssetComponentsSection({ assetId, asset, statuses = [] }) {
+function AssetComponentsSection({ assetId, statuses = [] }) {
   const queryClient = useQueryClient()
   const [editingComponent, setEditingComponent] = useState(null)
   const [editFormData, setEditFormData] = useState({})

@@ -33,8 +33,6 @@ import {
 import {
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   getExpandedRowModel,
@@ -183,9 +181,6 @@ function AuditLogsPage() {
     pageIndex: 0,
     pageSize: 50,
   })
-  const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
-  const [mobileSorting, setMobileSorting] = useState([{ id: 'movement_date', desc: true }])
-
   // Fetch audit logs for table view (regular pagination)
   const {
     data: auditData,
@@ -429,45 +424,6 @@ function AuditLogsPage() {
     pageCount: meta.last_page || 1,
     onPaginationChange: setPagination,
   })
-
-  // Mobile columns for simpler filtering
-  const mobileColumns = useMemo(
-    () => [
-      { accessorKey: 'movement_date', header: 'Date' },
-      { accessorKey: 'movement_type', header: 'Action Type' },
-      { accessorKey: 'description', header: 'Description' },
-    ],
-    []
-  )
-
-  // Mobile table with client-side pagination
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const mobileTable = useReactTable({
-    data: movements,
-    columns: mobileColumns,
-    state: {
-      globalFilter: mobileGlobalFilter,
-      sorting: mobileSorting,
-    },
-    onGlobalFilterChange: setMobileGlobalFilter,
-    onSortingChange: setMobileSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  })
-
-  const mobileSortId = mobileSorting[0]?.id || ''
-  const mobileSortDesc = mobileSorting[0]?.desc || false
-  const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
-  const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
-  const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
   // Handle filter changes
   const handleFilterChange = (key, value) => {

@@ -10,9 +10,7 @@ import AssetEmptyState from './AssetEmptyState'
 
 const AssetTableView = ({
   assets,
-  categories,
   statuses,
-  vendors,
   statusColorMap,
   statusPickerFor,
   totalEmployeeAcqCost,
