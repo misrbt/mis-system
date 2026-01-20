@@ -66,6 +66,7 @@ const AssetCard = ({
   // State to track if codes section is expanded (default: collapsed/hidden)
   const [isCodesExpanded, setIsCodesExpanded] = useState(false)
   const [isComponentsExpanded, setIsComponentsExpanded] = useState(false)
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
 
   // Check if asset is Desktop PC
   const isDesktopPC = asset.category?.name?.toLowerCase().includes('desktop') ||
@@ -282,17 +283,17 @@ const AssetCard = ({
         </div>
       ) : (
         /* VIEW MODE */
-        <div className="flex flex-col h-full">
-          {/* Card Header with Gradient */}
-          <div className="bg-gradient-to-br from-slate-50 to-blue-50 p-5 sm:p-7 border-b border-slate-200">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-bold text-slate-900 mb-3 truncate">
+        <div className="flex flex-col h-full bg-white">
+          {/* Card Header with Gradient - More Compact */}
+          <div className="bg-gradient-to-br from-slate-50 to-blue-50 p-4 border-b border-slate-200">
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1 min-w-0 pr-2">
+                <h3 className="text-lg font-bold text-slate-900 mb-2 truncate" title={asset.asset_name}>
                   {asset.asset_name}
                 </h3>
                 <div className="flex items-center gap-2 flex-wrap">
                   {asset.category && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-slate-200 text-slate-700">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white border border-slate-200 text-slate-700">
                       <Tag className="w-3 h-3" />
                       {asset.category.name}
                     </span>
@@ -300,11 +301,11 @@ const AssetCard = ({
                 </div>
               </div>
 
-              {/* Status Picker */}
+              {/* Compact Status Picker */}
               <div className="relative flex-shrink-0">
                 <button
                   onClick={onStatusPickerToggle}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
                 >
                   <span
                     className="w-2 h-2 rounded-full"
@@ -313,6 +314,7 @@ const AssetCard = ({
                   <span>{asset.status?.name || 'Status'}</span>
                   <ChevronDown className="w-3 h-3" />
                 </button>
+                {/* Status Dropdown - Same as before */}
                 {showStatusPicker && (
                   <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
                     <div className="max-h-56 overflow-y-auto py-1">
@@ -347,362 +349,184 @@ const AssetCard = ({
               </div>
             </div>
 
-            {/* Acquisition Cost Highlight */}
-            {asset.acq_cost && (
-              <div className="mt-5 p-4 bg-white rounded-lg border border-blue-200 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-600">Acquisition Cost</span>
-                  <span className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(asset.acq_cost)}
-                  </span>
-                </div>
+            {/* Key Info Row: Serial & Acq Cost */}
+            <div className="flex items-center justify-between mt-3 text-sm">
+              <div className="flex items-center gap-1.5 text-slate-600 overflow-hidden">
+                <Package className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="font-mono truncate" title={asset.serial_number || 'No Serial'}>
+                  {asset.serial_number || '—'}
+                </span>
               </div>
-            )}
-          </div>
-
-          {/* Card Body - Asset Details */}
-          <div className="flex-1 p-5 sm:p-7 bg-white flex flex-col">
-            <div className="space-y-4 sm:space-y-5 flex-1">
-              {/* Primary Info Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                {asset.brand && (
-                  <InfoCard label="Brand" value={asset.brand} icon="🏢" />
-                )}
-                {asset.model && (
-                  <InfoCard label="Model" value={asset.model} icon="📱" />
-                )}
-              </div>
-
-              {/* Serial & Purchase Info */}
-              <div className="space-y-2.5">
-                {asset.serial_number && (
-                  <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                    <Package className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-slate-500">Serial Number</div>
-                      <div className="text-sm font-mono font-semibold text-slate-900 truncate">{asset.serial_number}</div>
-                    </div>
-                  </div>
-                )}
-
-                {asset.purchase_date && (
-                  <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                    <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                    <div className="flex-1">
-                      <div className="text-xs text-slate-500">Purchase Date</div>
-                      <div className="text-sm font-medium text-slate-900">
-                        {formatDate(asset.purchase_date)}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {asset.book_value && (
-                  <div
-                    className={`flex items-center gap-2 p-2.5 rounded-lg border ${
-                      isBookValueOne ? 'bg-gray-200 border-slate-200' : 'bg-green-50 border-green-100'
-                    }`}
-                  >
-                    <div className="flex-1">
-                      <div className={`text-xs font-medium ${isBookValueOne ? 'text-slate-600' : 'text-green-600'}`}>
-                        Book Value
-                      </div>
-                      <div className={`text-sm font-bold ${isBookValueOne ? 'text-slate-700' : 'text-green-700'}`}>
-                        {formatCurrency(asset.book_value)}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Additional Details */}
-              <div className="pt-3 border-t border-slate-200 space-y-2">
-                {asset.estimate_life && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      Estimated Life
-                    </span>
-                    <span className="font-semibold text-slate-900">{asset.estimate_life} years</span>
-                  </div>
-                )}
-                {asset.waranty_expiration_date && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5" />
-                      Warranty Expires
-                    </span>
-                    <span className="font-semibold text-slate-900">
-                      {formatDate(asset.waranty_expiration_date)}
-                    </span>
-                  </div>
-                )}
-                {asset.vendor && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Vendor</span>
-                    <span className="font-semibold text-slate-900 truncate ml-2">{asset.vendor.company_name}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Remarks */}
-              {asset.remarks && (
-                <div className="pt-3 border-t border-slate-200">
-                  <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-100">
-                    <FileText className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-amber-700 mb-1">Notes</div>
-                      <div className="text-sm text-slate-700 line-clamp-3">{asset.remarks}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Desktop PC Components Section - Collapsible */}
-              {isDesktopPC && components.length > 0 && (
-                <div className="pt-3 border-t border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setIsComponentsExpanded(!isComponentsExpanded)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors mb-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Package className="w-4 h-4 text-amber-600" />
-                      <span>Desktop PC Components ({components.length})</span>
-                    </div>
-                    {isComponentsExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-amber-600" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-amber-600" />
-                    )}
-                  </button>
-
-                  {isComponentsExpanded && (
-                    <div className="space-y-2">
-                      {components.map((component) => (
-                        <div
-                          key={component.id}
-                          className="bg-white border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-start gap-2 mb-2">
-                            <div className="text-blue-600 mt-0.5">
-                              {getComponentIcon(component.component_type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-slate-900 text-sm truncate">
-                                {component.component_name}
-                              </div>
-                              <span className="inline-block text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full mt-1">
-                                {component.component_type.replace('_', ' ').toUpperCase()}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-1 text-xs">
-                            {component.brand && (
-                              <div className="flex justify-between">
-                                <span className="text-slate-600">Brand:</span>
-                                <span className="font-medium text-slate-900">{component.brand}</span>
-                              </div>
-                            )}
-                            {component.model && (
-                              <div className="flex justify-between">
-                                <span className="text-slate-600">Model:</span>
-                                <span className="font-medium text-slate-900">{component.model}</span>
-                              </div>
-                            )}
-                            {component.serial_number && (
-                              <div className="flex justify-between">
-                                <span className="text-slate-600">Serial:</span>
-                                <span className="font-mono text-slate-900">{component.serial_number}</span>
-                              </div>
-                            )}
-                            {component.status && (
-                              <div className="flex justify-between">
-                                <span className="text-slate-600">Status:</span>
-                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                  {component.status.name}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {asset.acq_cost && (
+                <div className="font-bold text-blue-700">
+                  {formatCurrency(asset.acq_cost)}
                 </div>
               )}
             </div>
+          </div>
 
-            {/* QR Code / Barcode Section - Collapsible */}
-            {(asset.qr_code || asset.barcode) && (
-              <div className="mt-4 pt-4 border-t border-slate-200">
-                {/* Toggle Button to Show/Hide Codes */}
-                <button
-                  type="button"
-                  onClick={() => setIsCodesExpanded(!isCodesExpanded)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors mb-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <QrCode className="w-4 h-4 text-slate-600" />
-                    <span>QR Code & Barcode</span>
-                  </div>
-                  {isCodesExpanded ? (
-                    <ChevronUp className="w-4 h-4 text-slate-500" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-slate-500" />
-                  )}
-                </button>
-
-                {/* Codes Content - Only shown when expanded */}
-                {isCodesExpanded && (
-                  <>
-                    {asset.qr_code && asset.barcode ? (
-                      <div className="space-y-3">
-                        {/* Toggle Tabs */}
-                        <div className="flex items-center justify-center border-b border-slate-200">
-                      <div className="inline-flex">
-                        <button
-                          type="button"
-                          onClick={() => onCodeToggle('qr')}
-                          className={`relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 ${
-                            (showCodes || 'qr') === 'qr'
-                              ? 'text-blue-600'
-                              : 'text-slate-500 hover:text-slate-700'
-                          }`}
-                        >
-                          <QrCode className="w-4 h-4" />
-                          <span>QR Code</span>
-                          {(showCodes || 'qr') === 'qr' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onCodeToggle('barcode')}
-                          className={`relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 ${
-                            (showCodes || 'qr') === 'barcode'
-                              ? 'text-blue-600'
-                              : 'text-slate-500 hover:text-slate-700'
-                          }`}
-                        >
-                          <Barcode className="w-4 h-4" />
-                          <span>Barcode</span>
-                          {(showCodes || 'qr') === 'barcode' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* QR Code Display */}
-                    {(showCodes || 'qr') === 'qr' && (
-                      <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl border-2 border-blue-200 p-4 shadow-md hover:shadow-xl transition-shadow duration-300">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            <QrCode className="w-4 h-4 text-blue-600" />
-                            <span className="text-sm font-bold text-blue-900 uppercase tracking-wide">QR Code</span>
-                          </div>
-                          <div className="bg-white rounded-lg p-3 shadow-inner">
-                            <img
-                              src={asset.qr_code}
-                              alt={`${asset.asset_name} QR code`}
-                              className="w-48 h-48 object-contain cursor-pointer hover:scale-105 transition-transform duration-200"
-                              onClick={() => onCodeView({ src: asset.qr_code, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'qr' })}
-                            />
-                          </div>
-                          <p className="text-xs text-slate-600 text-center italic">Click to view full size</p>
-                        </div>
+          {/* Card Body - Collapsible Details */}
+          <div className="flex-1 flex flex-col">
+            {/* Expanded Details Section */}
+            {isDetailsExpanded && (
+              <div className="p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                {/* Brand & Model */}
+                {(asset.brand || asset.model) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {asset.brand && (
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                         <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Brand</div>
+                         <div className="text-sm font-semibold text-slate-900 truncate">{asset.brand}</div>
                       </div>
                     )}
-
-                    {/* Barcode Display */}
-                    {(showCodes || 'qr') === 'barcode' && (
-                      <div className="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 rounded-xl border-2 border-slate-300 p-4 shadow-md hover:shadow-xl transition-shadow duration-300">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            <Barcode className="w-4 h-4 text-slate-700" />
-                            <span className="text-sm font-bold text-slate-900 uppercase tracking-wide">Barcode</span>
-                          </div>
-                          <div className="bg-white rounded-lg p-4 shadow-inner w-full">
-                            <img
-                              src={asset.barcode}
-                              alt={`${asset.asset_name} barcode`}
-                              className="w-full h-24 object-contain cursor-pointer hover:scale-105 transition-transform duration-200"
-                              onClick={() => onCodeView({ src: asset.barcode, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'barcode' })}
-                            />
-                          </div>
-                          <p className="text-xs text-slate-600 text-center italic">Click to view full size</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  // Single code display
-                  <div className="space-y-3">
-                    {asset.qr_code && (
-                      <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl border-2 border-blue-200 p-4 shadow-md hover:shadow-xl transition-shadow duration-300">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            <QrCode className="w-4 h-4 text-blue-600" />
-                            <span className="text-sm font-bold text-blue-900 uppercase tracking-wide">QR Code</span>
-                          </div>
-                          <div className="bg-white rounded-lg p-3 shadow-inner">
-                            <img
-                              src={asset.qr_code}
-                              alt={`${asset.asset_name} QR code`}
-                              className="w-48 h-48 object-contain cursor-pointer hover:scale-105 transition-transform duration-200"
-                              onClick={() => onCodeView({ src: asset.qr_code, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'qr' })}
-                            />
-                          </div>
-                          <p className="text-xs text-slate-600 text-center italic">Click to view full size</p>
-                        </div>
-                      </div>
-                    )}
-                    {asset.barcode && (
-                      <div className="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 rounded-xl border-2 border-slate-300 p-4 shadow-md hover:shadow-xl transition-shadow duration-300">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            <Barcode className="w-4 h-4 text-slate-700" />
-                            <span className="text-sm font-bold text-slate-900 uppercase tracking-wide">Barcode</span>
-                          </div>
-                          <div className="bg-white rounded-lg p-4 shadow-inner w-full">
-                            <img
-                              src={asset.barcode}
-                              alt={`${asset.asset_name} barcode`}
-                              className="w-full h-24 object-contain cursor-pointer hover:scale-105 transition-transform duration-200"
-                              onClick={() => onCodeView({ src: asset.barcode, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'barcode' })}
-                            />
-                          </div>
-                          <p className="text-xs text-slate-600 text-center italic">Click to view full size</p>
-                        </div>
+                    {asset.model && (
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                         <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Model</div>
+                         <div className="text-sm font-semibold text-slate-900 truncate">{asset.model}</div>
                       </div>
                     )}
                   </div>
                 )}
-                </>
-              )}
+
+                {/* Dates & Values */}
+                <div className="space-y-2 text-sm">
+                   {asset.purchase_date && (
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-slate-600">Purchase Date</span>
+                      <span className="font-medium text-slate-900">{formatDate(asset.purchase_date)}</span>
+                    </div>
+                   )}
+                   {asset.book_value && (
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-slate-600">Book Value</span>
+                      <span className={`font-medium ${isBookValueOne ? 'text-slate-900' : 'text-green-700'}`}>
+                        {formatCurrency(asset.book_value)}
+                      </span>
+                    </div>
+                   )}
+                   {asset.estimate_life && (
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-slate-600">Est. Life</span>
+                      <span className="font-medium text-slate-900">{asset.estimate_life} yrs</span>
+                    </div>
+                   )}
+                   {asset.waranty_expiration_date && (
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-slate-600">Warranty Exp.</span>
+                      <span className="font-medium text-slate-900">{formatDate(asset.waranty_expiration_date)}</span>
+                    </div>
+                   )}
+                   {asset.vendor && (
+                    <div className="flex justify-between pt-1">
+                      <span className="text-slate-600">Vendor</span>
+                      <span className="font-medium text-slate-900 truncate max-w-[150px]">{asset.vendor.company_name}</span>
+                    </div>
+                   )}
+                </div>
+
+                {/* Remarks */}
+                {asset.remarks && (
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                    <div className="flex items-center gap-1.5 mb-1 text-amber-800">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span className="text-xs font-bold uppercase">Notes</span>
+                    </div>
+                    <p className="text-sm text-slate-700 leading-snug">{asset.remarks}</p>
+                  </div>
+                )}
+
+                {/* Sub-Components (Desktop PC) */}
+                {isDesktopPC && components.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-200">
+                    <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                      <Package className="w-3 h-3" />
+                      Components ({components.length})
+                    </div>
+                    {components.map((comp) => (
+                      <div key={comp.id} className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded border border-slate-100">
+                        <div className="truncate pr-2">
+                          <span className="font-semibold text-slate-700">{comp.component_name}</span>
+                          <span className="text-slate-400 mx-1">•</span>
+                          <span className="text-slate-500">{comp.serial_number || '-'}</span>
+                        </div>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                           comp.status?.name?.toLowerCase() === 'working' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {comp.status?.name || 'N/A'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                 {/* QR/Barcode */}
+                {(asset.qr_code || asset.barcode) && (
+                  <div className="pt-2 border-t border-slate-200 flex gap-2">
+                     {asset.qr_code && (
+                       <button
+                        onClick={() => onCodeView({ src: asset.qr_code, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'qr' })}
+                        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded hover:bg-blue-100 border border-blue-100 transition-colors"
+                       >
+                         <QrCode className="w-3.5 h-3.5" />
+                         QR Code
+                       </button>
+                     )}
+                     {asset.barcode && (
+                       <button
+                        onClick={() => onCodeView({ src: asset.barcode, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'barcode' })}
+                        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded hover:bg-slate-200 border border-slate-200 transition-colors"
+                       >
+                         <Barcode className="w-3.5 h-3.5" />
+                         Barcode
+                       </button>
+                     )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center gap-2 sm:gap-3">
+          {/* Footer Actions - Toggle & Buttons */}
+          <div className="mt-auto bg-slate-50 border-t border-slate-200">
+            {/* Toggle Button */}
             <button
-              onClick={onEdit}
-              className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md touch-manipulation"
+               onClick={(e) => {
+                 e.stopPropagation()
+                 setIsDetailsExpanded(!isDetailsExpanded)
+               }}
+               className="w-full flex items-center justify-center gap-1 py-2 text-xs font-medium text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition-colors border-b border-slate-200"
             >
-              <Edit className="w-4 h-4" />
-              <span>Edit</span>
+              {isDetailsExpanded ? (
+                <>
+                  <span>Show Less</span>
+                  <ChevronUp className="w-3 h-3" />
+                </>
+              ) : (
+                <>
+                  <span>Show Details</span>
+                  <ChevronDown className="w-3 h-3" />
+                </>
+              )}
             </button>
-            <button
-              onClick={onDelete}
-              disabled={isPending}
-              className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete</span>
-            </button>
+
+            {/* Main Actions */}
+            <div className="p-3 flex items-center gap-2">
+              <button
+                onClick={onEdit}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all shadow-sm"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={onDelete}
+                disabled={isPending}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-all shadow-sm disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -23,6 +23,7 @@ class AssetController extends Controller
         try {
             $query = Asset::with([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -39,6 +40,10 @@ class AssetController extends Controller
 
             if ($request->has('category_id') && $request->category_id) {
                 $query->where('asset_category_id', $request->category_id);
+            }
+
+            if ($request->has('subcategory_id') && $request->subcategory_id) {
+                $query->where('subcategory_id', $request->subcategory_id);
             }
 
             if ($request->has('status_id') && $request->status_id) {
@@ -122,6 +127,10 @@ class AssetController extends Controller
                 $query->where('asset_category_id', $request->category_id);
             }
 
+            if ($request->has('subcategory_id') && $request->subcategory_id) {
+                $query->where('subcategory_id', $request->subcategory_id);
+            }
+
             if ($request->has('status_id') && $request->status_id) {
                 $query->where('status_id', $request->status_id);
             }
@@ -183,6 +192,18 @@ class AssetController extends Controller
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
+            'subcategory_id' => [
+                'nullable',
+                'exists:asset_subcategories,id',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($value && $request->asset_category_id) {
+                        $subcategory = \App\Models\AssetSubcategory::find($value);
+                        if ($subcategory && $subcategory->category_id != $request->asset_category_id) {
+                            $fail('The selected subcategory does not belong to the selected category.');
+                        }
+                    }
+                },
+            ],
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'serial_number' => 'nullable|string|max:255',
@@ -324,6 +345,7 @@ class AssetController extends Controller
             // Load relationships
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -355,6 +377,7 @@ class AssetController extends Controller
         try {
             $asset = Asset::with([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -388,6 +411,18 @@ class AssetController extends Controller
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
+            'subcategory_id' => [
+                'nullable',
+                'exists:asset_subcategories,id',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($value && $request->asset_category_id) {
+                        $subcategory = \App\Models\AssetSubcategory::find($value);
+                        if ($subcategory && $subcategory->category_id != $request->asset_category_id) {
+                            $fail('The selected subcategory does not belong to the selected category.');
+                        }
+                    }
+                },
+            ],
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'serial_number' => 'nullable|string|max:255',
@@ -473,6 +508,7 @@ class AssetController extends Controller
             // Load relationships
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -666,6 +702,7 @@ class AssetController extends Controller
             $allowedFields = [
                 'asset_name',
                 'asset_category_id',
+                'subcategory_id',
                 'brand',
                 'model',
                 'serial_number',
@@ -702,6 +739,7 @@ class AssetController extends Controller
 
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -758,6 +796,7 @@ class AssetController extends Controller
 
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',

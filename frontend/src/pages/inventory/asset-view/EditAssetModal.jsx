@@ -1,10 +1,12 @@
 import { createPortal } from 'react-dom'
 import { Edit, X, RefreshCw, Save } from 'lucide-react'
+import SpecificationFields from '../../../components/specifications/SpecificationFields'
 
 function EditAssetModal({
   isOpen,
   data,
   categories,
+  subcategories = [],
   statuses,
   vendors,
   formData,
@@ -75,6 +77,23 @@ function EditAssetModal({
                 ))}
               </select>
             </div>
+
+            {/* Subcategory - Only show if category has subcategories */}
+            {formData.asset_category_id && subcategories?.length > 0 && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Subcategory</label>
+                <select
+                  value={formData.subcategory_id || ''}
+                  onChange={(e) => onChange('subcategory_id', e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select Subcategory (Optional)</option>
+                  {subcategories?.map((subcat) => (
+                    <option key={subcat.id} value={subcat.id}>{subcat.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Status</label>
@@ -183,6 +202,14 @@ function EditAssetModal({
                   <option key={vendor.id} value={vendor.id}>{vendor.company_name}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <SpecificationFields
+                categoryName={categories?.find(c => c.id == formData.asset_category_id)?.name}
+                specifications={formData.specifications || {}}
+                onChange={(specs) => onChange('specifications', specs)}
+              />
             </div>
 
             <div className="md:col-span-2">

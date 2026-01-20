@@ -9,6 +9,7 @@ use App\Http\Controllers\StatusController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetCategoryController;
+use App\Http\Controllers\AssetSubcategoryController;
 use App\Http\Controllers\AssetComponentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ReportController;
@@ -74,6 +75,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Asset Category routes
     Route::apiResource('asset-categories', AssetCategoryController::class);
+
+    // Asset Subcategory routes
+    Route::get('asset-categories/{categoryId}/subcategories', [AssetSubcategoryController::class, 'getByCategory']);
+    Route::apiResource('asset-subcategories', AssetSubcategoryController::class);
 
     // Employee routes
     Route::get('employees/{id}/asset-history', [EmployeeController::class, 'getAssetHistory']);

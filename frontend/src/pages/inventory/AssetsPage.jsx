@@ -49,6 +49,7 @@ const CURRENCY_PREFIX = '₱'
 const INITIAL_FILTERS = {
   branch_id: '',
   category_id: '',
+  subcategory_id: '',
   status_id: '',
   vendor_id: '',
   purchase_date_from: '',
@@ -94,6 +95,7 @@ const formatDateForInput = (dateString) => {
 const buildFormData = (asset = {}) => ({
   asset_name: asset.asset_name || '',
   asset_category_id: asset.asset_category_id || '',
+  subcategory_id: asset.subcategory_id || '',
   brand: asset.brand || '',
   model: asset.model || '',
   book_value: asset.book_value || '',
@@ -105,6 +107,7 @@ const buildFormData = (asset = {}) => ({
   vendor_id: asset.vendor_id || '',
   status_id: asset.status_id || '',
   remarks: asset.remarks || '',
+  specifications: asset.specifications || {},
   assigned_to_employee_id: asset.assigned_to_employee_id || '',
 })
 
@@ -224,6 +227,27 @@ function AssetsPage() {
       const response = await apiClient.get('/asset-categories')
       return normalizeArrayResponse(response.data)
     },
+  })
+
+  const { data: subcategories } = useQuery({
+    queryKey: ['asset-subcategories', formData.asset_category_id],
+    queryFn: async () => {
+      if (!formData.asset_category_id) return []
+      const response = await apiClient.get(`/asset-categories/${formData.asset_category_id}/subcategories`)
+      return normalizeArrayResponse(response.data)
+    },
+    enabled: !!formData.asset_category_id,
+  })
+
+  // Fetch subcategories for filter (based on filter category selection)
+  const { data: filterSubcategories } = useQuery({
+    queryKey: ['filter-subcategories', filters.category_id],
+    queryFn: async () => {
+      if (!filters.category_id) return []
+      const response = await apiClient.get(`/asset-categories/${filters.category_id}/subcategories`)
+      return normalizeArrayResponse(response.data)
+    },
+    enabled: !!filters.category_id,
   })
 
   const { data: statuses } = useQuery({
@@ -380,8 +404,34 @@ function AssetsPage() {
   // Handlers
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }, [])
+    setFormData((prev) => {
+      const newData = { ...prev, [name]: value }
+
+      // Clear subcategory when category changes
+      if (name === 'asset_category_id') {
+        newData.subcategory_id = ''
+      }
+
+      // Auto-generate asset name when relevant fields change
+      if (['asset_category_id', 'subcategory_id', 'brand', 'model'].includes(name)) {
+        // Find category and subcategory names
+        const categoryName = categories?.find(cat => cat.id == newData.asset_category_id)?.name || ''
+        const subcategoryName = subcategories?.find(sub => sub.id == newData.subcategory_id)?.name || ''
+
+        // Build asset name from parts (filter out empty strings)
+        const parts = [categoryName, subcategoryName, newData.brand, newData.model]
+          .map(part => part?.trim())
+          .filter(part => part)
+
+        const generatedName = parts.join(' ')
+        if (generatedName) {
+          newData.asset_name = generatedName
+        }
+      }
+
+      return newData
+    })
+  }, [categories, subcategories])
 
   const handleVendorChange = useCallback((value) => {
     setFormData((prev) => ({ ...prev, vendor_id: value }))
@@ -428,7 +478,13 @@ function AssetsPage() {
 
   const handleFilterChange = useCallback((e) => {
     const { name, value } = e.target
-    setFilters((prev) => ({ ...prev, [name]: value }))
+    setFilters((prev) => {
+      // Clear subcategory when category changes
+      if (name === 'category_id') {
+        return { ...prev, [name]: value, subcategory_id: '' }
+      }
+      return { ...prev, [name]: value }
+    })
   }, [])
 
   const clearFilters = useCallback(() => {
@@ -878,14 +934,15 @@ function AssetsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">IT Asset Inventory</h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1 sm:mt-1.5">
             Track and manage all company assets with ease
           </p>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
           {/* View mode and refresh buttons row */}
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1 flex-1 sm:flex-initial sm:ml-auto">
@@ -1017,6 +1074,29 @@ function AssetsPage() {
                 {categories?.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Subcategory</label>
+              <select
+                name="subcategory_id"
+                value={filters.subcategory_id}
+                onChange={handleFilterChange}
+                disabled={!filters.category_id}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {!filters.category_id
+                    ? 'Select a category first'
+                    : (filterSubcategories?.length === 0)
+                      ? 'No subcategories'
+                      : 'All Subcategories'}
+                </option>
+                {filterSubcategories?.map((subcategory) => (
+                  <option key={subcategory.id} value={subcategory.id}>
+                    {subcategory.name}
                   </option>
                 ))}
               </select>
@@ -1804,6 +1884,7 @@ function AssetsPage() {
         onGenerateComponentSerial={generateComponentSerialNumber}
         onAddVendor={openVendorModal}
         categories={categories}
+        subcategories={subcategories || []}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
         statusOptions={statusOptions}
@@ -1830,6 +1911,7 @@ function AssetsPage() {
         onEmployeeChange={handleEmployeeChange}
         onAddVendor={openVendorModal}
         categories={categories}
+        subcategories={subcategories || []}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
         statusOptions={statusOptions}

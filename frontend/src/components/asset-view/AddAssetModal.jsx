@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { X, RefreshCw, Plus, Package } from 'lucide-react'
+import SpecificationFields from '../specifications/SpecificationFields'
 
 const AddAssetModal = ({
   isOpen,
@@ -12,6 +13,7 @@ const AddAssetModal = ({
   formData,
   onInputChange,
   categories,
+  subcategories = [],
   vendors,
   statuses = [],
   onGenerateSerial,
@@ -78,6 +80,26 @@ const AddAssetModal = ({
               ))}
             </select>
           </div>
+
+          {/* Subcategory - Only show if category has subcategories */}
+          {formData.asset_category_id && subcategories?.length > 0 && (
+            <div>
+              <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">
+                Subcategory <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.subcategory_id || ''}
+                onChange={(e) => onInputChange('subcategory_id', e.target.value)}
+                className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
+                required
+              >
+                <option value="">Select Subcategory</option>
+                {subcategories.map((subcat) => (
+                  <option key={subcat.id} value={subcat.id}>{subcat.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Desktop PC Components Section - Appears immediately after category selection */}
           {isDesktopPCCategory() && (
@@ -184,7 +206,7 @@ const AddAssetModal = ({
                         </div>
 
                         <div className="sm:col-span-2">
-                          <label className="block text-xs font-medium text-slate-700 mb-1">Serial Number</label>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Serial Number </label>
                           <div className="flex gap-1.5">
                             <input
                               type="text"
@@ -192,6 +214,7 @@ const AddAssetModal = ({
                               onChange={(e) => onComponentChange(component.id, 'serial_number', e.target.value)}
                               placeholder="Enter serial number or generate"
                               className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              required
                             />
                             <button
                               type="button"
@@ -273,10 +296,19 @@ const AddAssetModal = ({
             </div>
           )}
 
+          {/* Category-Specific Specifications */}
+          {!isDesktopPCCategory() && (
+            <SpecificationFields
+              categoryName={categories?.find(c => c.id === parseInt(formData.asset_category_id))?.name}
+              specifications={formData.specifications || {}}
+              onChange={(specs) => onInputChange('specifications', specs)}
+            />
+          )}
+
           {/* Serial Number */}
           {!isDesktopPCCategory() && (
             <div>
-              <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Serial Number</label>
+              <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Serial Number <span className="text-red-500">*</span></label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -284,6 +316,7 @@ const AddAssetModal = ({
                   onChange={(e) => onInputChange('serial_number', e.target.value)}
                   className="flex-1 px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="Enter serial number or generate"
+                  required
                 />
                 <button
                   type="button"

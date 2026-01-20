@@ -13,8 +13,11 @@ const EmployeeListPage = lazy(() => import('../pages/inventory/EmployeeListPage'
 const StatusPage = lazy(() => import('../pages/inventory/StatusPage'))
 const VendorsPage = lazy(() => import('../pages/inventory/VendorsPage'))
 const AssetCategoryPage = lazy(() => import('../pages/inventory/AssetCategoryPage'))
+const SubcategoryPage = lazy(() => import('../pages/inventory/SubcategoryPage'))
 const AssetsPage = lazy(() => import('../pages/inventory/AssetsPage'))
 const AssetViewPage = lazy(() => import('../pages/inventory/AssetViewPage'))
+const AssetComponentsPage = lazy(() => import('../pages/inventory/AssetComponentsPage'))
+
 const RepairsPage = lazy(() => import('../pages/inventory/RepairsPage'))
 const ReportsPage = lazy(() => import('../pages/inventory/ReportsPage'))
 const AuditLogsPage = lazy(() => import('../pages/inventory/AuditLogsPage'))
@@ -65,6 +68,10 @@ const inventoryRoutes = {
       element: <AssetCategoryPage />,
     },
     {
+      path: 'asset-subcategories',
+      element: <SubcategoryPage />,
+    },
+    {
       path: 'vendors',
       element: <VendorsPage />,
     },
@@ -80,6 +87,11 @@ const inventoryRoutes = {
       path: 'assets/:id',
       element: <AssetViewPage />,
     },
+    {
+      path: 'assets/:id/components',
+      element: <AssetComponentsPage />,
+    },
+
     {
       path: 'employees/:employeeId/assets',
       element: <AssetViewPage />,

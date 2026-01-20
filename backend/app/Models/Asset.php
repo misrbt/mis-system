@@ -15,6 +15,7 @@ class Asset extends Model
     protected $fillable = [
         'asset_name',
         'asset_category_id',
+        'subcategory_id',
         'brand',
         'model',
         'book_value',
@@ -26,6 +27,7 @@ class Asset extends Model
         'vendor_id',
         'status_id',
         'remarks',
+        'specifications',
         'assigned_to_employee_id',
         'qr_code',
         'barcode',
@@ -37,11 +39,17 @@ class Asset extends Model
         'book_value' => 'float',
         'acq_cost' => 'float',
         'estimate_life' => 'float',
+        'specifications' => 'array',
     ];
 
     public function category()
     {
         return $this->belongsTo(AssetCategory::class, 'asset_category_id');
+    }
+
+    public function subcategory()
+    {
+        return $this->belongsTo(AssetSubcategory::class, 'subcategory_id');
     }
 
     public function vendor()

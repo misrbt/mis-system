@@ -23,7 +23,6 @@ import StatusUpdateModal from '../../../components/StatusUpdateModal'
 import RepairFormModal from '../../../components/RepairFormModal'
 import AssetMovementTimeline from '../../../components/AssetMovementTimeline'
 import AssetAssignmentHistory from '../../../components/AssetAssignmentHistory'
-import AssetComponentsSection from '../../../components/asset-view/AssetComponentsSection'
 import InfoCard from './InfoCard'
 
 function IndividualAssetView({
@@ -55,6 +54,7 @@ function IndividualAssetView({
   activeTab,
   setActiveTab,
   navigateToEmployeeAssets,
+  navigateToAssetComponents,
 }) {
   if (!asset) {
     return (
@@ -276,6 +276,25 @@ function IndividualAssetView({
               )}
             </div>
 
+            {asset && (asset.category?.name?.toLowerCase().includes('desktop') || asset.category?.name?.toLowerCase().includes('pc')) && (
+              <div className="bg-gradient-to-r from-amber-600 to-orange-700 rounded-lg shadow-sm border border-amber-200 p-4 sm:p-6 text-white">
+                <div className="flex items-center gap-3 mb-3">
+                  <LayoutGrid className="w-5 h-5" />
+                  <h3 className="text-base sm:text-lg font-semibold">Desktop PC Components</h3>
+                </div>
+                <p className="text-sm text-amber-50 mb-4">
+                  Manage individual components of this desktop PC (System Unit, Monitor, Keyboard & Mouse, etc.)
+                </p>
+                <button
+                  onClick={() => navigateToAssetComponents(asset.id)}
+                  className="w-full px-4 py-2 bg-white text-amber-700 font-medium rounded-lg hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Package className="w-4 h-4" />
+                  View Components
+                </button>
+              </div>
+            )}
+
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
               <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Activity className="w-5 h-5 text-indigo-600" />
@@ -320,23 +339,17 @@ function IndividualAssetView({
                     <span className="font-medium text-gray-900">{asset.vendor.company_name}</span>
                   </div>
                 )}
-                {asset.warranty_expiration && (
+                {asset.waranty_expiration_date && (
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2">
                     <span className="text-sm text-gray-600">Warranty Expiration</span>
                     <span className="font-medium text-gray-900">
-                      {new Date(asset.warranty_expiration).toLocaleDateString()}
+                      {new Date(asset.waranty_expiration_date).toLocaleDateString()}
                     </span>
                   </div>
                 )}
               </div>
             </div>
           </div>
-
-          {asset && (asset.category?.name?.toLowerCase().includes('desktop') || asset.category?.name?.toLowerCase().includes('pc')) && (
-            <div className="lg:col-span-12 mb-6">
-              <AssetComponentsSection assetId={asset.id} statuses={statuses} />
-            </div>
-          )}
 
           <div className="lg:col-span-8">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">

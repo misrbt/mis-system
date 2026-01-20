@@ -1,9 +1,9 @@
 import { ArrowLeft, ArrowRight, History, LayoutGrid, Package, Table } from 'lucide-react'
-import EmployeeHeader from '../../components/asset-view/EmployeeHeader'
-import AssetsSectionHeader from '../../components/asset-view/AssetsSectionHeader'
-import AssetCardsView from '../../components/asset-view/AssetCardsView'
-import AssetTableView from '../../components/asset-view/AssetTableView'
-import EmployeeAssetHistory from '../../components/employee/EmployeeAssetHistory'
+import EmployeeHeader from '../../../components/asset-view/EmployeeHeader'
+import AssetsSectionHeader from '../../../components/asset-view/AssetsSectionHeader'
+import AssetCardsView from '../../../components/asset-view/AssetCardsView'
+import AssetTableView from '../../../components/asset-view/AssetTableView'
+import EmployeeAssetHistory from '../../../components/employee/EmployeeAssetHistory'
 
 function EmployeeAssetsView({
   employee,

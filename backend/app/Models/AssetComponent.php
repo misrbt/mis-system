@@ -16,7 +16,7 @@ class AssetComponent extends Model
 
     protected $fillable = [
         'parent_asset_id',
-        'component_type',
+        'category_id',
         'component_name',
         'brand',
         'model',
@@ -42,6 +42,11 @@ class AssetComponent extends Model
     public function status()
     {
         return $this->belongsTo(Status::class);
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(AssetCategory::class, 'category_id');
     }
 
     public function assignedEmployee()
@@ -76,7 +81,7 @@ class AssetComponent extends Model
 
         $qrData .= "[COMPONENT INFO]\n";
         $qrData .= "--------------------------------\n";
-        $qrData .= "* Component Type:\n  " . ucwords(str_replace('_', ' ', $this->component_type)) . "\n\n";
+        $qrData .= "* Component Type:\n  " . ($this->category?->name ?? 'N/A') . "\n\n";
         $qrData .= "* Component Name:\n  " . $this->component_name . "\n\n";
         $qrData .= "* Parent Asset:\n  " . $parentAssetName . "\n\n";
         $qrData .= "* Parent ID:\n  " . $parentAssetCode . "\n\n";
@@ -149,6 +154,6 @@ class AssetComponent extends Model
     // Helper to get formatted component type
     public function getFormattedTypeAttribute()
     {
-        return ucwords(str_replace('_', ' ', $this->component_type));
+        return $this->category?->name ?? 'N/A';
     }
 }

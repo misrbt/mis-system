@@ -1,5 +1,6 @@
 import Modal from '../../../components/Modal'
 import SearchableSelect from '../../../components/SearchableSelect'
+import SpecificationFields from '../../../components/specifications/SpecificationFields'
 import { RefreshCw, Plus, X, Package } from 'lucide-react'
 
 const AssetFormModal = ({
@@ -14,6 +15,7 @@ const AssetFormModal = ({
   onVendorChange,
   onEmployeeChange,
   categories,
+  subcategories = [],
   vendorOptions,
   employeeOptions,
   statusOptions,
@@ -30,6 +32,9 @@ const AssetFormModal = ({
   onComponentChange,
   onAddVendor,
 }) => {
+  // Ensure categories is always an array
+  const safeCategories = Array.isArray(categories) ? categories : []
+
   const placeholders = usePlaceholders
     ? {
         asset_name: 'Enter asset name',
@@ -49,7 +54,7 @@ const AssetFormModal = ({
 
   // Helper to check if selected category is Desktop PC
   const isDesktopPCCategory = () => {
-    const category = categories?.find(c => c.id === parseInt(formData.asset_category_id))
+    const category = safeCategories.find(c => c.id === parseInt(formData.asset_category_id))
     return category?.name?.toLowerCase().includes('desktop') ||
            category?.name?.toLowerCase().includes('pc')
   }
@@ -95,13 +100,35 @@ const AssetFormModal = ({
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select category</option>
-                {categories?.map((category) => (
+                {safeCategories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
                 ))}
               </select>
             </div>
+
+            {/* Subcategory - Only show if category has subcategories */}
+            {formData.asset_category_id && subcategories?.length > 0 && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Subcategory <span className="text-slate-500 text-xs font-normal">(Optional)</span>
+                </label>
+                <select
+                  name="subcategory_id"
+                  value={formData.subcategory_id || ''}
+                  onChange={onInputChange}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select subcategory</option>
+                  {subcategories?.map((subcategory) => (
+                    <option key={subcategory.id} value={subcategory.id}>
+                      {subcategory.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Desktop PC Components Section - Appears immediately after category selection */}
             {isDesktopPCCategory() && (
@@ -492,6 +519,17 @@ const AssetFormModal = ({
                 emptyMessage="No employees found"
               />
             </div>
+
+            {/* Category-Specific Specifications */}
+            {!isDesktopPCCategory() && (
+              <div className={remarksWrapperClass}>
+                <SpecificationFields
+                  categoryName={safeCategories.find(c => c.id === parseInt(formData.asset_category_id))?.name}
+                  specifications={formData.specifications || {}}
+                  onChange={(specs) => onInputChange({ target: { name: 'specifications', value: specs } })}
+                />
+              </div>
+            )}
 
             <div className={remarksWrapperClass}>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Remarks</label>
