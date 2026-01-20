@@ -12,7 +12,6 @@ const DashboardCard = ({
   trendUp,
   icon: Icon,
   color = 'blue',
-  isMonetary = false,
   onClick,
   headerAction,
 }) => {

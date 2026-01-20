@@ -391,11 +391,11 @@ const SingleAssetView = ({
                     <span className="font-medium text-gray-900">{asset.vendor.company_name}</span>
                   </div>
                 )}
-                {asset.warranty_expiration && (
+                {asset.waranty_expiration_date && (
                   <div className="flex items-center justify-between py-2">
                     <span className="text-sm text-gray-600">Warranty Expiration</span>
                     <span className="font-medium text-gray-900">
-                      {new Date(asset.warranty_expiration).toLocaleDateString()}
+                      {new Date(asset.waranty_expiration_date).toLocaleDateString()}
                     </span>
                   </div>
                 )}

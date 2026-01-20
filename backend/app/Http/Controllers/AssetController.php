@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
+use App\Models\AssetComponent;
 use App\Models\Employee;
 use App\Models\Status;
 use App\Services\InventoryAuditLogService;
@@ -22,6 +23,7 @@ class AssetController extends Controller
         try {
             $query = Asset::with([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -38,6 +40,10 @@ class AssetController extends Controller
 
             if ($request->has('category_id') && $request->category_id) {
                 $query->where('asset_category_id', $request->category_id);
+            }
+
+            if ($request->has('subcategory_id') && $request->subcategory_id) {
+                $query->where('subcategory_id', $request->subcategory_id);
             }
 
             if ($request->has('status_id') && $request->status_id) {
@@ -121,6 +127,10 @@ class AssetController extends Controller
                 $query->where('asset_category_id', $request->category_id);
             }
 
+            if ($request->has('subcategory_id') && $request->subcategory_id) {
+                $query->where('subcategory_id', $request->subcategory_id);
+            }
+
             if ($request->has('status_id') && $request->status_id) {
                 $query->where('status_id', $request->status_id);
             }
@@ -182,6 +192,18 @@ class AssetController extends Controller
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
+            'subcategory_id' => [
+                'nullable',
+                'exists:asset_subcategories,id',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($value && $request->asset_category_id) {
+                        $subcategory = \App\Models\AssetSubcategory::find($value);
+                        if ($subcategory && $subcategory->category_id != $request->asset_category_id) {
+                            $fail('The selected subcategory does not belong to the selected category.');
+                        }
+                    }
+                },
+            ],
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'serial_number' => 'nullable|string|max:255',
@@ -202,6 +224,28 @@ class AssetController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $validator->errors(),
             ], 422);
+        }
+
+        // Add component validation if components are provided
+        if ($request->has('components')) {
+            $componentValidator = Validator::make($request->all(), [
+                'components' => 'array',
+                'components.*.component_type' => 'required|in:system_unit,monitor,keyboard_mouse,other',
+                'components.*.component_name' => 'required|string|max:255',
+                'components.*.brand' => 'nullable|string|max:255',
+                'components.*.model' => 'nullable|string|max:255',
+                'components.*.serial_number' => 'nullable|string|max:255|unique:asset_components,serial_number',
+                'components.*.acq_cost' => 'nullable|numeric|min:0',
+                'components.*.remarks' => 'nullable|string',
+            ]);
+
+            if ($componentValidator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Component validation failed',
+                    'errors' => $componentValidator->errors(),
+                ], 422);
+            }
         }
 
         try {
@@ -266,9 +310,42 @@ class AssetController extends Controller
             // Refresh the asset to get the generated QR code and barcode
             $asset->refresh();
 
+            // Create components if provided (for Desktop PC assets)
+            $createdComponents = [];
+            if ($request->has('components') && is_array($request->components)) {
+                foreach ($request->components as $componentData) {
+                    $component = AssetComponent::create([
+                        'parent_asset_id' => $asset->id,
+                        'component_type' => $componentData['component_type'],
+                        'component_name' => $componentData['component_name'],
+                        'brand' => $componentData['brand'] ?? null,
+                        'model' => $componentData['model'] ?? null,
+                        'serial_number' => $componentData['serial_number'] ?? null,
+                        'acq_cost' => $componentData['acq_cost'] ?? null,
+                        'status_id' => $asset->status_id, // Inherit parent status initially
+                        'assigned_to_employee_id' => $asset->assigned_to_employee_id, // Inherit parent assignment
+                        'remarks' => $componentData['remarks'] ?? null,
+                    ]);
+
+                    // Generate codes for component (non-blocking)
+                    try {
+                        $component->generateAndSaveQRCode();
+                        $component->generateAndSaveBarcode();
+                    } catch (\Exception $e) {
+                        Log::warning("Failed to generate codes for component {$component->id}: " . $e->getMessage());
+                    }
+
+                    $createdComponents[] = $component;
+                }
+
+                // Load components relationship
+                $asset->load('components');
+            }
+
             // Load relationships
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -281,6 +358,7 @@ class AssetController extends Controller
                 'message' => "Asset created successfully with status \"{$statusName}\"",
                 'data' => $asset,
                 'depreciation_info' => $bookValueCalc,
+                'components_created' => count($createdComponents),
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -299,6 +377,7 @@ class AssetController extends Controller
         try {
             $asset = Asset::with([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -332,6 +411,18 @@ class AssetController extends Controller
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
+            'subcategory_id' => [
+                'nullable',
+                'exists:asset_subcategories,id',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($value && $request->asset_category_id) {
+                        $subcategory = \App\Models\AssetSubcategory::find($value);
+                        if ($subcategory && $subcategory->category_id != $request->asset_category_id) {
+                            $fail('The selected subcategory does not belong to the selected category.');
+                        }
+                    }
+                },
+            ],
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'serial_number' => 'nullable|string|max:255',
@@ -417,6 +508,7 @@ class AssetController extends Controller
             // Load relationships
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -610,6 +702,7 @@ class AssetController extends Controller
             $allowedFields = [
                 'asset_name',
                 'asset_category_id',
+                'subcategory_id',
                 'brand',
                 'model',
                 'serial_number',
@@ -646,6 +739,7 @@ class AssetController extends Controller
 
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
@@ -702,6 +796,7 @@ class AssetController extends Controller
 
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',

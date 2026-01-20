@@ -64,8 +64,16 @@ function InventoryHome() {
 
   // Extract Data
   const statsData = statistics.data
-  const monthlyExpensesData = monthlyExpenses.data || []
-  const yearlyExpensesData = yearlyExpenses.data || []
+  const monthlyExpensesData = Array.isArray(monthlyExpenses.data)
+    ? monthlyExpenses.data
+    : Array.isArray(monthlyExpenses.data?.data)
+      ? monthlyExpenses.data.data
+      : []
+  const yearlyExpensesData = Array.isArray(yearlyExpenses.data)
+    ? yearlyExpenses.data
+    : Array.isArray(yearlyExpenses.data?.data)
+      ? yearlyExpenses.data.data
+      : []
   const currentMonthTotal = currentMonthExpenses.data?.total_expenses || 0
 
   // Branch Statistics Data

@@ -2,6 +2,7 @@ import { lazy } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import ProtectedRoute from '../components/ProtectedRoute'
 import inventoryRoutes from './inventoryRoutes'
+import ErrorPage from '../components/ErrorPage'
 
 // Lazy load auth and portal pages
 const AuthLayout = lazy(() => import('../layouts/AuthLayout'))
@@ -14,12 +15,14 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <Navigate to="/auth/login" replace />,
+    errorElement: <ErrorPage />,
   },
 
   // Auth routes (public)
   {
     path: '/auth',
     element: <AuthLayout />,
+    errorElement: <ErrorPage />,
     children: [
       {
         index: true,
@@ -44,10 +47,14 @@ const router = createBrowserRouter([
         <Portal />
       </ProtectedRoute>
     ),
+    errorElement: <ErrorPage />,
   },
 
   // Inventory routes (protected)
-  inventoryRoutes,
+  {
+    ...inventoryRoutes,
+    errorElement: <ErrorPage />,
+  },
 
   // Helpdesk routes (protected) - placeholder for now
   {
@@ -57,6 +64,7 @@ const router = createBrowserRouter([
         <Navigate to="/portal" replace />
       </ProtectedRoute>
     ),
+    errorElement: <ErrorPage />,
   },
 
   // Catch all - redirect to login

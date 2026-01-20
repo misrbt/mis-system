@@ -49,6 +49,7 @@ const CURRENCY_PREFIX = '₱'
 const INITIAL_FILTERS = {
   branch_id: '',
   category_id: '',
+  subcategory_id: '',
   status_id: '',
   vendor_id: '',
   purchase_date_from: '',
@@ -94,6 +95,7 @@ const formatDateForInput = (dateString) => {
 const buildFormData = (asset = {}) => ({
   asset_name: asset.asset_name || '',
   asset_category_id: asset.asset_category_id || '',
+  subcategory_id: asset.subcategory_id || '',
   brand: asset.brand || '',
   model: asset.model || '',
   book_value: asset.book_value || '',
@@ -105,6 +107,7 @@ const buildFormData = (asset = {}) => ({
   vendor_id: asset.vendor_id || '',
   status_id: asset.status_id || '',
   remarks: asset.remarks || '',
+  specifications: asset.specifications || {},
   assigned_to_employee_id: asset.assigned_to_employee_id || '',
 })
 
@@ -187,6 +190,7 @@ function AssetsPage() {
 
   // Form state
   const [formData, setFormData] = useState(() => buildFormData())
+  const [components, setComponents] = useState([])
 
   // Fetch assets with React Query
   const { data: assetsData, isLoading, refetch } = useQuery({
@@ -223,6 +227,27 @@ function AssetsPage() {
       const response = await apiClient.get('/asset-categories')
       return normalizeArrayResponse(response.data)
     },
+  })
+
+  const { data: subcategories } = useQuery({
+    queryKey: ['asset-subcategories', formData.asset_category_id],
+    queryFn: async () => {
+      if (!formData.asset_category_id) return []
+      const response = await apiClient.get(`/asset-categories/${formData.asset_category_id}/subcategories`)
+      return normalizeArrayResponse(response.data)
+    },
+    enabled: !!formData.asset_category_id,
+  })
+
+  // Fetch subcategories for filter (based on filter category selection)
+  const { data: filterSubcategories } = useQuery({
+    queryKey: ['filter-subcategories', filters.category_id],
+    queryFn: async () => {
+      if (!filters.category_id) return []
+      const response = await apiClient.get(`/asset-categories/${filters.category_id}/subcategories`)
+      return normalizeArrayResponse(response.data)
+    },
+    enabled: !!filters.category_id,
   })
 
   const { data: statuses } = useQuery({
@@ -299,6 +324,7 @@ function AssetsPage() {
       queryClient.invalidateQueries(['assets'])
       notifySuccess('Success', 'Asset created successfully')
       setIsAddModalOpen(false)
+      setComponents([]) // Reset components after successful creation
     },
     onError: (error) => {
       notifyError('Failed to create asset', error)
@@ -378,8 +404,34 @@ function AssetsPage() {
   // Handlers
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }, [])
+    setFormData((prev) => {
+      const newData = { ...prev, [name]: value }
+
+      // Clear subcategory when category changes
+      if (name === 'asset_category_id') {
+        newData.subcategory_id = ''
+      }
+
+      // Auto-generate asset name when relevant fields change
+      if (['asset_category_id', 'subcategory_id', 'brand', 'model'].includes(name)) {
+        // Find category and subcategory names
+        const categoryName = categories?.find(cat => cat.id == newData.asset_category_id)?.name || ''
+        const subcategoryName = subcategories?.find(sub => sub.id == newData.subcategory_id)?.name || ''
+
+        // Build asset name from parts (filter out empty strings)
+        const parts = [categoryName, subcategoryName, newData.brand, newData.model]
+          .map(part => part?.trim())
+          .filter(part => part)
+
+        const generatedName = parts.join(' ')
+        if (generatedName) {
+          newData.asset_name = generatedName
+        }
+      }
+
+      return newData
+    })
+  }, [categories, subcategories])
 
   const handleVendorChange = useCallback((value) => {
     setFormData((prev) => ({ ...prev, vendor_id: value }))
@@ -416,9 +468,23 @@ function AssetsPage() {
     })
   }, [formData.asset_category_id, categories])
 
+  const generateComponentSerialNumber = useCallback((componentId) => {
+    // Generate unique serial number for component using COMP prefix
+    const serialNumber = buildSerialNumber('COMP')
+    setComponents(prev => prev.map(c =>
+      c.id === componentId ? { ...c, serial_number: serialNumber } : c
+    ))
+  }, [])
+
   const handleFilterChange = useCallback((e) => {
     const { name, value } = e.target
-    setFilters((prev) => ({ ...prev, [name]: value }))
+    setFilters((prev) => {
+      // Clear subcategory when category changes
+      if (name === 'category_id') {
+        return { ...prev, [name]: value, subcategory_id: '' }
+      }
+      return { ...prev, [name]: value }
+    })
   }, [])
 
   const clearFilters = useCallback(() => {
@@ -444,6 +510,7 @@ function AssetsPage() {
 
   const openAddModal = useCallback(() => {
     setFormData(buildFormData())
+    setComponents([]) // Reset components for new asset
     setIsAddModalOpen(true)
   }, [])
 
@@ -451,6 +518,31 @@ function AssetsPage() {
     setSelectedAsset(asset)
     setFormData(buildFormData(asset))
     setIsEditModalOpen(true)
+  }, [])
+
+  // Component handlers for Desktop PC
+  const handleComponentAdd = useCallback(() => {
+    setComponents(prev => [...prev, {
+      id: Date.now(),
+      component_type: 'system_unit',
+      component_name: '',
+      brand: '',
+      model: '',
+      serial_number: '',
+      status_id: '',
+      acq_cost: '',
+      remarks: '',
+    }])
+  }, [])
+
+  const handleComponentRemove = useCallback((id) => {
+    setComponents(prev => prev.filter(c => c.id !== id))
+  }, [])
+
+  const handleComponentChange = useCallback((id, field, value) => {
+    setComponents(prev => prev.map(c =>
+      c.id === id ? { ...c, [field]: value } : c
+    ))
   }, [])
 
   const openVendorModal = useCallback(() => {
@@ -471,11 +563,15 @@ function AssetsPage() {
     e.preventDefault()
     createVendorMutation.mutate(vendorFormData)
   }, [createVendorMutation, vendorFormData])
-
   const handleCreate = useCallback((e) => {
     e.preventDefault()
-    createMutation.mutate(formData)
-  }, [createMutation, formData])
+    // Include components in payload if Desktop PC category
+    const payload = {
+      ...formData,
+      components: components.filter(c => c.component_name.trim() !== '')
+    }
+    createMutation.mutate(payload)
+  }, [createMutation, formData, components])
 
   const handleUpdate = useCallback((e) => {
     e.preventDefault()
@@ -618,7 +714,6 @@ function AssetsPage() {
     enableRowSelection: true,
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const mobileTable = useReactTable({
     data: isMobileView ? assetsList : [],
     columns: mobileColumns,
@@ -839,14 +934,15 @@ function AssetsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">IT Asset Inventory</h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1 sm:mt-1.5">
             Track and manage all company assets with ease
           </p>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
           {/* View mode and refresh buttons row */}
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1 flex-1 sm:flex-initial sm:ml-auto">
@@ -978,6 +1074,29 @@ function AssetsPage() {
                 {categories?.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Subcategory</label>
+              <select
+                name="subcategory_id"
+                value={filters.subcategory_id}
+                onChange={handleFilterChange}
+                disabled={!filters.category_id}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {!filters.category_id
+                    ? 'Select a category first'
+                    : (filterSubcategories?.length === 0)
+                      ? 'No subcategories'
+                      : 'All Subcategories'}
+                </option>
+                {filterSubcategories?.map((subcategory) => (
+                  <option key={subcategory.id} value={subcategory.id}>
+                    {subcategory.name}
                   </option>
                 ))}
               </select>
@@ -1762,14 +1881,20 @@ function AssetsPage() {
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
         onGenerateSerial={generateSerialNumber}
+        onGenerateComponentSerial={generateComponentSerialNumber}
         onAddVendor={openVendorModal}
         categories={categories}
+        subcategories={subcategories || []}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
         statusOptions={statusOptions}
         assignmentTitle="Assignment & Remarks"
         assignmentSubtitle="Employee assignment and additional notes"
         usePlaceholders
+        components={components}
+        onComponentAdd={handleComponentAdd}
+        onComponentRemove={handleComponentRemove}
+        onComponentChange={handleComponentChange}
       />
 
       {/* Edit Modal - Similar to Add Modal */}
@@ -1786,6 +1911,7 @@ function AssetsPage() {
         onEmployeeChange={handleEmployeeChange}
         onAddVendor={openVendorModal}
         categories={categories}
+        subcategories={subcategories || []}
         vendorOptions={vendorOptions}
         employeeOptions={employeeOptions}
         statusOptions={statusOptions}

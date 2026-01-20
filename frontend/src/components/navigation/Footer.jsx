@@ -32,17 +32,17 @@ function Footer({ variant = 'light', className = '', maxWidth = 'max-w-7xl', hor
   const s = styles[variant] || styles.light
 
   return (
-    <footer className={`fixed bottom-0 left-0 right-0 z-40 py-4 shadow-sm ${s.wrapper} ${className}`}>
+    <footer className={`fixed bottom-0 left-0 right-0 z-40 py-2 shadow-sm ${s.wrapper} ${className}`}>
       <div className={`${maxWidth} mx-auto ${horizontalPadding}`}>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           {/* Left side - Branding and copyright */}
           <div className="flex items-center gap-3 justify-center md:justify-start">
-            <div className="w-10 h-10 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="w-7 h-7 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <img src={Logo} alt="MIS System logo" className="h-full w-full object-cover" />
             </div>
             <div className="space-y-0.5">
-              <p className={`text-sm font-semibold ${s.title}`}>MIS System</p>
-              <p className={`text-xs ${s.copyright}`}>
+              <p className={`text-[10px] font-semibold ${s.title}`}>MIS System</p>
+              <p className={`text-[10px] ${s.copyright}`}>
                 &copy; {currentYear} RBT bank Inc. All Rights Reserved.
               </p>
             </div>
@@ -50,12 +50,12 @@ function Footer({ variant = 'light', className = '', maxWidth = 'max-w-7xl', hor
 
           {/* Right side - Powered by and developer credit */}
           <div className="text-center md:text-right space-y-0.5">
-            <p className={`text-xs ${s.powered}`}>
+            <p className={`text-[10px] ${s.powered}`}>
               Powered by <span className={`font-medium ${s.highlight}`}>MIS Department</span>
             </p>
-            <p className={`text-xs ${s.developer}`}>
+            <p className={`text-[10px] ${s.developer}`}>
               Designed & Developed by{' '}
-              <span className={`text-sm font-medium ${s.developerName}`}>Augustin Maputol</span>
+              <span className={`text-[10px] font-medium ${s.developerName}`}>Augustin Maputol</span>
             </p>
           </div>
         </div>

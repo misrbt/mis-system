@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use App\Models\Asset;
 use App\Models\AssetCategory;
+use App\Models\AssetComponent;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\Repair;
@@ -13,6 +14,7 @@ use App\Models\Section;
 use App\Models\Status;
 use App\Models\Vendor;
 use App\Observers\AssetCategoryObserver;
+use App\Observers\AssetComponentObserver;
 use App\Observers\AssetObserver;
 use App\Observers\BranchObserver;
 use App\Observers\DashboardCacheObserver;
@@ -40,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Register observers for automatic audit logging and movement tracking
         Asset::observe(AssetObserver::class);
+        AssetComponent::observe(AssetComponentObserver::class);
         Repair::observe(RepairObserver::class);
         RepairRemark::observe(RepairRemarkObserver::class);
 
