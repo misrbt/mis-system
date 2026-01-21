@@ -34,10 +34,16 @@ const AssetFormModal = ({
   onComponentChange,
   onAddVendor,
   equipmentOptions = [],
-  onEquipmentChange,
 }) => {
   // Ensure categories is always an array
   const safeCategories = Array.isArray(categories) ? categories : []
+  const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const brandOptions = Array.from(
+    new Set(safeEquipmentOptions.map((eq) => eq.brand).filter(Boolean))
+  ).map((brand) => ({ id: brand, name: brand }))
+  const modelOptions = Array.from(
+    new Set(safeEquipmentOptions.map((eq) => eq.model).filter(Boolean))
+  ).map((model) => ({ id: model, name: model }))
 
   const placeholders = usePlaceholders
     ? {
@@ -167,22 +173,6 @@ const AssetFormModal = ({
                 </select>
               </div>
             )}
-
-            {/* Equipment Dropdown */}
-            <div>
-               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                 Equipment <span className="text-slate-500 text-xs font-normal">(Standard Model)</span>
-               </label>
-               <SearchableSelect
-                 label=""
-                 options={equipmentOptions}
-                 value={formData.equipment_id}
-                 onChange={onEquipmentChange}
-                 displayField="name"
-                 placeholder="Select equipment..."
-                 emptyMessage="No equipment found"
-               />
-             </div>
 
             {/* Desktop PC Components Section - Appears immediately after category selection */}
             {isDesktopPCCategory() && (
@@ -327,11 +317,15 @@ const AssetFormModal = ({
                                 className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               >
                                 <option value="">Select status</option>
-                                {statusOptions.map((status) => (
-                                  <option key={status.value} value={status.value}>
-                                    {status.label}
-                                  </option>
-                                ))}
+                                {statusOptions.map((status) => {
+                                  const value = status.id ?? status.value
+                                  const label = status.name ?? status.label
+                                  return (
+                                    <option key={value} value={value}>
+                                      {label}
+                                    </option>
+                                  )
+                                })}
                               </select>
                             </div>
 
@@ -357,13 +351,14 @@ const AssetFormModal = ({
             {!isDesktopPCCategory() && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Brand</label>
-                <input
-                  type="text"
-                  name="brand"
+                <SearchableSelect
+                  label=""
+                  options={brandOptions}
                   value={formData.brand}
-                  onChange={onInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder={placeholders.brand}
+                  onChange={(value) => onInputChange({ target: { name: 'brand', value } })}
+                  displayField="name"
+                  placeholder="Select brand..."
+                  emptyMessage="No brands found"
                 />
               </div>
             )}
@@ -371,13 +366,14 @@ const AssetFormModal = ({
             {!isDesktopPCCategory() && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Model</label>
-                <input
-                  type="text"
-                  name="model"
+                <SearchableSelect
+                  label=""
+                  options={modelOptions}
                   value={formData.model}
-                  onChange={onInputChange}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder={placeholders.model}
+                  onChange={(value) => onInputChange({ target: { name: 'model', value } })}
+                  displayField="name"
+                  placeholder="Select model..."
+                  emptyMessage="No models found"
                 />
               </div>
             )}

@@ -53,6 +53,15 @@ const AssetTableRow = ({
         </div>
       </td>
 
+      {/* Equipment */}
+      <td className="px-4 py-3">
+        <div className="text-sm text-slate-700">
+          {asset.equipment
+            ? `${asset.equipment.brand || ''} ${asset.equipment.model || ''}`.trim() || 'ƒ?"'
+            : 'ƒ?"'}
+        </div>
+      </td>
+
       {/* Serial # */}
       <td className="px-4 py-3">
         <div className="text-sm font-mono text-slate-700">{asset.serial_number || '—'}</div>

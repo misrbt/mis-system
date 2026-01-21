@@ -151,6 +151,7 @@ export default function useAssetViewController({ id, employeeId }) {
     categories,
     statuses,
     vendors,
+    equipment,
     statusColorMap,
     isLoading: isLoadingDropdowns,
   } = useAssetDropdownData();
@@ -180,6 +181,17 @@ export default function useAssetViewController({ id, employeeId }) {
   });
 
   const editSubcategories = editSubcategoriesData || [];
+
+  const equipmentOptions = useMemo(
+    () =>
+      (Array.isArray(equipment) ? equipment : []).map((eq) => ({
+        id: eq.id,
+        name: `${eq.brand} ${eq.model}`.trim(),
+        brand: eq.brand,
+        model: eq.model,
+      })),
+    [equipment]
+  );
 
   // Fetch employees for bulk transfer
   const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
@@ -508,6 +520,7 @@ export default function useAssetViewController({ id, employeeId }) {
         asset_name: empAsset.asset_name || "",
         asset_category_id: empAsset.asset_category_id || "",
         subcategory_id: empAsset.subcategory_id || "",
+        equipment_id: empAsset.equipment_id || "",
         brand: empAsset.brand || "",
         model: empAsset.model || "",
         serial_number: empAsset.serial_number || "",
@@ -530,6 +543,7 @@ export default function useAssetViewController({ id, employeeId }) {
         asset_name: empAsset.asset_name || "",
         asset_category_id: empAsset.asset_category_id || "",
         subcategory_id: empAsset.subcategory_id || "",
+        equipment_id: empAsset.equipment_id || "",
         brand: empAsset.brand || "",
         model: empAsset.model || "",
         serial_number: empAsset.serial_number || "",
@@ -641,6 +655,20 @@ export default function useAssetViewController({ id, employeeId }) {
   };
 
   const handleComponentAdd = () => {
+    const defaultStatus =
+      statuses.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('functional')
+      )?.id ??
+      statuses.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('working')
+      )?.id ??
+      statuses.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('functional')
+      )?.value ??
+      statuses.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('working')
+      )?.value ??
+      "";
     setComponents((prev) => [
       ...prev,
       {
@@ -650,7 +678,7 @@ export default function useAssetViewController({ id, employeeId }) {
         brand: "",
         model: "",
         serial_number: "",
-        status_id: "",
+        status_id: defaultStatus,
         acq_cost: "",
         remarks: "",
       },
@@ -957,6 +985,7 @@ export default function useAssetViewController({ id, employeeId }) {
     editSubcategories,
     statuses,
     vendors,
+    equipmentOptions,
     statusColorMap,
     employees,
     filteredEmployees,

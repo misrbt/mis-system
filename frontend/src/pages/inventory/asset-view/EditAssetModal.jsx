@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import { Edit, X, RefreshCw, Save } from 'lucide-react'
+import SearchableSelect from '../../../components/SearchableSelect'
 import SpecificationFields from '../../../components/specifications/SpecificationFields'
 
 function EditAssetModal({
@@ -9,6 +10,7 @@ function EditAssetModal({
   subcategories = [],
   statuses,
   vendors,
+  equipmentOptions = [],
   formData,
   onClose,
   onChange,
@@ -16,6 +18,13 @@ function EditAssetModal({
   isPending,
 }) {
   if (!isOpen || !data) return null
+  const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const brandOptions = Array.from(
+    new Set(safeEquipmentOptions.map((eq) => eq.brand).filter(Boolean))
+  ).map((brand) => ({ id: brand, name: brand }))
+  const modelOptions = Array.from(
+    new Set(safeEquipmentOptions.map((eq) => eq.model).filter(Boolean))
+  ).map((model) => ({ id: model, name: model }))
 
   return createPortal(
     <div
@@ -111,23 +120,27 @@ function EditAssetModal({
 
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Brand</label>
-              <input
-                type="text"
+              <SearchableSelect
+                label=""
+                options={brandOptions}
                 value={formData.brand}
-                onChange={(e) => onChange('brand', e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter brand"
+                onChange={(value) => onChange('brand', value)}
+                displayField="name"
+                placeholder="Select brand..."
+                emptyMessage="No brands found"
               />
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Model</label>
-              <input
-                type="text"
+              <SearchableSelect
+                label=""
+                options={modelOptions}
                 value={formData.model}
-                onChange={(e) => onChange('model', e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter model"
+                onChange={(value) => onChange('model', value)}
+                displayField="name"
+                placeholder="Select model..."
+                emptyMessage="No models found"
               />
             </div>
 

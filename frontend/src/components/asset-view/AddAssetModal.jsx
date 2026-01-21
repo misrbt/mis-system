@@ -5,6 +5,7 @@
 
 import React, { useEffect } from 'react'
 import { X, RefreshCw, Plus, Package, Sparkles } from 'lucide-react'
+import SearchableSelect from '../SearchableSelect'
 import SpecificationFields from '../specifications/SpecificationFields'
 import { generateAssetName, shouldAutoGenerateName } from '../../utils/assetNameGenerator'
 
@@ -15,6 +16,7 @@ const AddAssetModal = ({
   onInputChange,
   categories,
   subcategories = [],
+  equipmentOptions = [],
   vendors,
   statuses = [],
   onGenerateSerial,
@@ -27,6 +29,14 @@ const AddAssetModal = ({
   onComponentChange,
   onAddVendor,
 }) => {
+  const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const brandOptions = Array.from(
+    new Set(safeEquipmentOptions.map((eq) => eq.brand).filter(Boolean))
+  ).map((brand) => ({ id: brand, name: brand }))
+  const modelOptions = Array.from(
+    new Set(safeEquipmentOptions.map((eq) => eq.model).filter(Boolean))
+  ).map((model) => ({ id: model, name: model }))
+
   // Helper to check if selected category is Desktop PC
   const isDesktopPCCategory = () => {
     const category = categories?.find(c => c.id === parseInt(formData.asset_category_id))
@@ -310,22 +320,26 @@ const AddAssetModal = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Brand</label>
-                <input
-                  type="text"
+                <SearchableSelect
+                  label=""
+                  options={brandOptions}
                   value={formData.brand}
-                  onChange={(e) => onInputChange('brand', e.target.value)}
-                  className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter brand"
+                  onChange={(value) => onInputChange('brand', value)}
+                  displayField="name"
+                  placeholder="Select brand..."
+                  emptyMessage="No brands found"
                 />
               </div>
               <div>
                 <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Model</label>
-                <input
-                  type="text"
+                <SearchableSelect
+                  label=""
+                  options={modelOptions}
                   value={formData.model}
-                  onChange={(e) => onInputChange('model', e.target.value)}
-                  className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter model"
+                  onChange={(value) => onInputChange('model', value)}
+                  displayField="name"
+                  placeholder="Select model..."
+                  emptyMessage="No models found"
                 />
               </div>
             </div>

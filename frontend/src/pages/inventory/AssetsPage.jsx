@@ -109,7 +109,6 @@ const buildFormData = (asset = {}) => ({
   remarks: asset.remarks || '',
   specifications: asset.specifications || {},
   assigned_to_employee_id: asset.assigned_to_employee_id || '',
-  equipment_id: asset.equipment_id || '',
 })
 
 const notifySuccess = (title, text) => {
@@ -464,10 +463,6 @@ function AssetsPage() {
     setFormData((prev) => ({ ...prev, assigned_to_employee_id: value }))
   }, [])
 
-  const handleEquipmentChange = useCallback((value) => {
-    setFormData((prev) => ({ ...prev, equipment_id: value }))
-  }, [])
-
   const generateSerialNumber = useCallback(() => {
     // Get selected category
     const selectedCategory = categories?.find(cat => cat.id == formData.asset_category_id)
@@ -549,6 +544,20 @@ function AssetsPage() {
 
   // Component handlers for Desktop PC
   const handleComponentAdd = useCallback(() => {
+    const defaultStatus =
+      statusOptions.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('functional')
+      )?.id ??
+      statusOptions.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('working')
+      )?.id ??
+      statusOptions.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('functional')
+      )?.value ??
+      statusOptions.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('working')
+      )?.value ??
+      ''
     setComponents(prev => [...prev, {
       id: Date.now(),
       component_type: 'system_unit',
@@ -556,11 +565,11 @@ function AssetsPage() {
       brand: '',
       model: '',
       serial_number: '',
-      status_id: '',
+      status_id: defaultStatus,
       acq_cost: '',
       remarks: '',
     }])
-  }, [])
+  }, [statusOptions])
 
   const handleComponentRemove = useCallback((id) => {
     setComponents(prev => prev.filter(c => c.id !== id))
@@ -1924,7 +1933,6 @@ function AssetsPage() {
 
         onComponentChange={handleComponentChange}
         equipmentOptions={equipmentOptions}
-        onEquipmentChange={handleEquipmentChange}
       />
 
       {/* Edit Modal - Similar to Add Modal */}
@@ -1951,7 +1959,6 @@ function AssetsPage() {
 
         assignmentSubtitle="Employee assignment and asset status"
         equipmentOptions={equipmentOptions}
-        onEquipmentChange={handleEquipmentChange}
       />
 
       {/* Add Vendor Modal */}

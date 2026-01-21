@@ -74,6 +74,10 @@ function IndividualAssetView({
   const currentEmployee = asset?.assigned_employee
   const currentStatus = asset?.status
   const currentAssignmentDays = statistics?.current_assignment_days || 0
+  const equipmentName = asset?.equipment
+    ? `${asset.equipment.brand || ''} ${asset.equipment.model || ''}`.trim()
+    : ''
+  const assetTitle = equipmentName || `${asset.brand || ''} ${asset.model || ''}`.trim() || asset.asset_name
 
   return (
     <div className="min-h-screen bg-gray-50 pb-8">
@@ -91,7 +95,7 @@ function IndividualAssetView({
               </button>
               <div className="min-w-0">
                 <h1 className="text-lg sm:text-2xl font-bold text-gray-900 leading-snug break-words">
-                  {asset.brand} {asset.model}
+                  {assetTitle}
                 </h1>
                 <p className="text-xs sm:text-sm text-gray-600 break-words">
                   Serial: {asset.serial_number}

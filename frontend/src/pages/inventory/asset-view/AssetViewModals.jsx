@@ -17,6 +17,7 @@ function AssetViewModals({ controller, isEmployeeView }) {
     editSubcategories,
     vendors,
     statuses,
+    equipmentOptions,
     components,
     showDeleteModal,
     deleteTarget,
@@ -87,6 +88,7 @@ function AssetViewModals({ controller, isEmployeeView }) {
             onInputChange={handleAddInputChange}
             categories={categories}
             subcategories={addSubcategories}
+            equipmentOptions={equipmentOptions}
             vendors={vendors}
             statuses={statuses}
             onGenerateSerial={generateSerialNumber}
@@ -145,6 +147,7 @@ function AssetViewModals({ controller, isEmployeeView }) {
             subcategories={editSubcategories}
             statuses={statuses}
             vendors={vendors}
+            equipmentOptions={equipmentOptions}
             formData={editFormData}
             onClose={handleCancelEdit}
             onChange={(field, value) => handleInputChange(field, value)}

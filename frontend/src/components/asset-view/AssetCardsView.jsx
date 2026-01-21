@@ -278,6 +278,11 @@ const AssetCard = ({
                       {asset.category.name}
                     </span>
                   )}
+                  {asset.subcategory && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-50 border border-slate-200 text-slate-600">
+                      {asset.subcategory.name}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -380,6 +385,15 @@ const AssetCard = ({
                       <div className="text-xs font-bold text-blue-600 uppercase tracking-wide">Serial Number</div>
                     </div>
                     <div className="text-sm font-mono font-semibold text-slate-900">{asset.serial_number}</div>
+                  </div>
+                )}
+
+                {asset.equipment && (
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Equipment</div>
+                    <div className="text-sm font-semibold text-slate-900 truncate">
+                      {`${asset.equipment.brand || ''} ${asset.equipment.model || ''}`.trim() || 'ƒ?"'}
+                    </div>
                   </div>
                 )}
 
