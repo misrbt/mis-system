@@ -193,6 +193,13 @@ export default function useAssetViewController({ id, employeeId }) {
     [equipment]
   );
 
+  const resolveEquipmentId = (brand, model) => {
+    const match = equipmentOptions.find(
+      (eq) => eq.brand === brand && eq.model === model
+    );
+    return match?.id || null;
+  };
+
   // Fetch employees for bulk transfer
   const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
     queryKey: ["employees"],
@@ -521,8 +528,8 @@ export default function useAssetViewController({ id, employeeId }) {
         asset_category_id: empAsset.asset_category_id || "",
         subcategory_id: empAsset.subcategory_id || "",
         equipment_id: empAsset.equipment_id || "",
-        brand: empAsset.brand || "",
-        model: empAsset.model || "",
+        brand: empAsset.brand || empAsset.equipment?.brand || "",
+        model: empAsset.model || empAsset.equipment?.model || "",
         serial_number: empAsset.serial_number || "",
         purchase_date: formatDateForInput(empAsset.purchase_date),
         acq_cost: empAsset.acq_cost || "",
@@ -544,8 +551,8 @@ export default function useAssetViewController({ id, employeeId }) {
         asset_category_id: empAsset.asset_category_id || "",
         subcategory_id: empAsset.subcategory_id || "",
         equipment_id: empAsset.equipment_id || "",
-        brand: empAsset.brand || "",
-        model: empAsset.model || "",
+        brand: empAsset.brand || empAsset.equipment?.brand || "",
+        model: empAsset.model || empAsset.equipment?.model || "",
         serial_number: empAsset.serial_number || "",
         purchase_date: formatDateForInput(empAsset.purchase_date),
         acq_cost: empAsset.acq_cost || "",
@@ -563,15 +570,37 @@ export default function useAssetViewController({ id, employeeId }) {
   };
 
   const handleSaveEdit = () => {
+    const normalizedEditData = {
+      ...editFormData,
+      asset_category_id: editFormData.asset_category_id
+        ? Number(editFormData.asset_category_id)
+        : null,
+      subcategory_id: editFormData.subcategory_id
+        ? Number(editFormData.subcategory_id)
+        : null,
+      vendor_id: editFormData.vendor_id ? Number(editFormData.vendor_id) : null,
+      status_id: editFormData.status_id ? Number(editFormData.status_id) : null,
+      assigned_to_employee_id: editFormData.assigned_to_employee_id
+        ? Number(editFormData.assigned_to_employee_id)
+        : null,
+    };
     if (editModalData) {
+      const equipmentId = resolveEquipmentId(editFormData.brand, editFormData.model);
       updateAssetMutation.mutate({
         assetId: editModalData.id,
-        data: editFormData,
+        data: {
+          ...normalizedEditData,
+          equipment_id: equipmentId,
+        },
       });
     } else if (editingAssetId) {
+      const equipmentId = resolveEquipmentId(editFormData.brand, editFormData.model);
       updateAssetMutation.mutate({
         assetId: editingAssetId,
-        data: editFormData,
+        data: {
+          ...normalizedEditData,
+          equipment_id: equipmentId,
+        },
       });
     }
   };
@@ -751,6 +780,7 @@ export default function useAssetViewController({ id, employeeId }) {
       subcategory_id: addFormData.subcategory_id
         ? Number(addFormData.subcategory_id)
         : null,
+      equipment_id: resolveEquipmentId(addFormData.brand, addFormData.model),
       vendor_id: addFormData.vendor_id ? Number(addFormData.vendor_id) : null,
       acq_cost: addFormData.acq_cost ? Number(addFormData.acq_cost) : null,
       estimate_life: addFormData.estimate_life

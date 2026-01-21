@@ -27,6 +27,7 @@ function EmployeeAssetsView({
   categories,
   statuses,
   vendors,
+  equipmentOptions,
   statusColorMap,
   onEditClick,
   onSaveEdit,
@@ -162,6 +163,7 @@ function EmployeeAssetsView({
                       categories={categories}
                       statuses={statuses}
                       vendors={vendors}
+                      equipmentOptions={equipmentOptions}
                       statusColorMap={statusColorMap}
                       statusPickerFor={statusPickerFor}
                       showCodesFor={showCodesFor}

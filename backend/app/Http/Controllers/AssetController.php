@@ -194,6 +194,10 @@ class AssetController extends Controller
      */
     public function store(Request $request)
     {
+        $request->merge([
+            'subcategory_id' => $request->input('subcategory_id') ?: null,
+            'equipment_id' => $request->input('equipment_id') ?: null,
+        ]);
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
@@ -253,7 +257,23 @@ class AssetController extends Controller
         }
 
         try {
-            $data = $request->except(['status_id', 'book_value']); // Remove status and book_value from request
+            $data = $request->only([
+                'asset_name',
+                'asset_category_id',
+                'subcategory_id',
+                'equipment_id',
+                'serial_number',
+                'purchase_date',
+                'acq_cost',
+                'waranty_expiration_date',
+                'estimate_life',
+                'vendor_id',
+                'remarks',
+                'specifications',
+                'assigned_to_employee_id',
+                'warranty_duration_value',
+                'warranty_duration_unit',
+            ]);
 
             // Compute warranty expiration if duration is provided; otherwise respect provided date or leave null
             $data['waranty_expiration_date'] = $this->calculateWarrantyExpiration(
@@ -414,6 +434,10 @@ class AssetController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $request->merge([
+            'subcategory_id' => $request->input('subcategory_id') ?: null,
+            'equipment_id' => $request->input('equipment_id') ?: null,
+        ]);
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
@@ -460,7 +484,24 @@ class AssetController extends Controller
                 || $request->has('estimate_life');
 
             // Update asset (excluding book_value from request)
-            $data = $request->except(['book_value']);
+            $data = $request->only([
+                'asset_name',
+                'asset_category_id',
+                'subcategory_id',
+                'equipment_id',
+                'serial_number',
+                'purchase_date',
+                'acq_cost',
+                'waranty_expiration_date',
+                'estimate_life',
+                'vendor_id',
+                'status_id',
+                'remarks',
+                'specifications',
+                'assigned_to_employee_id',
+                'warranty_duration_value',
+                'warranty_duration_unit',
+            ]);
 
             // Auto-adjust status based on purchase date if:
             // 1. Purchase date is being changed

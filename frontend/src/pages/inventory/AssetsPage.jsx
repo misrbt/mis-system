@@ -96,8 +96,8 @@ const buildFormData = (asset = {}) => ({
   asset_name: asset.asset_name || '',
   asset_category_id: asset.asset_category_id || '',
   subcategory_id: asset.subcategory_id || '',
-  brand: asset.brand || '',
-  model: asset.model || '',
+  brand: asset.brand || asset.equipment?.brand || '',
+  model: asset.model || asset.equipment?.model || '',
   book_value: asset.book_value || '',
   serial_number: asset.serial_number || '',
   purchase_date: formatDateForInput(asset.purchase_date),
@@ -335,6 +335,16 @@ function AssetsPage() {
         model: eq.model,
       })),
     [equipmentList]
+  )
+
+  const resolveEquipmentId = useCallback(
+    (brand, model) => {
+      const match = equipmentOptions.find(
+        (eq) => eq.brand === brand && eq.model === model
+      )
+      return match?.id || null
+    },
+    [equipmentOptions]
   )
 
 
@@ -601,18 +611,37 @@ function AssetsPage() {
   }, [createVendorMutation, vendorFormData])
   const handleCreate = useCallback((e) => {
     e.preventDefault()
+    const equipmentId = resolveEquipmentId(formData.brand, formData.model)
     // Include components in payload if Desktop PC category
     const payload = {
       ...formData,
+      asset_category_id: formData.asset_category_id ? Number(formData.asset_category_id) : null,
+      subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
+      vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
+      status_id: formData.status_id ? Number(formData.status_id) : null,
+      assigned_to_employee_id: formData.assigned_to_employee_id ? Number(formData.assigned_to_employee_id) : null,
+      equipment_id: equipmentId,
       components: components.filter(c => c.component_name.trim() !== '')
     }
     createMutation.mutate(payload)
-  }, [createMutation, formData, components])
+  }, [createMutation, formData, components, resolveEquipmentId])
 
   const handleUpdate = useCallback((e) => {
     e.preventDefault()
-    updateMutation.mutate({ id: selectedAsset.id, data: formData })
-  }, [formData, selectedAsset, updateMutation])
+    const equipmentId = resolveEquipmentId(formData.brand, formData.model)
+    updateMutation.mutate({
+      id: selectedAsset.id,
+      data: {
+        ...formData,
+        asset_category_id: formData.asset_category_id ? Number(formData.asset_category_id) : null,
+        subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
+        vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
+        status_id: formData.status_id ? Number(formData.status_id) : null,
+        assigned_to_employee_id: formData.assigned_to_employee_id ? Number(formData.assigned_to_employee_id) : null,
+        equipment_id: equipmentId,
+      },
+    })
+  }, [formData, selectedAsset, updateMutation, resolveEquipmentId])
 
   const handleDelete = useCallback(
     async (asset) => {

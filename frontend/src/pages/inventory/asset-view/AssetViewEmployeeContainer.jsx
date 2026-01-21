@@ -66,6 +66,7 @@ function AssetViewEmployeeContainer({ controller }) {
       selectedAssets={selectedAssets}
       editingAssetId={editingAssetId}
       editFormData={editFormData}
+      equipmentOptions={controller.equipmentOptions}
       onSelectAll={handleSelectAll}
       onSelectAsset={handleSelectAsset}
       onBulkTransfer={handleBulkTransfer}

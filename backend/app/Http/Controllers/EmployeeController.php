@@ -7,6 +7,7 @@ use App\Models\AssetMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class EmployeeController extends Controller
 {
@@ -39,10 +40,22 @@ class EmployeeController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'fullname' => 'required|string|max:255',
+            'fullname' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('employee', 'fullname')->where(function ($query) use ($request) {
+                    return $query
+                        ->where('branch_id', $request->branch_id)
+                        ->where('department_id', $request->department_id)
+                        ->where('position_id', $request->position_id);
+                }),
+            ],
             'branch_id' => 'required|exists:branch,id',
             'department_id' => 'nullable|exists:section,id',
             'position_id' => 'required|exists:position,id',
+        ], [
+            'fullname.unique' => 'An employee with the same name, branch, department, and position already exists.',
         ]);
 
         if ($validator->fails()) {
@@ -99,10 +112,22 @@ class EmployeeController extends Controller
     public function update(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'fullname' => 'required|string|max:255',
+            'fullname' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('employee', 'fullname')->where(function ($query) use ($request) {
+                    return $query
+                        ->where('branch_id', $request->branch_id)
+                        ->where('department_id', $request->department_id)
+                        ->where('position_id', $request->position_id);
+                })->ignore($id),
+            ],
             'branch_id' => 'required|exists:branch,id',
             'department_id' => 'nullable|exists:section,id',
             'position_id' => 'required|exists:position,id',
+        ], [
+            'fullname.unique' => 'An employee with the same name, branch, department, and position already exists.',
         ]);
 
         if ($validator->fails()) {

@@ -22,6 +22,7 @@ import {
   Barcode,
   Eye,
 } from 'lucide-react'
+import SearchableSelect from '../SearchableSelect'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
 import apiClient from '../../services/apiClient'
 
@@ -43,6 +44,7 @@ const AssetCard = ({
   categories,
   statuses,
   vendors,
+  equipmentOptions,
   statusColorMap,
   showStatusPicker,
 
@@ -61,6 +63,19 @@ const AssetCard = ({
 }) => {
   // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+  const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const brandOptions = Array.from(
+    new Set(
+      [editFormData.brand, ...safeEquipmentOptions.map((eq) => eq.brand)]
+        .filter(Boolean)
+    )
+  ).map((brand) => ({ id: brand, name: brand }))
+  const modelOptions = Array.from(
+    new Set(
+      [editFormData.model, ...safeEquipmentOptions.map((eq) => eq.model)]
+        .filter(Boolean)
+    )
+  ).map((model) => ({ id: model, name: model }))
 
   // Check if asset is Desktop PC
   const isDesktopPC = asset.category?.name?.toLowerCase().includes('desktop') ||
@@ -100,6 +115,13 @@ const AssetCard = ({
   const bookValueNumber = Number.parseFloat(asset?.book_value)
   const isBookValueOne =
     Number.isFinite(bookValueNumber) && Math.round(bookValueNumber * 100) / 100 === 1
+  const isPrinter = asset.category?.name?.toLowerCase().includes('printer')
+  const equipmentName = asset.equipment
+    ? `${asset.equipment.brand || ''} ${asset.equipment.model || ''}`.trim()
+    : ''
+  const cardTitle = isPrinter && equipmentName ? equipmentName : asset.asset_name
+  const displayBrand = asset.brand || asset.equipment?.brand || ''
+  const displayModel = asset.model || asset.equipment?.model || ''
 
   return (
     <div
@@ -125,16 +147,6 @@ const AssetCard = ({
           />
         </div>
       )}
-      {/* View Movement Overlay - Only shown on hover in view mode */}
-      {!isEditing && (
-        <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 pointer-events-none z-10 flex items-center justify-center">
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 pointer-events-none">
-            <Eye className="w-5 h-5" />
-            <span className="font-semibold text-sm">View Asset Movement</span>
-          </div>
-        </div>
-      )}
-
       {isEditing ? (
         /* EDIT MODE */
         <div className="p-6 sm:p-8 space-y-4 flex-1 flex flex-col">
@@ -183,19 +195,23 @@ const AssetCard = ({
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
-            <input
-              type="text"
+            <SearchableSelect
+              label=""
+              options={brandOptions}
               value={editFormData.brand}
-              onChange={(e) => onChange('brand', e.target.value)}
-              placeholder="Brand"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(value) => onChange('brand', value)}
+              displayField="name"
+              placeholder="Select brand..."
+              emptyMessage="No brands found"
             />
-            <input
-              type="text"
+            <SearchableSelect
+              label=""
+              options={modelOptions}
               value={editFormData.model}
-              onChange={(e) => onChange('model', e.target.value)}
-              placeholder="Model"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(value) => onChange('model', value)}
+              displayField="name"
+              placeholder="Select model..."
+              emptyMessage="No models found"
             />
             <input
               type="text"
@@ -268,9 +284,14 @@ const AssetCard = ({
           <div className="bg-gradient-to-br from-slate-50 to-blue-50 p-4 border-b border-slate-200">
             <div className="flex items-start justify-between mb-2">
               <div className={`flex-1 min-w-0 pr-2 ${onSelect ? 'pl-8' : ''}`}>
-                <h3 className="text-lg font-bold text-slate-900 mb-2 truncate" title={asset.asset_name}>
-                  {asset.asset_name}
+                <h3 className="text-lg font-bold text-slate-900 mb-2 truncate" title={cardTitle}>
+                  {cardTitle}
                 </h3>
+                {(displayBrand || displayModel) && (
+                  <div className="text-xs font-medium text-slate-600 mb-2 truncate">
+                    {[displayBrand, displayModel].filter(Boolean).join(' ')}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 flex-wrap">
                   {asset.category && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white border border-slate-200 text-slate-700">
@@ -388,28 +409,19 @@ const AssetCard = ({
                   </div>
                 )}
 
-                {asset.equipment && (
-                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Equipment</div>
-                    <div className="text-sm font-semibold text-slate-900 truncate">
-                      {`${asset.equipment.brand || ''} ${asset.equipment.model || ''}`.trim() || 'ƒ?"'}
-                    </div>
-                  </div>
-                )}
-
                 {/* Brand & Model */}
-                {(asset.brand || asset.model) && (
+                {(displayBrand || displayModel) && (
                   <div className="grid grid-cols-2 gap-3">
-                    {asset.brand && (
+                    {displayBrand && (
                       <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Brand</div>
-                         <div className="text-sm font-semibold text-slate-900 truncate">{asset.brand}</div>
+                         <div className="text-sm font-semibold text-slate-900 truncate">{displayBrand}</div>
                       </div>
                     )}
-                    {asset.model && (
+                    {displayModel && (
                       <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Model</div>
-                         <div className="text-sm font-semibold text-slate-900 truncate">{asset.model}</div>
+                         <div className="text-sm font-semibold text-slate-900 truncate">{displayModel}</div>
                       </div>
                     )}
                   </div>
@@ -623,9 +635,19 @@ const AssetCard = ({
             )}
           </div>
 
-          {/* Footer Actions - Edit & Delete Buttons */}
+          {/* Footer Actions - View, Edit & Delete Buttons */}
           <div className="mt-auto bg-slate-50 border-t border-slate-200">
             <div className="p-3 flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCardClick?.()
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-all shadow-sm"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>View</span>
+              </button>
               <button
                 onClick={onEdit}
                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all shadow-sm"
@@ -656,6 +678,7 @@ const AssetCardsView = ({
   categories,
   statuses,
   vendors,
+  equipmentOptions,
   statusColorMap,
   statusPickerFor,
   showCodesFor,
@@ -686,6 +709,7 @@ const AssetCardsView = ({
           categories={categories}
           statuses={statuses}
           vendors={vendors}
+          equipmentOptions={equipmentOptions}
           statusColorMap={statusColorMap}
           showStatusPicker={statusPickerFor === asset.id}
           showCodes={showCodesFor[asset.id]}
