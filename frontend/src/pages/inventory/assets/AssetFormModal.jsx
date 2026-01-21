@@ -1,7 +1,9 @@
+import React, { useEffect } from 'react'
 import Modal from '../../../components/Modal'
 import SearchableSelect from '../../../components/SearchableSelect'
 import SpecificationFields from '../../../components/specifications/SpecificationFields'
-import { RefreshCw, Plus, X, Package } from 'lucide-react'
+import { RefreshCw, Plus, X, Package, Sparkles } from 'lucide-react'
+import { generateAssetName, shouldAutoGenerateName } from '../../../utils/assetNameGenerator'
 
 const AssetFormModal = ({
   isOpen,
@@ -31,6 +33,8 @@ const AssetFormModal = ({
   onComponentRemove,
   onComponentChange,
   onAddVendor,
+  equipmentOptions = [],
+  onEquipmentChange,
 }) => {
   // Ensure categories is always an array
   const safeCategories = Array.isArray(categories) ? categories : []
@@ -59,6 +63,29 @@ const AssetFormModal = ({
            category?.name?.toLowerCase().includes('pc')
   }
 
+  // Get current category name
+  const categoryName = safeCategories.find(c => c.id === parseInt(formData.asset_category_id))?.name
+
+  // Check if auto-generation is supported for this category
+  const canAutoGenerate = categoryName && shouldAutoGenerateName(categoryName) && !isDesktopPCCategory()
+
+  // Auto-generate asset name when brand or specifications change
+  useEffect(() => {
+    if (!canAutoGenerate) return
+
+    const generatedName = generateAssetName(
+      categoryName,
+      formData.brand,
+      formData.specifications || {}
+    )
+
+    // Only update if there's a generated name and it's different from current
+    if (generatedName && generatedName !== formData.asset_name) {
+      onInputChange({ target: { name: 'asset_name', value: generatedName } })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.brand, formData.specifications, categoryName, canAutoGenerate])
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl">
       <form onSubmit={onSubmit} className="space-y-6">
@@ -76,6 +103,12 @@ const AssetFormModal = ({
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Asset Name <span className="text-red-500">*</span>
+                {canAutoGenerate && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-blue-600">
+                    <Sparkles className="w-3 h-3" />
+                    Auto-generated
+                  </span>
+                )}
               </label>
               <input
                 type="text"
@@ -86,6 +119,11 @@ const AssetFormModal = ({
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder={placeholders.asset_name}
               />
+              {canAutoGenerate && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Name is automatically generated from brand and specifications
+                </p>
+              )}
             </div>
 
             <div>
@@ -129,6 +167,22 @@ const AssetFormModal = ({
                 </select>
               </div>
             )}
+
+            {/* Equipment Dropdown */}
+            <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-2">
+                 Equipment <span className="text-slate-500 text-xs font-normal">(Standard Model)</span>
+               </label>
+               <SearchableSelect
+                 label=""
+                 options={equipmentOptions}
+                 value={formData.equipment_id}
+                 onChange={onEquipmentChange}
+                 displayField="name"
+                 placeholder="Select equipment..."
+                 emptyMessage="No equipment found"
+               />
+             </div>
 
             {/* Desktop PC Components Section - Appears immediately after category selection */}
             {isDesktopPCCategory() && (
@@ -525,6 +579,7 @@ const AssetFormModal = ({
               <div className={remarksWrapperClass}>
                 <SpecificationFields
                   categoryName={safeCategories.find(c => c.id === parseInt(formData.asset_category_id))?.name}
+                  subcategoryName={subcategories?.find(s => s.id === parseInt(formData.subcategory_id))?.name}
                   specifications={formData.specifications || {}}
                   onChange={(specs) => onInputChange({ target: { name: 'specifications', value: specs } })}
                 />

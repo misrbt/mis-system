@@ -7,8 +7,9 @@ import {
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
+import SpecificationFields from '../specifications/SpecificationFields'
 
-function AssetComponentsSection({ assetId, asset, statuses = [] }) {
+function AssetComponentsSection({ assetId, statuses = [] }) {
   const queryClient = useQueryClient()
   const [editingComponent, setEditingComponent] = useState(null)
   const [editFormData, setEditFormData] = useState({})
@@ -22,6 +23,12 @@ function AssetComponentsSection({ assetId, asset, statuses = [] }) {
     brand: '',
     model: '',
     serial_number: '',
+    category_id: '',
+    subcategory_id: '',
+    purchase_date: '',
+    acq_cost: '',
+    vendor_id: '',
+    specifications: {},
     status_id: '',
     remarks: '',
   })
@@ -50,6 +57,42 @@ function AssetComponentsSection({ assetId, asset, statuses = [] }) {
 
   const employees = employeesData?.data || []
 
+  // Fetch categories for component form
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const response = await apiClient.get('/asset-categories')
+      return response.data
+    },
+    enabled: showAddModal,
+  })
+
+  const categories = categoriesData?.data || []
+
+  // Fetch subcategories for selected category
+  const { data: subcategoriesData } = useQuery({
+    queryKey: ['subcategories', addFormData.category_id],
+    queryFn: async () => {
+      const response = await apiClient.get(`/asset-categories/${addFormData.category_id}/subcategories`)
+      return response.data
+    },
+    enabled: !!addFormData.category_id && showAddModal,
+  })
+
+  const subcategories = subcategoriesData?.data || []
+
+  // Fetch vendors for component form
+  const { data: vendorsData } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: async () => {
+      const response = await apiClient.get('/vendors')
+      return response.data
+    },
+    enabled: showAddModal,
+  })
+
+  const vendors = vendorsData?.data || []
+
   // Add component mutation
   const addComponentMutation = useMutation({
     mutationFn: async (data) => {
@@ -67,6 +110,12 @@ function AssetComponentsSection({ assetId, asset, statuses = [] }) {
         brand: '',
         model: '',
         serial_number: '',
+        category_id: '',
+        subcategory_id: '',
+        purchase_date: '',
+        acq_cost: '',
+        vendor_id: '',
+        specifications: {},
         status_id: '',
         remarks: '',
       })
@@ -700,6 +749,99 @@ function AssetComponentsSection({ assetId, asset, statuses = [] }) {
                     <RefreshCw className="w-4 h-4" />
                     Generate
                   </button>
+                </div>
+              </div>
+
+              {/* Optional Fields Section */}
+              <div className="border-t border-slate-200 pt-4 mt-2">
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">Optional Details</h4>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Category</label>
+                      <select
+                        value={addFormData.category_id}
+                        onChange={(e) => setAddFormData({ ...addFormData, category_id: e.target.value, subcategory_id: '' })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select category</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Subcategory</label>
+                      <select
+                        value={addFormData.subcategory_id}
+                        onChange={(e) => setAddFormData({ ...addFormData, subcategory_id: e.target.value })}
+                        disabled={!addFormData.category_id}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select subcategory</option>
+                        {subcategories.map((subcategory) => (
+                          <option key={subcategory.id} value={subcategory.id}>
+                            {subcategory.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Purchase Date</label>
+                      <input
+                        type="date"
+                        value={addFormData.purchase_date}
+                        onChange={(e) => setAddFormData({ ...addFormData, purchase_date: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Acquisition Cost</label>
+                      <input
+                        type="number"
+                        value={addFormData.acq_cost}
+                        onChange={(e) => setAddFormData({ ...addFormData, acq_cost: e.target.value })}
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Vendor</label>
+                    <select
+                      value={addFormData.vendor_id}
+                      onChange={(e) => setAddFormData({ ...addFormData, vendor_id: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select vendor</option>
+                      {vendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.company_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Specifications Section */}
+                  {addFormData.category_id && (
+                    <SpecificationFields
+                      categoryName={categories.find(c => c.id === parseInt(addFormData.category_id))?.name || ''}
+                      subcategoryName={subcategories.find(s => s.id === parseInt(addFormData.subcategory_id))?.name || ''}
+                      specifications={addFormData.specifications}
+                      onChange={(specs) => setAddFormData({ ...addFormData, specifications: specs })}
+                    />
+                  )}
                 </div>
               </div>
 

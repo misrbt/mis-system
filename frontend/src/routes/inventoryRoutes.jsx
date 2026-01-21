@@ -12,6 +12,7 @@ const EmployeePage = lazy(() => import('../pages/inventory/EmployeePage'))
 const EmployeeListPage = lazy(() => import('../pages/inventory/EmployeeListPage'))
 const StatusPage = lazy(() => import('../pages/inventory/StatusPage'))
 const VendorsPage = lazy(() => import('../pages/inventory/VendorsPage'))
+const EquipmentPage = lazy(() => import('../pages/inventory/EquipmentPage'))
 const AssetCategoryPage = lazy(() => import('../pages/inventory/AssetCategoryPage'))
 const SubcategoryPage = lazy(() => import('../pages/inventory/SubcategoryPage'))
 const AssetsPage = lazy(() => import('../pages/inventory/AssetsPage'))
@@ -74,6 +75,10 @@ const inventoryRoutes = {
     {
       path: 'vendors',
       element: <VendorsPage />,
+    },
+    {
+      path: 'equipment',
+      element: <EquipmentPage />,
     },
     {
       path: 'repairs',

@@ -66,8 +66,9 @@ const SpecificationFields = ({ categoryName, subcategoryName, specifications = {
       }
       if (storageType === 'nvme') {
         return [
-          { value: 'NVMe', label: 'NVMe' },
-          { value: 'PCIe', label: 'PCIe' },
+          { value: 'PCIe 3.0 x4', label: 'PCIe 3.0 x4 (~3,500 MB/s)' },
+          { value: 'PCIe 4.0 x4', label: 'PCIe 4.0 x4 (~7,000 MB/s)' },
+          { value: 'PCIe 5.0 x4', label: 'PCIe 5.0 x4 (~12,000 MB/s)' },
         ]
       }
       return []

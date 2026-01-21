@@ -20,6 +20,7 @@ import {
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
+import SpecificationFields from '../../components/specifications/SpecificationFields'
 
 function AssetComponentsPage() {
   const { id } = useParams()
@@ -28,15 +29,21 @@ function AssetComponentsPage() {
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showTransferModal, setShowTransferModal] = useState(null)
+  const [showCodeModal, setShowCodeModal] = useState(null)
   const [editingComponent, setEditingComponent] = useState(null)
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
   const [addFormData, setAddFormData] = useState({
     category_id: '',
+    subcategory_id: '',
     component_name: '',
     brand: '',
     model: '',
     serial_number: '',
+    purchase_date: '',
+    specifications: {},
+    acq_cost: '',
+    vendor_id: '',
     status_id: '',
     remarks: '',
   })
@@ -86,8 +93,30 @@ function AssetComponentsPage() {
     },
   })
 
+  // Fetch subcategories (cascading based on selected category)
+  const { data: subcategoriesData } = useQuery({
+    queryKey: ['subcategories', addFormData.category_id],
+    queryFn: async () => {
+      const response = await apiClient.get(`/asset-categories/${addFormData.category_id}/subcategories`)
+      return response.data
+    },
+    enabled: !!addFormData.category_id && showAddModal,
+  })
+
+  // Fetch vendors
+  const { data: vendorsData } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: async () => {
+      const response = await apiClient.get('/vendors')
+      return response.data
+    },
+    enabled: showAddModal,
+  })
+
   const statuses = statusesData || []
   const categories = categoriesData?.data || []
+  const subcategories = subcategoriesData?.data || []
+  const vendors = vendorsData?.data || []
   const components = componentsData || []
 
   // Memoize employees to prevent unnecessary re-renders
@@ -210,10 +239,15 @@ function AssetComponentsPage() {
   const resetAddForm = () => {
     setAddFormData({
       category_id: '',
+      subcategory_id: '',
       component_name: '',
       brand: '',
       model: '',
       serial_number: '',
+      purchase_date: '',
+      specifications: {},
+      acq_cost: '',
+      vendor_id: '',
       status_id: '',
       remarks: '',
     })
@@ -405,7 +439,6 @@ function AssetComponentsPage() {
               <h1 className="text-2xl font-bold text-gray-900">
                 {asset.brand} {asset.model}
               </h1>
-              <p className="text-sm text-gray-600">Serial: {asset.serial_number}</p>
             </div>
             <button
               onClick={() => setShowAddModal(true)}
@@ -605,21 +638,76 @@ function AssetComponentsPage() {
                     </div>
 
                     <div className="space-y-2 mb-4">
+                      {/* Serial Number */}
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Serial:</span>
-                        <span className="font-medium text-gray-900">{component.serial_number || ''}</span>
+                        <span className="font-medium text-gray-900">{component.serial_number || <span className="text-gray-400 italic">Not set</span>}</span>
                       </div>
+
+                      {/* Status */}
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Status:</span>
                         <span className={`px-2 py-1 rounded-md text-xs font-semibold border ${getStatusColor(component.status?.name)}`}>
-                          {component.status?.name || ''}
+                          {component.status?.name || 'N/A'}
                         </span>
                       </div>
 
+                      {/* Subcategory */}
+                      {component.subcategory && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Remarks:</span>
-                          <span className="font-medium text-gray-900">{component.remarks || ''}</span>
+                          <span className="text-gray-600">Subcategory:</span>
+                          <span className="font-medium text-gray-900">{component.subcategory.name}</span>
                         </div>
+                      )}
+
+                      {/* Purchase Date */}
+                      {component.purchase_date && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Purchase Date:</span>
+                          <span className="font-medium text-gray-900">{new Date(component.purchase_date).toLocaleDateString()}</span>
+                        </div>
+                      )}
+
+                      {/* Acquisition Cost */}
+                      {component.acq_cost && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Acq. Cost:</span>
+                          <span className="font-medium text-green-700">₱{Number(component.acq_cost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+
+                      {/* Vendor */}
+                      {component.vendor && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Vendor:</span>
+                          <span className="font-medium text-gray-900 truncate max-w-[150px]" title={component.vendor.company_name}>{component.vendor.company_name}</span>
+                        </div>
+                      )}
+
+                      {/* Specifications */}
+                      {component.specifications && Object.keys(component.specifications).length > 0 && (
+                        <div className="pt-2 border-t border-gray-200">
+                          <div className="text-xs font-semibold text-gray-700 mb-2">Specifications</div>
+                          <div className="space-y-1">
+                            {Object.entries(component.specifications).map(([key, value]) => (
+                              value && (
+                                <div key={key} className="flex justify-between text-xs">
+                                  <span className="text-gray-500 capitalize">{key.replace(/_/g, ' ')}:</span>
+                                  <span className="font-medium text-gray-900">{value}</span>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Remarks */}
+                      {component.remarks && (
+                        <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
+                          <span className="text-gray-600">Remarks:</span>
+                          <span className="font-medium text-gray-900">{component.remarks}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -656,14 +744,20 @@ function AssetComponentsPage() {
                         Transfer
                       </button>
                       <button
-                        onClick={() => handleDownloadQR(component)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setShowCodeModal({ component, type: 'qr' })
+                        }}
                         className="flex-1 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2"
                       >
                         <QrCode className="w-4 h-4" />
                         QR
                       </button>
                       <button
-                        onClick={() => handleDownloadBarcode(component)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setShowCodeModal({ component, type: 'barcode' })
+                        }}
                         className="flex-1 px-3 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 flex items-center justify-center gap-2"
                       >
                         <Barcode className="w-4 h-4" />
@@ -791,6 +885,83 @@ function AssetComponentsPage() {
                   rows="3"
                   placeholder="Additional notes..."
                 />
+              </div>
+
+              {/* Optional Fields Section */}
+              <div className="border-t border-slate-200 pt-4 mt-2">
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">Optional Details</h4>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Subcategory</label>
+                      <select
+                        value={addFormData.subcategory_id}
+                        onChange={(e) => setAddFormData({ ...addFormData, subcategory_id: e.target.value })}
+                        disabled={!addFormData.category_id}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select subcategory</option>
+                        {subcategories.map((subcategory) => (
+                          <option key={subcategory.id} value={subcategory.id}>
+                            {subcategory.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Purchase Date</label>
+                      <input
+                        type="date"
+                        value={addFormData.purchase_date}
+                        onChange={(e) => setAddFormData({ ...addFormData, purchase_date: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Acquisition Cost</label>
+                      <input
+                        type="number"
+                        value={addFormData.acq_cost}
+                        onChange={(e) => setAddFormData({ ...addFormData, acq_cost: e.target.value })}
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Vendor</label>
+                      <select
+                        value={addFormData.vendor_id}
+                        onChange={(e) => setAddFormData({ ...addFormData, vendor_id: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select vendor</option>
+                        {vendors.map((vendor) => (
+                          <option key={vendor.id} value={vendor.id}>
+                            {vendor.company_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Specifications Section */}
+                  {addFormData.category_id && (
+                    <SpecificationFields
+                      categoryName={categories.find(c => c.id === parseInt(addFormData.category_id))?.name || ''}
+                      subcategoryName={subcategories.find(s => s.id === parseInt(addFormData.subcategory_id))?.name || ''}
+                      specifications={addFormData.specifications}
+                      onChange={(specs) => setAddFormData({ ...addFormData, specifications: specs })}
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -922,6 +1093,106 @@ function AssetComponentsPage() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code / Barcode Modal */}
+      {showCodeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {showCodeModal.type === 'qr' ? 'QR Code' : 'Barcode'} - {showCodeModal.component.component_name}
+                </h2>
+                <button
+                  onClick={() => setShowCodeModal(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {/* Display the code */}
+              <div className="flex justify-center items-center bg-gray-50 rounded-lg p-8 mb-6">
+                {showCodeModal.type === 'qr' ? (
+                  showCodeModal.component.qr_code ? (
+                    <img
+                      src={showCodeModal.component.qr_code}
+                      alt="QR Code"
+                      className="max-w-full h-auto"
+                      style={{ maxHeight: '400px' }}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <QrCode className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                      <p className="text-gray-500">No QR code available</p>
+                    </div>
+                  )
+                ) : (
+                  showCodeModal.component.barcode ? (
+                    <img
+                      src={showCodeModal.component.barcode}
+                      alt="Barcode"
+                      className="max-w-full h-auto"
+                      style={{ maxHeight: '200px' }}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <Barcode className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                      <p className="text-gray-500">No barcode available</p>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Component Info */}
+              <div className="bg-slate-50 rounded-lg p-4 mb-4">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-600">Component:</span>
+                    <p className="font-semibold text-gray-900">{showCodeModal.component.component_name}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Category:</span>
+                    <p className="font-semibold text-gray-900">{showCodeModal.component.category?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Serial:</span>
+                    <p className="font-semibold text-gray-900">{showCodeModal.component.serial_number || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Status:</span>
+                    <p className="font-semibold text-gray-900">{showCodeModal.component.status?.name || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    if (showCodeModal.type === 'qr') {
+                      handleDownloadQR(showCodeModal.component)
+                    } else {
+                      handleDownloadBarcode(showCodeModal.component)
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Download {showCodeModal.type === 'qr' ? 'QR Code' : 'Barcode'}
+                </button>
+                <button
+                  onClick={() => setShowCodeModal(null)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

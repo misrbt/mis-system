@@ -17,13 +17,17 @@ class AssetComponent extends Model
     protected $fillable = [
         'parent_asset_id',
         'category_id',
+        'subcategory_id',
         'component_name',
         'brand',
         'model',
         'serial_number',
+        'purchase_date',
+        'specifications',
         'qr_code',
         'barcode',
         'acq_cost',
+        'vendor_id',
         'status_id',
         'assigned_to_employee_id',
         'remarks',
@@ -31,6 +35,8 @@ class AssetComponent extends Model
 
     protected $casts = [
         'acq_cost' => 'float',
+        'specifications' => 'array',
+        'purchase_date' => 'date',
     ];
 
     // Relationships
@@ -47,6 +53,16 @@ class AssetComponent extends Model
     public function category()
     {
         return $this->belongsTo(AssetCategory::class, 'category_id');
+    }
+
+    public function subcategory()
+    {
+        return $this->belongsTo(AssetSubcategory::class, 'subcategory_id');
+    }
+
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class, 'vendor_id');
     }
 
     public function assignedEmployee()

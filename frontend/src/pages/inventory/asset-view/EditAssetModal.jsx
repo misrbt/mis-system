@@ -207,6 +207,7 @@ function EditAssetModal({
             <div className="md:col-span-2">
               <SpecificationFields
                 categoryName={categories?.find(c => c.id == formData.asset_category_id)?.name}
+                subcategoryName={subcategories?.find(s => s.id == formData.subcategory_id)?.name}
                 specifications={formData.specifications || {}}
                 onChange={(specs) => onChange('specifications', specs)}
               />

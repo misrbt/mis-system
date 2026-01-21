@@ -28,7 +28,8 @@ class AssetController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             // Advanced filtering
@@ -73,9 +74,11 @@ class AssetController extends Controller
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('asset_name', 'like', "%{$search}%")
-                      ->orWhere('serial_number', 'like', "%{$search}%")
-                      ->orWhere('brand', 'like', "%{$search}%")
-                      ->orWhere('model', 'like', "%{$search}%");
+                        ->orWhere('serial_number', 'like', "%{$search}%")
+                        ->orWhereHas('equipment', function ($eq) use ($search) {
+                            $eq->where('brand', 'like', "%{$search}%")
+                                ->orWhere('model', 'like', "%{$search}%");
+                        });
                 });
             }
 
@@ -92,7 +95,7 @@ class AssetController extends Controller
             $returnAll = $request->boolean('all', false);
             if (!$hasEmployeeFilter && !$returnAll) {
                 $assets = $assets
-                    ->unique(fn ($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
+                    ->unique(fn($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
                     ->values();
             }
 
@@ -156,8 +159,10 @@ class AssetController extends Controller
                 $query->where(function ($q) use ($search) {
                     $q->where('asset_name', 'like', "%{$search}%")
                         ->orWhere('serial_number', 'like', "%{$search}%")
-                        ->orWhere('brand', 'like', "%{$search}%")
-                        ->orWhere('model', 'like', "%{$search}%");
+                        ->orWhereHas('equipment', function ($eq) use ($search) {
+                            $eq->where('brand', 'like', "%{$search}%")
+                                ->orWhere('model', 'like', "%{$search}%");
+                        });
                 });
             }
 
@@ -165,7 +170,7 @@ class AssetController extends Controller
                 ->selectRaw('assigned_to_employee_id, COALESCE(SUM(acq_cost), 0) as total_acq_cost')
                 ->groupBy('assigned_to_employee_id')
                 ->get()
-                ->map(fn ($row) => [
+                ->map(fn($row) => [
                     'employee_id' => $row->assigned_to_employee_id,
                     'total_acq_cost' => (float) $row->total_acq_cost,
                 ]);
@@ -204,8 +209,7 @@ class AssetController extends Controller
                     }
                 },
             ],
-            'brand' => 'nullable|string|max:255',
-            'model' => 'nullable|string|max:255',
+            'equipment_id' => 'nullable|exists:equipment,id',
             'serial_number' => 'nullable|string|max:255',
             'purchase_date' => 'required|date',
             'acq_cost' => 'nullable|numeric|min:0',
@@ -350,7 +354,8 @@ class AssetController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             return response()->json([
@@ -382,7 +387,8 @@ class AssetController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ])->findOrFail($id);
 
             // Calculate depreciation information
@@ -423,8 +429,7 @@ class AssetController extends Controller
                     }
                 },
             ],
-            'brand' => 'nullable|string|max:255',
-            'model' => 'nullable|string|max:255',
+            'equipment_id' => 'nullable|exists:equipment,id',
             'serial_number' => 'nullable|string|max:255',
             'purchase_date' => 'required|date',
             'acq_cost' => 'nullable|numeric|min:0',
@@ -513,7 +518,8 @@ class AssetController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             $response = [
@@ -527,7 +533,7 @@ class AssetController extends Controller
                 $response['message'] .= ' (book value recalculated)';
             }
 
-        return response()->json($response, 200);
+            return response()->json($response, 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -703,8 +709,7 @@ class AssetController extends Controller
                 'asset_name',
                 'asset_category_id',
                 'subcategory_id',
-                'brand',
-                'model',
+                'equipment_id',
                 'serial_number',
                 'purchase_date',
                 'acq_cost',
@@ -744,7 +749,8 @@ class AssetController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             $response = [
