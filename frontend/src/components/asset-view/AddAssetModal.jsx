@@ -3,9 +3,10 @@
  * Modal form for adding new assets to employee
  */
 
-import React from 'react'
-import { X, RefreshCw, Plus, Package } from 'lucide-react'
+import React, { useEffect } from 'react'
+import { X, RefreshCw, Plus, Package, Sparkles } from 'lucide-react'
 import SpecificationFields from '../specifications/SpecificationFields'
+import { generateAssetName, shouldAutoGenerateName } from '../../utils/assetNameGenerator'
 
 const AddAssetModal = ({
   isOpen,
@@ -26,14 +27,37 @@ const AddAssetModal = ({
   onComponentChange,
   onAddVendor,
 }) => {
-  if (!isOpen) return null
-
   // Helper to check if selected category is Desktop PC
   const isDesktopPCCategory = () => {
     const category = categories?.find(c => c.id === parseInt(formData.asset_category_id))
     return category?.name?.toLowerCase().includes('desktop') ||
            category?.name?.toLowerCase().includes('pc')
   }
+
+  // Get current category name
+  const categoryName = categories?.find(c => c.id === parseInt(formData.asset_category_id))?.name
+
+  // Check if auto-generation is supported for this category
+  const canAutoGenerate = categoryName && shouldAutoGenerateName(categoryName) && !isDesktopPCCategory()
+
+  // Auto-generate asset name when brand or specifications change
+  useEffect(() => {
+    if (!isOpen || !canAutoGenerate) return
+
+    const generatedName = generateAssetName(
+      categoryName,
+      formData.brand,
+      formData.specifications || {}
+    )
+
+    // Only update if there's a generated name and it's different from current
+    if (generatedName && generatedName !== formData.asset_name) {
+      onInputChange('asset_name', generatedName)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, formData.brand, formData.specifications, categoryName, canAutoGenerate])
+
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
@@ -54,6 +78,12 @@ const AddAssetModal = ({
           <div>
             <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">
               Asset Name <span className="text-red-500">*</span>
+              {canAutoGenerate && (
+                <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-blue-600">
+                  <Sparkles className="w-3 h-3" />
+                  Auto-generated
+                </span>
+              )}
             </label>
             <input
               type="text"
@@ -62,6 +92,11 @@ const AddAssetModal = ({
               className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               placeholder="Enter asset name"
             />
+            {canAutoGenerate && (
+              <p className="mt-1 text-xs text-slate-500">
+                Name is automatically generated from brand and specifications
+              </p>
+            )}
           </div>
 
           {/* Category */}
@@ -300,6 +335,7 @@ const AddAssetModal = ({
           {!isDesktopPCCategory() && (
             <SpecificationFields
               categoryName={categories?.find(c => c.id === parseInt(formData.asset_category_id))?.name}
+              subcategoryName={subcategories?.find(s => s.id === parseInt(formData.subcategory_id))?.name}
               specifications={formData.specifications || {}}
               onChange={(specs) => onInputChange('specifications', specs)}
             />

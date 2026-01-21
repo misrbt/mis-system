@@ -7,6 +7,7 @@ use App\Http\Controllers\SectionController;
 use App\Http\Controllers\PositionController;
 use App\Http\Controllers\StatusController;
 use App\Http\Controllers\VendorController;
+use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetCategoryController;
 use App\Http\Controllers\AssetSubcategoryController;
@@ -72,6 +73,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Vendor routes
     Route::apiResource('vendors', VendorController::class);
+
+    // Equipment routes
+    Route::apiResource('equipment', EquipmentController::class);
 
     // Asset Category routes
     Route::apiResource('asset-categories', AssetCategoryController::class);

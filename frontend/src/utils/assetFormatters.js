@@ -28,11 +28,10 @@ export const formatDate = (dateString) => {
  */
 export const formatCurrency = (amount) => {
   const value = Number(amount) || 0
-  return value.toLocaleString('en-PH', {
-    style: 'currency',
-    currency: 'PHP',
+  return `₱${value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
-  })
+    maximumFractionDigits: 2,
+  })}`
 }
 
 /**

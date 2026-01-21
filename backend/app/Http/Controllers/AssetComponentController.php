@@ -24,6 +24,8 @@ class AssetComponentController extends Controller
                 ->with([
                     'status',
                     'category',
+                    'subcategory',
+                    'vendor',
                     'assignedEmployee.branch',
                     'assignedEmployee.position',
                     'parentAsset.category'
@@ -55,11 +57,15 @@ class AssetComponentController extends Controller
         $validator = Validator::make($request->all(), [
             'components' => 'required|array',
             'components.*.category_id' => 'required|exists:asset_category,id',
+            'components.*.subcategory_id' => 'nullable|exists:asset_subcategories,id',
             'components.*.component_name' => 'required|string|max:255',
             'components.*.brand' => 'nullable|string|max:255',
             'components.*.model' => 'nullable|string|max:255',
             'components.*.serial_number' => 'required|string|max:255|unique:asset_components,serial_number',
+            'components.*.purchase_date' => 'nullable|date',
+            'components.*.specifications' => 'nullable|array',
             'components.*.acq_cost' => 'nullable|numeric|min:0',
+            'components.*.vendor_id' => 'nullable|exists:vendors,id',
             'components.*.status_id' => 'required|exists:status,id',
             'components.*.assigned_to_employee_id' => 'nullable|exists:employee,id',
             'components.*.remarks' => 'nullable|string',
@@ -80,11 +86,15 @@ class AssetComponentController extends Controller
                 $component = AssetComponent::create([
                     'parent_asset_id' => $assetId,
                     'category_id' => $componentData['category_id'],
+                    'subcategory_id' => $componentData['subcategory_id'] ?? null,
                     'component_name' => $componentData['component_name'],
                     'brand' => $componentData['brand'] ?? null,
                     'model' => $componentData['model'] ?? null,
                     'serial_number' => $componentData['serial_number'] ?? null,
+                    'purchase_date' => $componentData['purchase_date'] ?? null,
+                    'specifications' => $componentData['specifications'] ?? null,
                     'acq_cost' => $componentData['acq_cost'] ?? null,
+                    'vendor_id' => $componentData['vendor_id'] ?? null,
                     'status_id' => $componentData['status_id'],
                     'assigned_to_employee_id' => $componentData['assigned_to_employee_id'] ?? null,
                     'remarks' => $componentData['remarks'] ?? null,
@@ -102,6 +112,8 @@ class AssetComponentController extends Controller
                 $component->load([
                     'status',
                     'category',
+                    'subcategory',
+                    'vendor',
                     'assignedEmployee.branch',
                     'assignedEmployee.position',
                     'parentAsset.category'
@@ -133,6 +145,8 @@ class AssetComponentController extends Controller
             $component = AssetComponent::with([
                 'status',
                 'category',
+                'subcategory',
+                'vendor',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'parentAsset.category',
@@ -165,11 +179,15 @@ class AssetComponentController extends Controller
 
         $validator = Validator::make($request->all(), [
             'category_id' => $isTransferOnly ? 'sometimes|exists:asset_category,id' : 'required|exists:asset_category,id',
+            'subcategory_id' => 'nullable|exists:asset_subcategories,id',
             'component_name' => $isTransferOnly ? 'sometimes|string|max:255' : 'required|string|max:255',
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'serial_number' => ['nullable', 'string', 'max:255', Rule::unique('asset_components', 'serial_number')->ignore($id)],
+            'purchase_date' => 'nullable|date',
+            'specifications' => 'nullable|array',
             'acq_cost' => 'nullable|numeric|min:0',
+            'vendor_id' => 'nullable|exists:vendors,id',
             'status_id' => $isTransferOnly ? 'sometimes|exists:status,id' : 'required|exists:status,id',
             'assigned_to_employee_id' => 'nullable|exists:employee,id',
             'remarks' => 'nullable|string',
@@ -206,6 +224,8 @@ class AssetComponentController extends Controller
             $component->load([
                 'status',
                 'category',
+                'subcategory',
+                'vendor',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'parentAsset.category'
@@ -284,6 +304,8 @@ class AssetComponentController extends Controller
             $component->load([
                 'status',
                 'category',
+                'subcategory',
+                'vendor',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'parentAsset.category'
@@ -338,6 +360,8 @@ class AssetComponentController extends Controller
             $query = AssetComponent::with([
                 'status',
                 'category',
+                'subcategory',
+                'vendor',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'parentAsset.category',

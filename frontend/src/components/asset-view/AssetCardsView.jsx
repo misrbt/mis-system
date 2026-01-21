@@ -21,9 +21,6 @@ import {
   QrCode,
   Barcode,
   Eye,
-  Cpu,
-  Monitor,
-  Keyboard,
 } from 'lucide-react'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
 import apiClient from '../../services/apiClient'
@@ -48,7 +45,7 @@ const AssetCard = ({
   vendors,
   statusColorMap,
   showStatusPicker,
-  showCodes,
+
   isSelected,
   onSelect,
   onEdit,
@@ -58,14 +55,11 @@ const AssetCard = ({
   onDelete,
   onStatusChange,
   onStatusPickerToggle,
-  onCodeToggle,
   onCodeView,
   onCardClick,
   isPending,
 }) => {
-  // State to track if codes section is expanded (default: collapsed/hidden)
-  const [isCodesExpanded, setIsCodesExpanded] = useState(false)
-  const [isComponentsExpanded, setIsComponentsExpanded] = useState(false)
+  // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
 
   // Check if asset is Desktop PC
@@ -83,20 +77,6 @@ const AssetCard = ({
   })
 
   const components = componentsData?.data || []
-
-  // Component type icons
-  const getComponentIcon = (type) => {
-    switch (type) {
-      case 'system_unit':
-        return <Cpu className="w-4 h-4" />
-      case 'monitor':
-        return <Monitor className="w-4 h-4" />
-      case 'keyboard_mouse':
-        return <Keyboard className="w-4 h-4" />
-      default:
-        return <Package className="w-4 h-4" />
-    }
-  }
 
   const handleCardClick = (e) => {
     // Don't navigate if in edit mode
@@ -123,7 +103,7 @@ const AssetCard = ({
 
   return (
     <div
-      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 h-full flex flex-col ${
+      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${
         isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200'
       } ${
         !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1 cursor-pointer' : ''
@@ -132,7 +112,7 @@ const AssetCard = ({
     >
       {/* Selection Checkbox */}
       {onSelect && !isEditing && (
-        <div className="absolute top-3 right-3 z-20">
+        <div className="absolute top-3 left-3 z-20">
           <input
             type="checkbox"
             checked={isSelected}
@@ -287,7 +267,7 @@ const AssetCard = ({
           {/* Card Header with Gradient - More Compact */}
           <div className="bg-gradient-to-br from-slate-50 to-blue-50 p-4 border-b border-slate-200">
             <div className="flex items-start justify-between mb-2">
-              <div className="flex-1 min-w-0 pr-2">
+              <div className={`flex-1 min-w-0 pr-2 ${onSelect ? 'pl-8' : ''}`}>
                 <h3 className="text-lg font-bold text-slate-900 mb-2 truncate" title={asset.asset_name}>
                   {asset.asset_name}
                 </h3>
@@ -349,14 +329,36 @@ const AssetCard = ({
               </div>
             </div>
 
-            {/* Key Info Row: Serial & Acq Cost */}
-            <div className="flex items-center justify-between mt-3 text-sm">
-              <div className="flex items-center gap-1.5 text-slate-600 overflow-hidden">
-                <Package className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="font-mono truncate" title={asset.serial_number || 'No Serial'}>
-                  {asset.serial_number || '—'}
-                </span>
+            {/* Purchase Date Row */}
+            {asset.purchase_date && (
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span className="font-medium">Purchased:</span>
+                <span className="font-semibold text-slate-900">{formatDate(asset.purchase_date)}</span>
               </div>
+            )}
+
+            {/* Key Info Row: Show Details Toggle & Acq Cost */}
+            <div className="flex items-center justify-between mt-3 text-sm">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsDetailsExpanded(!isDetailsExpanded)
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
+              >
+                {isDetailsExpanded ? (
+                  <>
+                    <span>Hide Details</span>
+                    <ChevronUp className="w-3 h-3" />
+                  </>
+                ) : (
+                  <>
+                    <span>Show Details</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </>
+                )}
+              </button>
               {asset.acq_cost && (
                 <div className="font-bold text-blue-700">
                   {formatCurrency(asset.acq_cost)}
@@ -370,6 +372,17 @@ const AssetCard = ({
             {/* Expanded Details Section */}
             {isDetailsExpanded && (
               <div className="p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                {/* Serial Number - Prominent Display */}
+                {asset.serial_number && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Package className="w-4 h-4 text-blue-600" />
+                      <div className="text-xs font-bold text-blue-600 uppercase tracking-wide">Serial Number</div>
+                    </div>
+                    <div className="text-sm font-mono font-semibold text-slate-900">{asset.serial_number}</div>
+                  </div>
+                )}
+
                 {/* Brand & Model */}
                 {(asset.brand || asset.model) && (
                   <div className="grid grid-cols-2 gap-3">
@@ -390,12 +403,6 @@ const AssetCard = ({
 
                 {/* Dates & Values */}
                 <div className="space-y-2 text-sm">
-                   {asset.purchase_date && (
-                    <div className="flex justify-between border-b border-slate-100 pb-2">
-                      <span className="text-slate-600">Purchase Date</span>
-                      <span className="font-medium text-slate-900">{formatDate(asset.purchase_date)}</span>
-                    </div>
-                   )}
                    {asset.book_value && (
                     <div className="flex justify-between border-b border-slate-100 pb-2">
                       <span className="text-slate-600">Book Value</span>
@@ -423,6 +430,122 @@ const AssetCard = ({
                     </div>
                    )}
                 </div>
+
+                {/* Specifications */}
+                {asset.specifications && Object.keys(asset.specifications).length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-200">
+                    <div className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      Specifications
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {asset.specifications.capacity && (
+                        <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                          <div className="text-[10px] text-blue-600 uppercase tracking-wide mb-0.5">Capacity</div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            {asset.specifications.capacity} {asset.specifications.capacity_unit || 'GB'}
+                          </div>
+                        </div>
+                      )}
+                      {asset.specifications.interface && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Interface</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.interface}</div>
+                        </div>
+                      )}
+                      {asset.specifications.form_factor && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Form Factor</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.form_factor}</div>
+                        </div>
+                      )}
+                      {asset.specifications.speed && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Speed</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.speed}</div>
+                        </div>
+                      )}
+                      {asset.specifications.memory_type && (
+                        <div className="bg-purple-50 p-2 rounded border border-purple-100">
+                          <div className="text-[10px] text-purple-600 uppercase tracking-wide mb-0.5">Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.memory_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.screen_size && (
+                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
+                          <div className="text-[10px] text-indigo-600 uppercase tracking-wide mb-0.5">Screen Size</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.screen_size}"</div>
+                        </div>
+                      )}
+                      {asset.specifications.resolution && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Resolution</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.resolution}</div>
+                        </div>
+                      )}
+                      {asset.specifications.panel_type && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Panel Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.panel_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.refresh_rate && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Refresh Rate</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.refresh_rate} Hz</div>
+                        </div>
+                      )}
+                      {asset.specifications.printer_type && (
+                        <div className="bg-green-50 p-2 rounded border border-green-100">
+                          <div className="text-[10px] text-green-600 uppercase tracking-wide mb-0.5">Printer Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.printer_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.color_support && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Color</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.color_support}</div>
+                        </div>
+                      )}
+                      {asset.specifications.print_speed && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Print Speed</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.print_speed} ppm</div>
+                        </div>
+                      )}
+                      {asset.specifications.device_type && (
+                        <div className="bg-cyan-50 p-2 rounded border border-cyan-100">
+                          <div className="text-[10px] text-cyan-600 uppercase tracking-wide mb-0.5">Device Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.device_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.ports && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Ports</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.ports}</div>
+                        </div>
+                      )}
+                      {asset.specifications.poe_support && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">PoE Support</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.poe_support}</div>
+                        </div>
+                      )}
+                      {asset.specifications.camera_type && (
+                        <div className="bg-red-50 p-2 rounded border border-red-100">
+                          <div className="text-[10px] text-red-600 uppercase tracking-wide mb-0.5">Camera Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.camera_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.night_vision_range && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Night Vision</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.night_vision_range}m</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Remarks */}
                 {asset.remarks && (
@@ -486,30 +609,8 @@ const AssetCard = ({
             )}
           </div>
 
-          {/* Footer Actions - Toggle & Buttons */}
+          {/* Footer Actions - Edit & Delete Buttons */}
           <div className="mt-auto bg-slate-50 border-t border-slate-200">
-            {/* Toggle Button */}
-            <button
-               onClick={(e) => {
-                 e.stopPropagation()
-                 setIsDetailsExpanded(!isDetailsExpanded)
-               }}
-               className="w-full flex items-center justify-center gap-1 py-2 text-xs font-medium text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition-colors border-b border-slate-200"
-            >
-              {isDetailsExpanded ? (
-                <>
-                  <span>Show Less</span>
-                  <ChevronUp className="w-3 h-3" />
-                </>
-              ) : (
-                <>
-                  <span>Show Details</span>
-                  <ChevronDown className="w-3 h-3" />
-                </>
-              )}
-            </button>
-
-            {/* Main Actions */}
             <div className="p-3 flex items-center gap-2">
               <button
                 onClick={onEdit}
@@ -561,7 +662,7 @@ const AssetCardsView = ({
   const isSelected = (assetId) => selectedAssets?.includes(assetId)
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 items-start">
       {assets.map((asset) => (
         <AssetCard
           key={asset.id}

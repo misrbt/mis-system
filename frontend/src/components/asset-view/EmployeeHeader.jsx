@@ -4,9 +4,10 @@
  */
 
 import React from 'react'
-import { User, Briefcase, Building2 } from 'lucide-react'
+import { User, Briefcase, Building2, Package } from 'lucide-react'
+import { formatCurrency } from '../../utils/assetFormatters'
 
-const EmployeeHeader = ({ employee }) => {
+const EmployeeHeader = ({ employee, assetCount = 0, totalAcqCost = 0 }) => {
   // Guard against undefined employee
   if (!employee) {
     return null
@@ -28,6 +29,19 @@ const EmployeeHeader = ({ employee }) => {
             </div>
           </div>
         </div>
+
+        {/* Asset Stats in Right Corner */}
+        {assetCount > 0 && (
+          <div className="flex flex-col gap-2 text-right bg-white/10 backdrop-blur-sm rounded-lg px-4 py-3 border border-white/20">
+            <div className="flex items-center gap-2 justify-end">
+              <Package className="w-4 h-4 text-indigo-100" />
+              <span className="text-sm font-bold">{assetCount} {assetCount === 1 ? 'Asset' : 'Assets'}</span>
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <span className="text-xs font-semibold text-indigo-100">Total: {formatCurrency(totalAcqCost)}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

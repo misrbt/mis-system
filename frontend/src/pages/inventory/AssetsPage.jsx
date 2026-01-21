@@ -109,6 +109,7 @@ const buildFormData = (asset = {}) => ({
   remarks: asset.remarks || '',
   specifications: asset.specifications || {},
   assigned_to_employee_id: asset.assigned_to_employee_id || '',
+  equipment_id: asset.equipment_id || '',
 })
 
 const notifySuccess = (title, text) => {
@@ -274,6 +275,15 @@ function AssetsPage() {
     },
   })
 
+  // Fetch equipment list
+  const { data: equipmentList } = useQuery({
+    queryKey: ['equipment'],
+    queryFn: async () => {
+      const response = await apiClient.get('/equipment')
+      return normalizeArrayResponse(response.data)
+    },
+  })
+
   const employeeAcqTotals = useMemo(() => {
     const totals = {}
     const rows = assetsTotalsData?.data || []
@@ -316,6 +326,19 @@ function AssetsPage() {
       })),
     [employees]
   )
+
+  const equipmentOptions = useMemo(
+    () =>
+      (Array.isArray(equipmentList) ? equipmentList : []).map((eq) => ({
+        id: eq.id,
+        name: `${eq.brand} ${eq.model}`,
+        brand: eq.brand,
+        model: eq.model,
+      })),
+    [equipmentList]
+  )
+
+
 
   // Mutations
   const createMutation = useMutation({
@@ -439,6 +462,10 @@ function AssetsPage() {
 
   const handleEmployeeChange = useCallback((value) => {
     setFormData((prev) => ({ ...prev, assigned_to_employee_id: value }))
+  }, [])
+
+  const handleEquipmentChange = useCallback((value) => {
+    setFormData((prev) => ({ ...prev, equipment_id: value }))
   }, [])
 
   const generateSerialNumber = useCallback(() => {
@@ -1894,7 +1921,10 @@ function AssetsPage() {
         components={components}
         onComponentAdd={handleComponentAdd}
         onComponentRemove={handleComponentRemove}
+
         onComponentChange={handleComponentChange}
+        equipmentOptions={equipmentOptions}
+        onEquipmentChange={handleEquipmentChange}
       />
 
       {/* Edit Modal - Similar to Add Modal */}
@@ -1918,7 +1948,10 @@ function AssetsPage() {
         showStatus
         showBookValue
         assignmentTitle="Assignment & Status"
+
         assignmentSubtitle="Employee assignment and asset status"
+        equipmentOptions={equipmentOptions}
+        onEquipmentChange={handleEquipmentChange}
       />
 
       {/* Add Vendor Modal */}

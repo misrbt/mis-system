@@ -16,8 +16,7 @@ class Asset extends Model
         'asset_name',
         'asset_category_id',
         'subcategory_id',
-        'brand',
-        'model',
+        'equipment_id',
         'book_value',
         'serial_number',
         'purchase_date',
@@ -55,6 +54,11 @@ class Asset extends Model
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function equipment()
+    {
+        return $this->belongsTo(Equipment::class, 'equipment_id');
     }
 
     public function status()

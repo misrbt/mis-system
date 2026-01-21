@@ -1,6 +1,5 @@
 import { ArrowLeft, ArrowRight, History, LayoutGrid, Package, Table } from 'lucide-react'
 import EmployeeHeader from '../../../components/asset-view/EmployeeHeader'
-import AssetsSectionHeader from '../../../components/asset-view/AssetsSectionHeader'
 import AssetCardsView from '../../../components/asset-view/AssetCardsView'
 import AssetTableView from '../../../components/asset-view/AssetTableView'
 import EmployeeAssetHistory from '../../../components/employee/EmployeeAssetHistory'
@@ -56,75 +55,78 @@ function EmployeeAssetsView({
         </button>
       </div>
 
-      <EmployeeHeader employee={employee} />
+      <EmployeeHeader
+        employee={employee}
+        assetCount={employeeAssets.length}
+        totalAcqCost={totalEmployeeAcqCost}
+      />
 
       <div className="mt-6 sm:mt-8">
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
-          <div className="flex items-center gap-1 sm:gap-2 mb-6 border-b border-slate-200 overflow-x-auto">
-            <button
-              onClick={() => setEmployeeViewTab('assets')}
-              className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 border-b-2 transition-colors whitespace-nowrap touch-manipulation font-medium ${
-                employeeViewTab === 'assets'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span className="text-sm sm:text-base">My Assets</span>
-              {employeeAssets.length > 0 && (
-                <span className="ml-1 px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 rounded-full">
-                  {employeeAssets.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setEmployeeViewTab('history')}
-              className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 border-b-2 transition-colors whitespace-nowrap touch-manipulation font-medium ${
-                employeeViewTab === 'history'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <History className="w-4 h-4" />
-              <span className="text-sm sm:text-base">Asset History</span>
-            </button>
+          <div className="flex items-center justify-between gap-2 mb-6 border-b border-slate-200">
+            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
+              <button
+                onClick={() => {
+                  setViewMode('cards')
+                  setEmployeeViewTab('assets')
+                }}
+                className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 border-b-2 transition-colors whitespace-nowrap touch-manipulation font-medium ${
+                  viewMode === 'cards' && employeeViewTab === 'assets'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+                <span className="text-sm sm:text-base">Cards</span>
+                {employeeAssets.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 rounded-full">
+                    {employeeAssets.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode('table')
+                  setEmployeeViewTab('assets')
+                }}
+                className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 border-b-2 transition-colors whitespace-nowrap touch-manipulation font-medium ${
+                  viewMode === 'table' && employeeViewTab === 'assets'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Table className="w-4 h-4" />
+                <span className="text-sm sm:text-base">Table</span>
+              </button>
+              <button
+                onClick={() => setEmployeeViewTab('history')}
+                className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 border-b-2 transition-colors whitespace-nowrap touch-manipulation font-medium ${
+                  employeeViewTab === 'history'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <History className="w-4 h-4" />
+                <span className="text-sm sm:text-base">Asset History</span>
+              </button>
+            </div>
+            {/* Add Asset Button */}
+            {employeeViewTab === 'assets' && employeeAssets.length > 0 && (
+              <button
+                onClick={onAddClick}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+              >
+                <Package className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Asset</span>
+                <span className="sm:hidden">Add</span>
+              </button>
+            )}
           </div>
 
           {employeeViewTab === 'assets' && (
             <>
               {employeeAssets.length > 0 ? (
                 <>
-                  <AssetsSectionHeader
-                    assetCount={employeeAssets.length}
-                    totalAcqCost={totalEmployeeAcqCost}
-                    onAddClick={onAddClick}
-                  />
-
-                  <div className="hidden sm:flex items-center gap-1 sm:gap-2 mb-6 border-b border-slate-200 overflow-x-auto">
-                    <button
-                      onClick={() => setViewMode('cards')}
-                      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 border-b-2 transition-colors whitespace-nowrap touch-manipulation ${
-                        viewMode === 'cards'
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                      <span className="text-sm sm:text-base">Cards</span>
-                    </button>
-                    <button
-                      onClick={() => setViewMode('table')}
-                      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 border-b-2 transition-colors whitespace-nowrap touch-manipulation ${
-                        viewMode === 'table'
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <Table className="w-4 h-4" />
-                      <span className="text-sm sm:text-base">Table</span>
-                    </button>
-                  </div>
-
                   {viewMode === 'cards' && selectedAssets && (
                     <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
                       <div className="flex items-center gap-3">

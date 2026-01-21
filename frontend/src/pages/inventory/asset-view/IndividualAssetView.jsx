@@ -309,6 +309,12 @@ function IndividualAssetView({
                   <span className="text-sm text-gray-600">Category</span>
                   <span className="font-medium text-gray-900">{asset.category?.name || 'N/A'}</span>
                 </div>
+                {asset.equipment && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">Equipment</span>
+                    <span className="font-medium text-gray-900">{asset.equipment.brand} {asset.equipment.model}</span>
+                  </div>
+                )}
                 {asset.purchase_date && (
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100">
                     <span className="text-sm text-gray-600">Purchase Date</span>

@@ -21,6 +21,7 @@ import {
   Wrench,
   FileSearch,
   Calendar,
+  Monitor,
 } from 'lucide-react'
 import Logo from '../../assets/logos.png'
 
@@ -95,6 +96,7 @@ function InventoryNavBarContent({ user, onLogout, location }) {
       type: 'dropdown',
       items: [
         { name: 'Assets', icon: Package, path: '/inventory/assets' },
+        { name: 'Equipment', icon: Monitor, path: '/inventory/equipment' },
         { name: 'Categories', icon: Package, path: '/inventory/asset-category' },
         { name: 'Subcategories', icon: Package, path: '/inventory/asset-subcategories' },
         { name: 'Asset Status', icon: CheckCircle, path: '/inventory/statuses' },
