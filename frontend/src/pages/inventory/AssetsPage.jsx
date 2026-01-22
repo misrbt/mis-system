@@ -333,6 +333,10 @@ function AssetsPage() {
         name: `${eq.brand} ${eq.model}`,
         brand: eq.brand,
         model: eq.model,
+        asset_category_id: eq.asset_category_id,
+        subcategory_id: eq.subcategory_id,
+        category_name: eq.category?.name,
+        subcategory_name: eq.subcategory?.name,
       })),
     [equipmentList]
   )
@@ -354,6 +358,10 @@ function AssetsPage() {
     mutationFn: (data) => apiClient.post('/assets', data),
     onSuccess: () => {
       queryClient.invalidateQueries(['assets'])
+      if (formData.assigned_to_employee_id) {
+        queryClient.invalidateQueries(['employeeAssets', formData.assigned_to_employee_id])
+        queryClient.invalidateQueries(['employee', formData.assigned_to_employee_id])
+      }
       notifySuccess('Success', 'Asset created successfully')
       setIsAddModalOpen(false)
       setComponents([]) // Reset components after successful creation
@@ -391,7 +399,13 @@ function AssetsPage() {
     mutationFn: (id) => apiClient.delete(`/assets/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries(['assets'])
-      notifySuccess('Deleted!', 'Asset deleted successfully')
+      Swal.fire({
+        icon: 'success',
+        title: 'Deleted!',
+        text: 'Asset deleted successfully',
+        timer: 2000,
+        showConfirmButton: false,
+      })
     },
     onError: (error) => {
       notifyError('Failed to delete asset', error)
@@ -444,12 +458,11 @@ function AssetsPage() {
         newData.subcategory_id = ''
       }
 
+      const categoryName = categories?.find(cat => cat.id == newData.asset_category_id)?.name || ''
+      const subcategoryName = subcategories?.find(sub => sub.id == newData.subcategory_id)?.name || ''
+
       // Auto-generate asset name when relevant fields change
       if (['asset_category_id', 'subcategory_id', 'brand', 'model'].includes(name)) {
-        // Find category and subcategory names
-        const categoryName = categories?.find(cat => cat.id == newData.asset_category_id)?.name || ''
-        const subcategoryName = subcategories?.find(sub => sub.id == newData.subcategory_id)?.name || ''
-
         // Build asset name from parts (filter out empty strings)
         const parts = [categoryName, subcategoryName, newData.brand, newData.model]
           .map(part => part?.trim())
@@ -461,9 +474,23 @@ function AssetsPage() {
         }
       }
 
+      if (name === 'asset_category_id' && isAddModalOpen) {
+        const lowerCategoryName = categoryName.toLowerCase()
+        const isMonitorCategory = lowerCategoryName.includes('monitor') || lowerCategoryName.includes('display')
+        const refreshRate = newData.specifications?.refresh_rate
+        const hasRefreshRate = refreshRate !== undefined && refreshRate !== null && refreshRate !== ''
+
+        if (isMonitorCategory && !hasRefreshRate) {
+          newData.specifications = {
+            ...(newData.specifications || {}),
+            refresh_rate: 60,
+          }
+        }
+      }
+
       return newData
     })
-  }, [categories, subcategories])
+  }, [categories, isAddModalOpen, subcategories])
 
   const handleVendorChange = useCallback((value) => {
     setFormData((prev) => ({ ...prev, vendor_id: value }))

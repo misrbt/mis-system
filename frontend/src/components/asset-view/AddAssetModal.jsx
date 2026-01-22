@@ -30,12 +30,42 @@ const AddAssetModal = ({
   onAddVendor,
 }) => {
   const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const categoryId = formData.asset_category_id ? Number(formData.asset_category_id) : null
+  const subcategoryId = formData.subcategory_id ? Number(formData.subcategory_id) : null
+  const filteredEquipmentOptions = safeEquipmentOptions.filter((eq) => {
+    if (categoryId && Number(eq.asset_category_id) !== categoryId) return false
+    if (subcategoryId && Number(eq.subcategory_id) !== subcategoryId) return false
+    return true
+  })
+  const effectiveEquipmentOptions = subcategoryId
+    ? filteredEquipmentOptions
+    : categoryId
+      ? (filteredEquipmentOptions.length ? filteredEquipmentOptions : safeEquipmentOptions)
+      : filteredEquipmentOptions
+  const buildCategoryLabel = (eq) =>
+    [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')
   const brandOptions = Array.from(
-    new Set(safeEquipmentOptions.map((eq) => eq.brand).filter(Boolean))
-  ).map((brand) => ({ id: brand, name: brand }))
+    new Map(
+      effectiveEquipmentOptions
+        .filter((eq) => eq.brand)
+        .map((eq) => [eq.brand, buildCategoryLabel(eq)])
+    ).entries()
+  ).map(([brand, categoryLabel]) => ({
+    id: brand,
+    name: brand,
+    categoryLabel,
+  }))
   const modelOptions = Array.from(
-    new Set(safeEquipmentOptions.map((eq) => eq.model).filter(Boolean))
-  ).map((model) => ({ id: model, name: model }))
+    new Map(
+      effectiveEquipmentOptions
+        .filter((eq) => eq.model)
+        .map((eq) => [eq.model, buildCategoryLabel(eq)])
+    ).entries()
+  ).map(([model, categoryLabel]) => ({
+    id: model,
+    name: model,
+    categoryLabel,
+  }))
 
   // Helper to check if selected category is Desktop PC
   const isDesktopPCCategory = () => {
@@ -316,7 +346,7 @@ const AddAssetModal = ({
           )}
 
           {/* Brand & Model */}
-          {!isDesktopPCCategory() && (
+          {!isDesktopPCCategory() && formData.asset_category_id && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Brand</label>
@@ -326,6 +356,7 @@ const AddAssetModal = ({
                   value={formData.brand}
                   onChange={(value) => onInputChange('brand', value)}
                   displayField="name"
+                  secondaryField="categoryLabel"
                   placeholder="Select brand..."
                   emptyMessage="No brands found"
                 />
@@ -338,6 +369,7 @@ const AddAssetModal = ({
                   value={formData.model}
                   onChange={(value) => onInputChange('model', value)}
                   displayField="name"
+                  secondaryField="categoryLabel"
                   placeholder="Select model..."
                   emptyMessage="No models found"
                 />

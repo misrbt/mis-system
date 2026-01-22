@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   Package,
   Calendar,
@@ -21,6 +22,7 @@ import {
   QrCode,
   Barcode,
   Eye,
+  ExternalLink,
 } from 'lucide-react'
 import SearchableSelect from '../SearchableSelect'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
@@ -64,18 +66,49 @@ const AssetCard = ({
   // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const navigate = useNavigate()
+  const categoryId = editFormData.asset_category_id ? Number(editFormData.asset_category_id) : null
+  const subcategoryId = editFormData.subcategory_id ? Number(editFormData.subcategory_id) : null
+  const filteredEquipmentOptions = safeEquipmentOptions.filter((eq) => {
+    if (categoryId && Number(eq.asset_category_id) !== categoryId) return false
+    if (subcategoryId && Number(eq.subcategory_id) !== subcategoryId) return false
+    return true
+  })
+  const effectiveEquipmentOptions = subcategoryId
+    ? filteredEquipmentOptions
+    : categoryId
+      ? (filteredEquipmentOptions.length ? filteredEquipmentOptions : safeEquipmentOptions)
+      : filteredEquipmentOptions
+  const buildCategoryLabel = (eq) =>
+    [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')
   const brandOptions = Array.from(
-    new Set(
-      [editFormData.brand, ...safeEquipmentOptions.map((eq) => eq.brand)]
+    new Map(
+      [editFormData.brand, ...effectiveEquipmentOptions.map((eq) => eq.brand)]
         .filter(Boolean)
-    )
-  ).map((brand) => ({ id: brand, name: brand }))
+        .map((brand) => {
+          const match = effectiveEquipmentOptions.find((eq) => eq.brand === brand)
+          return [brand, match ? buildCategoryLabel(match) : '']
+        })
+    ).entries()
+  ).map(([brand, categoryLabel]) => ({
+    id: brand,
+    name: brand,
+    categoryLabel,
+  }))
   const modelOptions = Array.from(
-    new Set(
-      [editFormData.model, ...safeEquipmentOptions.map((eq) => eq.model)]
+    new Map(
+      [editFormData.model, ...effectiveEquipmentOptions.map((eq) => eq.model)]
         .filter(Boolean)
-    )
-  ).map((model) => ({ id: model, name: model }))
+        .map((model) => {
+          const match = effectiveEquipmentOptions.find((eq) => eq.model === model)
+          return [model, match ? buildCategoryLabel(match) : '']
+        })
+    ).entries()
+  ).map(([model, categoryLabel]) => ({
+    id: model,
+    name: model,
+    categoryLabel,
+  }))
 
   // Check if asset is Desktop PC
   const isDesktopPC = asset.category?.name?.toLowerCase().includes('desktop') ||
@@ -195,24 +228,30 @@ const AssetCard = ({
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
-            <SearchableSelect
-              label=""
-              options={brandOptions}
-              value={editFormData.brand}
-              onChange={(value) => onChange('brand', value)}
-              displayField="name"
-              placeholder="Select brand..."
-              emptyMessage="No brands found"
-            />
-            <SearchableSelect
-              label=""
-              options={modelOptions}
-              value={editFormData.model}
-              onChange={(value) => onChange('model', value)}
-              displayField="name"
-              placeholder="Select model..."
-              emptyMessage="No models found"
-            />
+            {editFormData.asset_category_id && (
+              <SearchableSelect
+                label=""
+                options={brandOptions}
+                value={editFormData.brand}
+                onChange={(value) => onChange('brand', value)}
+                displayField="name"
+                secondaryField="categoryLabel"
+                placeholder="Select brand..."
+                emptyMessage="No brands found"
+              />
+            )}
+            {editFormData.asset_category_id && (
+              <SearchableSelect
+                label=""
+                options={modelOptions}
+                value={editFormData.model}
+                onChange={(value) => onChange('model', value)}
+                displayField="name"
+                secondaryField="categoryLabel"
+                placeholder="Select model..."
+                emptyMessage="No brands found"
+              />
+            )}
             <input
               type="text"
               value={editFormData.serial_number}
@@ -587,9 +626,23 @@ const AssetCard = ({
                 {/* Sub-Components (Desktop PC) */}
                 {isDesktopPC && components.length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-slate-200">
-                    <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                      <Package className="w-3 h-3" />
-                      Components ({components.length})
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                        <Package className="w-3 h-3" />
+                        Components ({components.length})
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate(`/inventory/assets/${asset.id}/components`)
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100"
+                        title="View components"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        View
+                      </button>
                     </div>
                     {components.map((comp) => (
                       <div key={comp.id} className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded border border-slate-100">

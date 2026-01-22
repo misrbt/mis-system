@@ -10,6 +10,7 @@ import {
 import Modal from '../../components/Modal'
 import DataTable from '../../components/DataTable'
 import equipmentService from '../../services/equipmentService'
+import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 
 function EquipmentPage() {
@@ -24,7 +25,11 @@ function EquipmentPage() {
     brand: '',
     model: '',
     description: '',
+    asset_category_id: '',
+    subcategory_id: '',
   })
+  const [categories, setCategories] = useState([])
+  const [subcategories, setSubcategories] = useState([])
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
 
@@ -50,9 +55,52 @@ function EquipmentPage() {
     fetchEquipment()
   }, [])
 
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await apiClient.get('/asset-categories')
+        const data = response.data?.data ?? response.data ?? []
+        setCategories(Array.isArray(data) ? data : [])
+      } catch (error) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: error.response?.data?.message || 'Failed to fetch categories',
+        })
+      }
+    }
+    fetchCategories()
+  }, [])
+
+  useEffect(() => {
+    const fetchSubcategories = async () => {
+      if (!formData.asset_category_id) {
+        setSubcategories([])
+        return
+      }
+      setSubcategories([])
+      try {
+        const response = await apiClient.get(`/asset-categories/${formData.asset_category_id}/subcategories`)
+        const data = response.data?.data ?? response.data ?? []
+        setSubcategories(Array.isArray(data) ? data : [])
+      } catch (error) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: error.response?.data?.message || 'Failed to fetch subcategories',
+        })
+      }
+    }
+    fetchSubcategories()
+  }, [formData.asset_category_id])
+
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'asset_category_id' ? { subcategory_id: '' } : {}),
+    }))
   }
 
   const openAddModal = () => {
@@ -60,6 +108,8 @@ function EquipmentPage() {
       brand: '',
       model: '',
       description: '',
+      asset_category_id: '',
+      subcategory_id: '',
     })
     setIsAddModalOpen(true)
   }
@@ -70,6 +120,8 @@ function EquipmentPage() {
       brand: equipment.brand || '',
       model: equipment.model || '',
       description: equipment.description || '',
+      asset_category_id: equipment.asset_category_id || '',
+      subcategory_id: equipment.subcategory_id || '',
     })
     setIsEditModalOpen(true)
   }, [])
@@ -178,6 +230,20 @@ function EquipmentPage() {
         ),
       },
       {
+        accessorKey: 'category',
+        header: 'Category',
+        cell: (info) => (
+          <div className="text-sm text-slate-700">{info.getValue()?.name || 'N/A'}</div>
+        ),
+      },
+      {
+        accessorKey: 'subcategory',
+        header: 'Subcategory',
+        cell: (info) => (
+          <div className="text-sm text-slate-700">{info.getValue()?.name || 'N/A'}</div>
+        ),
+      },
+      {
         id: 'actions',
         header: 'Actions',
         cell: ({ row }) => (
@@ -211,6 +277,8 @@ function EquipmentPage() {
       { accessorKey: 'brand', header: 'Brand' },
       { accessorKey: 'model', header: 'Model' },
       { accessorKey: 'description', header: 'Description' },
+      { accessorKey: 'category', header: 'Category' },
+      { accessorKey: 'subcategory', header: 'Subcategory' },
     ],
     []
   )
@@ -318,6 +386,11 @@ function EquipmentPage() {
                 {equipment.description && (
                   <div className="text-xs text-slate-500 mb-3">{equipment.description}</div>
                 )}
+                {(equipment.category || equipment.subcategory) && (
+                  <div className="text-xs text-slate-500 mb-3">
+                    {[equipment.category?.name, equipment.subcategory?.name].filter(Boolean).join(' / ')}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 mt-2">
                   <button
@@ -416,6 +489,46 @@ function EquipmentPage() {
         <form onSubmit={handleCreate} className="space-y-5">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Category
+            </label>
+            <select
+              name="asset_category_id"
+              value={formData.asset_category_id}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            >
+              <option value="">Select category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {formData.asset_category_id && subcategories.length > 0 && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Subcategory
+              </label>
+              <select
+                name="subcategory_id"
+                value={formData.subcategory_id}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              >
+                <option value="">Select subcategory</option>
+                {subcategories.map((subcategory) => (
+                  <option key={subcategory.id} value={subcategory.id}>
+                    {subcategory.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
               Brand <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -500,6 +613,46 @@ function EquipmentPage() {
       >
         <form onSubmit={handleUpdate} className="space-y-5">
            <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Category
+            </label>
+            <select
+              name="asset_category_id"
+              value={formData.asset_category_id}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            >
+              <option value="">Select category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {formData.asset_category_id && subcategories.length > 0 && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Subcategory
+              </label>
+              <select
+                name="subcategory_id"
+                value={formData.subcategory_id}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              >
+                <option value="">Select subcategory</option>
+                {subcategories.map((subcategory) => (
+                  <option key={subcategory.id} value={subcategory.id}>
+                    {subcategory.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Brand <span className="text-red-500">*</span>
             </label>

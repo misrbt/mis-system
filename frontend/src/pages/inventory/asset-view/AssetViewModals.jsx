@@ -5,6 +5,7 @@ import CodeModal from "./CodeModal";
 import EditAssetModal from "./EditAssetModal";
 import RemarksModal from "./RemarksModal";
 import VendorModal from "./VendorModal";
+import RepairFormModal from "../../../components/RepairFormModal";
 
 function AssetViewModals({ controller, isEmployeeView }) {
   const {
@@ -63,6 +64,9 @@ function AssetViewModals({ controller, isEmployeeView }) {
     bulkTransferPending,
     updateAssetPending,
     deleteAssetPending,
+    isRepairModalOpen,
+    repairModalAsset,
+    closeRepairModal,
   } = controller;
 
   return (
@@ -153,6 +157,12 @@ function AssetViewModals({ controller, isEmployeeView }) {
             onChange={(field, value) => handleInputChange(field, value)}
             onSave={handleSaveEdit}
             isPending={updateAssetPending}
+          />
+
+          <RepairFormModal
+            isOpen={isRepairModalOpen}
+            onClose={closeRepairModal}
+            asset={repairModalAsset}
           />
         </>
       )}

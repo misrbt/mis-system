@@ -25,6 +25,8 @@ class Asset extends Model
         'estimate_life',
         'vendor_id',
         'status_id',
+        'defective_at',
+        'delete_after_at',
         'remarks',
         'specifications',
         'assigned_to_employee_id',
@@ -39,6 +41,8 @@ class Asset extends Model
         'acq_cost' => 'float',
         'estimate_life' => 'float',
         'specifications' => 'array',
+        'defective_at' => 'datetime',
+        'delete_after_at' => 'datetime',
     ];
 
     public function category()
@@ -399,4 +403,5 @@ class Asset extends Model
         $this->save();
         return $this->barcode;
     }
+
 }

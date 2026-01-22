@@ -189,6 +189,10 @@ export default function useAssetViewController({ id, employeeId }) {
         name: `${eq.brand} ${eq.model}`.trim(),
         brand: eq.brand,
         model: eq.model,
+        asset_category_id: eq.asset_category_id,
+        subcategory_id: eq.subcategory_id,
+        category_name: eq.category?.name,
+        subcategory_name: eq.subcategory?.name,
       })),
     [equipment]
   );
@@ -662,12 +666,11 @@ export default function useAssetViewController({ id, employeeId }) {
         newData.subcategory_id = '';
       }
 
+      const categoryName = categories?.find(cat => cat.id == newData.asset_category_id)?.name || '';
+      const subcategoryName = addSubcategories?.find(sub => sub.id == newData.subcategory_id)?.name || '';
+
       // Auto-generate asset name when relevant fields change
       if (['asset_category_id', 'subcategory_id', 'brand', 'model'].includes(field)) {
-        // Find category and subcategory names
-        const categoryName = categories?.find(cat => cat.id == newData.asset_category_id)?.name || '';
-        const subcategoryName = addSubcategories?.find(sub => sub.id == newData.subcategory_id)?.name || '';
-
         // Build asset name from parts (filter out empty strings)
         const parts = [categoryName, subcategoryName, newData.brand, newData.model]
           .map(part => part?.trim())
@@ -676,6 +679,20 @@ export default function useAssetViewController({ id, employeeId }) {
         const generatedName = parts.join(' ');
         if (generatedName) {
           newData.asset_name = generatedName;
+        }
+      }
+
+      if (field === 'asset_category_id') {
+        const lowerCategoryName = categoryName.toLowerCase();
+        const isMonitorCategory = lowerCategoryName.includes('monitor') || lowerCategoryName.includes('display');
+        const refreshRate = newData.specifications?.refresh_rate;
+        const hasRefreshRate = refreshRate !== undefined && refreshRate !== null && refreshRate !== '';
+
+        if (isMonitorCategory && !hasRefreshRate) {
+          newData.specifications = {
+            ...(newData.specifications || {}),
+            refresh_rate: 60,
+          };
         }
       }
 
@@ -842,16 +859,18 @@ export default function useAssetViewController({ id, employeeId }) {
 
       const selectedStatus = statuses.find((s) => s.id === statusId);
 
+      if (selectedStatus?.name === "Under Repair") {
+        setTimeout(() => {
+          setRepairModalAssetId(assetId);
+          setIsRepairModalOpen(true);
+        }, 3000);
+      }
+
       Swal.fire({
         icon: "success",
         title: "Status Updated",
         timer: 1200,
         showConfirmButton: false,
-      }).then(() => {
-        if (selectedStatus?.name === "Under Repair") {
-          setRepairModalAssetId(assetId);
-          setIsRepairModalOpen(true);
-        }
       });
 
       setStatusPickerFor(null);

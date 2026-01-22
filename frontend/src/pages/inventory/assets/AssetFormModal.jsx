@@ -38,12 +38,42 @@ const AssetFormModal = ({
   // Ensure categories is always an array
   const safeCategories = Array.isArray(categories) ? categories : []
   const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const categoryId = formData.asset_category_id ? Number(formData.asset_category_id) : null
+  const subcategoryId = formData.subcategory_id ? Number(formData.subcategory_id) : null
+  const filteredEquipmentOptions = safeEquipmentOptions.filter((eq) => {
+    if (categoryId && Number(eq.asset_category_id) !== categoryId) return false
+    if (subcategoryId && Number(eq.subcategory_id) !== subcategoryId) return false
+    return true
+  })
+  const effectiveEquipmentOptions = subcategoryId
+    ? filteredEquipmentOptions
+    : categoryId
+      ? (filteredEquipmentOptions.length ? filteredEquipmentOptions : safeEquipmentOptions)
+      : filteredEquipmentOptions
+  const buildCategoryLabel = (eq) =>
+    [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')
   const brandOptions = Array.from(
-    new Set(safeEquipmentOptions.map((eq) => eq.brand).filter(Boolean))
-  ).map((brand) => ({ id: brand, name: brand }))
+    new Map(
+      effectiveEquipmentOptions
+        .filter((eq) => eq.brand)
+        .map((eq) => [eq.brand, buildCategoryLabel(eq)])
+    ).entries()
+  ).map(([brand, categoryLabel]) => ({
+    id: brand,
+    name: brand,
+    categoryLabel,
+  }))
   const modelOptions = Array.from(
-    new Set(safeEquipmentOptions.map((eq) => eq.model).filter(Boolean))
-  ).map((model) => ({ id: model, name: model }))
+    new Map(
+      effectiveEquipmentOptions
+        .filter((eq) => eq.model)
+        .map((eq) => [eq.model, buildCategoryLabel(eq)])
+    ).entries()
+  ).map(([model, categoryLabel]) => ({
+    id: model,
+    name: model,
+    categoryLabel,
+  }))
 
   const placeholders = usePlaceholders
     ? {
@@ -156,12 +186,13 @@ const AssetFormModal = ({
             {formData.asset_category_id && subcategories?.length > 0 && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Subcategory <span className="text-slate-500 text-xs font-normal">(Optional)</span>
+                  Subcategory <span className="text-red-500">*</span>
                 </label>
                 <select
                   name="subcategory_id"
                   value={formData.subcategory_id || ''}
                   onChange={onInputChange}
+                  required
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Select subcategory</option>
@@ -348,7 +379,7 @@ const AssetFormModal = ({
               </div>
             )}
 
-            {!isDesktopPCCategory() && (
+            {!isDesktopPCCategory() && formData.asset_category_id && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Brand</label>
                 <SearchableSelect
@@ -357,13 +388,14 @@ const AssetFormModal = ({
                   value={formData.brand}
                   onChange={(value) => onInputChange({ target: { name: 'brand', value } })}
                   displayField="name"
+                  secondaryField="categoryLabel"
                   placeholder="Select brand..."
                   emptyMessage="No brands found"
                 />
               </div>
             )}
 
-            {!isDesktopPCCategory() && (
+            {!isDesktopPCCategory() && formData.asset_category_id && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Model</label>
                 <SearchableSelect
@@ -372,6 +404,7 @@ const AssetFormModal = ({
                   value={formData.model}
                   onChange={(value) => onInputChange({ target: { name: 'model', value } })}
                   displayField="name"
+                  secondaryField="categoryLabel"
                   placeholder="Select model..."
                   emptyMessage="No models found"
                 />

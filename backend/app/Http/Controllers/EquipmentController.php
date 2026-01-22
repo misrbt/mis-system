@@ -14,7 +14,7 @@ class EquipmentController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Equipment::query();
+            $query = Equipment::with(['category', 'subcategory']);
 
             // Search by brand or model
             if ($request->has('search') && $request->search) {
@@ -46,7 +46,7 @@ class EquipmentController extends Controller
     public function show($id)
     {
         try {
-            $equipment = Equipment::with(['assets'])->findOrFail($id);
+            $equipment = Equipment::with(['assets', 'category', 'subcategory'])->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -70,6 +70,8 @@ class EquipmentController extends Controller
             'brand' => 'required|string|max:255',
             'model' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'asset_category_id' => 'nullable|exists:asset_category,id',
+            'subcategory_id' => 'nullable|exists:asset_subcategories,id',
         ]);
 
         if ($validator->fails()) {
@@ -85,6 +87,8 @@ class EquipmentController extends Controller
                 'brand' => $request->brand,
                 'model' => $request->model,
                 'description' => $request->description,
+                'asset_category_id' => $request->input('asset_category_id') ?: null,
+                'subcategory_id' => $request->input('subcategory_id') ?: null,
             ]);
 
             return response()->json([
@@ -110,6 +114,8 @@ class EquipmentController extends Controller
             'brand' => 'required|string|max:255',
             'model' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'asset_category_id' => 'nullable|exists:asset_category,id',
+            'subcategory_id' => 'nullable|exists:asset_subcategories,id',
         ]);
 
         if ($validator->fails()) {
@@ -127,6 +133,8 @@ class EquipmentController extends Controller
                 'brand' => $request->brand,
                 'model' => $request->model,
                 'description' => $request->description,
+                'asset_category_id' => $request->input('asset_category_id') ?: null,
+                'subcategory_id' => $request->input('subcategory_id') ?: null,
             ]);
 
             return response()->json([
