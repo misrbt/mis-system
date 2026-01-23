@@ -1,11 +1,5 @@
-/**
- * Asset Cards View Component
- * Displays assets in a card grid layout with inline editing
- */
-
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import {
   Package,
   Calendar,
@@ -22,11 +16,13 @@ import {
   QrCode,
   Barcode,
   Eye,
-  ExternalLink,
+  Boxes,
 } from 'lucide-react'
 import SearchableSelect from '../SearchableSelect'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
 import apiClient from '../../services/apiClient'
+import SpecificationFields from '../specifications/SpecificationFields'
+import Swal from 'sweetalert2'
 
 // Small helper component for info cards
 const InfoCard = ({ label, value, icon }) => (
@@ -44,6 +40,7 @@ const AssetCard = ({
   isEditing,
   editFormData,
   categories,
+  editSubcategories,
   statuses,
   vendors,
   equipmentOptions,
@@ -61,12 +58,28 @@ const AssetCard = ({
   onStatusPickerToggle,
   onCodeView,
   onCardClick,
+  onComponentsClick,
   isPending,
 }) => {
   // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
-  const navigate = useNavigate()
+  const safeEditSubcategories = useMemo(
+    () => (Array.isArray(editSubcategories) ? editSubcategories : []),
+    [editSubcategories]
+  )
+  const resolvedEditSubcategories = useMemo(() => {
+    if (!editFormData.subcategory_id) return safeEditSubcategories
+    const hasCurrent = safeEditSubcategories.some(
+      (sub) => String(sub.id) === String(editFormData.subcategory_id)
+    )
+    if (hasCurrent) return safeEditSubcategories
+    const fallbackName = asset.subcategory?.name || 'Current subcategory'
+    return [
+      ...safeEditSubcategories,
+      { id: editFormData.subcategory_id, name: fallbackName },
+    ]
+  }, [asset.subcategory?.name, editFormData.subcategory_id, safeEditSubcategories])
   const categoryId = editFormData.asset_category_id ? Number(editFormData.asset_category_id) : null
   const subcategoryId = editFormData.subcategory_id ? Number(editFormData.subcategory_id) : null
   const filteredEquipmentOptions = safeEquipmentOptions.filter((eq) => {
@@ -74,19 +87,14 @@ const AssetCard = ({
     if (subcategoryId && Number(eq.subcategory_id) !== subcategoryId) return false
     return true
   })
-  const effectiveEquipmentOptions = subcategoryId
-    ? filteredEquipmentOptions
-    : categoryId
-      ? (filteredEquipmentOptions.length ? filteredEquipmentOptions : safeEquipmentOptions)
-      : filteredEquipmentOptions
   const buildCategoryLabel = (eq) =>
     [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')
   const brandOptions = Array.from(
     new Map(
-      [editFormData.brand, ...effectiveEquipmentOptions.map((eq) => eq.brand)]
+      [editFormData.brand, ...filteredEquipmentOptions.map((eq) => eq.brand)]
         .filter(Boolean)
         .map((brand) => {
-          const match = effectiveEquipmentOptions.find((eq) => eq.brand === brand)
+          const match = filteredEquipmentOptions.find((eq) => eq.brand === brand)
           return [brand, match ? buildCategoryLabel(match) : '']
         })
     ).entries()
@@ -97,10 +105,10 @@ const AssetCard = ({
   }))
   const modelOptions = Array.from(
     new Map(
-      [editFormData.model, ...effectiveEquipmentOptions.map((eq) => eq.model)]
+      [editFormData.model, ...filteredEquipmentOptions.map((eq) => eq.model)]
         .filter(Boolean)
         .map((model) => {
-          const match = effectiveEquipmentOptions.find((eq) => eq.model === model)
+          const match = filteredEquipmentOptions.find((eq) => eq.model === model)
           return [model, match ? buildCategoryLabel(match) : '']
         })
     ).entries()
@@ -121,28 +129,106 @@ const AssetCard = ({
       const response = await apiClient.get(`/assets/${asset.id}/components`)
       return response.data
     },
-    enabled: isDesktopPC && !isEditing,
+    enabled: isDesktopPC,
   })
 
-  const components = componentsData?.data || []
+  const components = useMemo(
+    () => componentsData?.data || [],
+    [componentsData]
+  )
+  const [componentEdits, setComponentEdits] = useState([])
+  const [isComponentSaving, setIsComponentSaving] = useState(false)
+  const componentsById = useMemo(
+    () => new Map(components.map((comp) => [comp.id, comp])),
+    [components]
+  )
 
-  const handleCardClick = (e) => {
-    // Don't navigate if in edit mode
-    if (isEditing) {
-      return
+  useEffect(() => {
+    if (!isEditing || !isDesktopPC) return
+    setComponentEdits(
+      components.map((comp) => ({
+        id: comp.id,
+        component_name: comp.component_name || '',
+        brand: comp.brand || '',
+        model: comp.model || '',
+        specifications: comp.specifications || {},
+      }))
+    )
+  }, [components, isDesktopPC, isEditing])
+
+  const updateComponentEdit = (componentId, field, value) => {
+    setComponentEdits((prev) =>
+      prev.map((comp) => (comp.id === componentId ? { ...comp, [field]: value } : comp))
+    )
+  }
+
+  const saveDesktopComponents = async () => {
+    if (!isDesktopPC || componentEdits.length === 0) return true
+
+    const updates = componentEdits
+      .map((edit) => {
+        const original = componentsById.get(edit.id)
+        if (!original) return null
+
+        const hasSpecChange =
+          JSON.stringify(edit.specifications || {}) !==
+          JSON.stringify(original.specifications || {})
+        const hasBrandChange = (edit.brand || '') !== (original.brand || '')
+        const hasModelChange = (edit.model || '') !== (original.model || '')
+
+        if (!hasSpecChange && !hasBrandChange && !hasModelChange) {
+          return null
+        }
+
+        const statusId = original.status_id || original.status?.id
+        if (!statusId) {
+          return { id: edit.id, error: 'missing-status' }
+        }
+
+        return {
+          id: edit.id,
+          payload: {
+            category_id: Number(original.category_id),
+            subcategory_id: original.subcategory_id ? Number(original.subcategory_id) : null,
+            component_name: original.component_name || edit.component_name || '',
+            brand: edit.brand?.trim() || null,
+            model: edit.model?.trim() || null,
+            serial_number: original.serial_number || null,
+            remarks: original.remarks || null,
+            status_id: Number(statusId),
+            specifications: edit.specifications || {},
+          },
+        }
+      })
+      .filter(Boolean)
+
+    if (updates.find((item) => item.error === 'missing-status')) {
+      Swal.fire(
+        'Error',
+        'Some components are missing status. Please edit in Components page.',
+        'error'
+      )
+      return false
     }
 
-    // Don't navigate if clicking on interactive elements
-    if (
-      e.target.closest('button') ||
-      e.target.closest('select') ||
-      e.target.closest('input') ||
-      e.target.closest('textarea') ||
-      e.target.closest('img')
-    ) {
-      return
+    if (updates.length === 0) return true
+
+    setIsComponentSaving(true)
+    try {
+      await Promise.all(
+        updates.map((item) => apiClient.put(`/asset-components/${item.id}`, item.payload))
+      )
+      return true
+    } catch (error) {
+      Swal.fire(
+        'Error',
+        error.response?.data?.message || 'Failed to update components',
+        'error'
+      )
+      return false
+    } finally {
+      setIsComponentSaving(false)
     }
-    onCardClick?.()
   }
 
   const bookValueNumber = Number.parseFloat(asset?.book_value)
@@ -158,12 +244,11 @@ const AssetCard = ({
 
   return (
     <div
-      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 flex flex-col ${
-        isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200'
+      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 flex flex-col box-border ${
+        isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200 border'
       } ${
-        !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1 cursor-pointer' : ''
-      }`}
-      onClick={handleCardClick}
+        !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1' : ''
+      } ${isEditing ? 'h-auto' : isDetailsExpanded ? 'min-h-[260px] h-auto' : 'h-[260px]'}`}
     >
       {/* Selection Checkbox */}
       {onSelect && !isEditing && (
@@ -192,8 +277,12 @@ const AssetCard = ({
             </div>
             <div className="flex gap-1.5 sm:gap-2">
               <button
-                onClick={onSave}
-                disabled={isPending}
+                onClick={async () => {
+                  const ok = await saveDesktopComponents()
+                  if (!ok) return
+                  onSave()
+                }}
+                disabled={isPending || isComponentSaving}
                 className="p-2 sm:p-2.5 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm touch-manipulation disabled:opacity-50"
                 title="Save"
               >
@@ -211,109 +300,241 @@ const AssetCard = ({
 
           {/* Edit Form Fields */}
           <div className="space-y-3 flex-1">
-            <input
-              type="text"
-              value={editFormData.asset_name}
-              onChange={(e) => onChange('asset_name', e.target.value)}
-              placeholder="Asset Name"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <select
-              value={editFormData.asset_category_id}
-              onChange={(e) => onChange('asset_category_id', e.target.value)}
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select Category</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-            {editFormData.asset_category_id && (
-              <SearchableSelect
-                label=""
-                options={brandOptions}
-                value={editFormData.brand}
-                onChange={(value) => onChange('brand', value)}
-                displayField="name"
-                secondaryField="categoryLabel"
-                placeholder="Select brand..."
-                emptyMessage="No brands found"
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Asset Name</label>
+              <input
+                type="text"
+                value={editFormData.asset_name}
+                onChange={(e) => onChange('asset_name', e.target.value)}
+                placeholder="Asset Name"
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Category</label>
+              <select
+                value={editFormData.asset_category_id}
+                onChange={(e) => onChange('asset_category_id', e.target.value)}
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Select Category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            {(editFormData.subcategory_id || asset.subcategory?.id) && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-600">Subcategory</label>
+                <select
+                  value={editFormData.subcategory_id || ''}
+                  onChange={(e) => onChange('subcategory_id', e.target.value)}
+                  className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  disabled={!editFormData.asset_category_id}
+                >
+                  <option value="">
+                    {!editFormData.asset_category_id
+                      ? 'Select category first'
+                      : resolvedEditSubcategories.length === 0
+                        ? 'No subcategories available'
+                        : 'Select Subcategory'}
+                  </option>
+                  {resolvedEditSubcategories.map((subcategory) => (
+                    <option key={subcategory.id} value={subcategory.id}>
+                      {subcategory.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
-            {editFormData.asset_category_id && (
-              <SearchableSelect
-                label=""
-                options={modelOptions}
-                value={editFormData.model}
-                onChange={(value) => onChange('model', value)}
-                displayField="name"
-                secondaryField="categoryLabel"
-                placeholder="Select model..."
-                emptyMessage="No brands found"
+            {!isDesktopPC && (
+              <div className="space-y-1">
+                <SearchableSelect
+                  label="Brand"
+                  options={brandOptions}
+                  value={editFormData.brand}
+                  onChange={(value) => onChange('brand', value)}
+                  displayField="name"
+                  secondaryField="categoryLabel"
+                  placeholder="Select brand..."
+                  emptyMessage="No brands found"
+                />
+              </div>
+            )}
+            {!isDesktopPC && (
+              <div className="space-y-1">
+                <SearchableSelect
+                  label="Model"
+                  options={modelOptions}
+                  value={editFormData.model}
+                  onChange={(value) => onChange('model', value)}
+                  displayField="name"
+                  secondaryField="categoryLabel"
+                  placeholder="Select model..."
+                  emptyMessage="No models found"
+                />
+              </div>
+            )}
+            {!isDesktopPC &&
+              editFormData.asset_category_id &&
+              (!resolvedEditSubcategories.length || editFormData.subcategory_id) && (
+                <SpecificationFields
+                  categoryName={
+                    categories.find((cat) => String(cat.id) === String(editFormData.asset_category_id))
+                      ?.name || ''
+                  }
+                  subcategoryName={
+                    resolvedEditSubcategories.find(
+                      (sub) => String(sub.id) === String(editFormData.subcategory_id)
+                    )?.name || ''
+                  }
+                  specifications={editFormData.specifications || {}}
+                  onChange={(specs) => onChange('specifications', specs)}
+                />
+              )}
+            {isDesktopPC && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-600">Desktop PC Components</label>
+                {componentEdits.length ? (
+                  <div className="space-y-3">
+                    {componentEdits.map((comp) => {
+                      const original = componentsById.get(comp.id)
+                      return (
+                        <div key={comp.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold text-slate-600">Component</div>
+                              <div className="font-semibold text-slate-900 truncate">
+                                {original?.component_name || comp.component_name || 'Component'}
+                              </div>
+                            </div>
+                            <span className="text-xs font-medium text-slate-600">
+                              {original?.category?.name || 'Component'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-600">Brand</label>
+                              <input
+                                type="text"
+                                value={comp.brand}
+                                onChange={(e) => updateComponentEdit(comp.id, 'brand', e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-600">Model</label>
+                              <input
+                                type="text"
+                                value={comp.model}
+                                onChange={(e) => updateComponentEdit(comp.id, 'model', e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <SpecificationFields
+                            categoryName={original?.category?.name || ''}
+                            subcategoryName={original?.subcategory?.name || ''}
+                            specifications={comp.specifications || {}}
+                            onChange={(specs) => updateComponentEdit(comp.id, 'specifications', specs)}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    No components yet. Use the Components page to add brand/model.
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Serial Number</label>
+              <input
+                type="text"
+                value={editFormData.serial_number}
+                onChange={(e) => onChange('serial_number', e.target.value)}
+                placeholder="Serial Number"
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-            )}
-            <input
-              type="text"
-              value={editFormData.serial_number}
-              onChange={(e) => onChange('serial_number', e.target.value)}
-              placeholder="Serial Number"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <input
-              type="date"
-              value={editFormData.purchase_date}
-              onChange={(e) => onChange('purchase_date', e.target.value)}
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-            <input
-              type="number"
-              value={editFormData.acq_cost}
-              onChange={(e) => onChange('acq_cost', e.target.value)}
-              placeholder="Acquisition Cost"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <input
-              type="number"
-              value={editFormData.estimate_life}
-              onChange={(e) => onChange('estimate_life', e.target.value)}
-              placeholder="Estimated Life (years)"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <input
-              type="date"
-              value={editFormData.waranty_expiration_date}
-              onChange={(e) => onChange('waranty_expiration_date', e.target.value)}
-              placeholder="Warranty Expiration"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <select
-              value={editFormData.vendor_id}
-              onChange={(e) => onChange('vendor_id', e.target.value)}
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select Vendor</option>
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>{vendor.company_name}</option>
-              ))}
-            </select>
-            <select
-              value={editFormData.status_id}
-              onChange={(e) => onChange('status_id', e.target.value)}
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select Status</option>
-              {statuses.map((status) => (
-                <option key={status.id} value={status.id}>{status.name}</option>
-              ))}
-            </select>
-            <textarea
-              value={editFormData.remarks}
-              onChange={(e) => onChange('remarks', e.target.value)}
-              placeholder="Remarks"
-              rows="2"
-              className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Purchase Date</label>
+              <input
+                type="date"
+                value={editFormData.purchase_date}
+                onChange={(e) => onChange('purchase_date', e.target.value)}
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Acquisition Cost</label>
+              <input
+                type="number"
+                value={editFormData.acq_cost}
+                onChange={(e) => onChange('acq_cost', e.target.value)}
+                placeholder="Acquisition Cost"
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Estimated Life (years)</label>
+              <input
+                type="number"
+                value={editFormData.estimate_life}
+                onChange={(e) => onChange('estimate_life', e.target.value)}
+                placeholder="Estimated Life (years)"
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Warranty Expiration</label>
+              <input
+                type="date"
+                value={editFormData.waranty_expiration_date}
+                onChange={(e) => onChange('waranty_expiration_date', e.target.value)}
+                placeholder="Warranty Expiration"
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Vendor</label>
+              <select
+                value={editFormData.vendor_id}
+                onChange={(e) => onChange('vendor_id', e.target.value)}
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Select Vendor</option>
+                {vendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>{vendor.company_name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Status</label>
+              <select
+                value={editFormData.status_id}
+                onChange={(e) => onChange('status_id', e.target.value)}
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Select Status</option>
+                {statuses.map((status) => (
+                  <option key={status.id} value={status.id}>{status.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Remarks</label>
+              <textarea
+                value={editFormData.remarks}
+                onChange={(e) => onChange('remarks', e.target.value)}
+                placeholder="Remarks"
+                rows="2"
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
         </div>
       ) : (
@@ -347,7 +568,19 @@ const AssetCard = ({
               </div>
 
               {/* Compact Status Picker */}
-              <div className="relative flex-shrink-0">
+              <div className="relative flex-shrink-0 flex items-center gap-2">
+                {isDesktopPC && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onComponentsClick?.()
+                    }}
+                    className="inline-flex items-center justify-center w-9 h-9 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
+                    title="View components"
+                  >
+                    <Boxes className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={onStatusPickerToggle}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
@@ -436,7 +669,7 @@ const AssetCard = ({
           <div className="flex-1 flex flex-col">
             {/* Expanded Details Section */}
             {isDetailsExpanded && (
-              <div className="p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+              <div className="p-4 space-y-4 animate-in slide-in-from-top-2 duration-200 flex-1">
                 {/* Serial Number - Prominent Display */}
                 {asset.serial_number && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -626,23 +859,9 @@ const AssetCard = ({
                 {/* Sub-Components (Desktop PC) */}
                 {isDesktopPC && components.length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-slate-200">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                        <Package className="w-3 h-3" />
-                        Components ({components.length})
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/inventory/assets/${asset.id}/components`)
-                        }}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100"
-                        title="View components"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        View
-                      </button>
+                    <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                      <Package className="w-3 h-3" />
+                      Components ({components.length})
                     </div>
                     {components.map((comp) => (
                       <div key={comp.id} className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded border border-slate-100">
@@ -729,6 +948,7 @@ const AssetCardsView = ({
   editingAssetId,
   editFormData,
   categories,
+  editSubcategories,
   statuses,
   vendors,
   equipmentOptions,
@@ -747,6 +967,7 @@ const AssetCardsView = ({
   onCodeToggle,
   onCodeView,
   onCardClick,
+  onComponentsClick,
   isPending,
 }) => {
   const isSelected = (assetId) => selectedAssets?.includes(assetId)
@@ -760,6 +981,7 @@ const AssetCardsView = ({
           isEditing={editingAssetId === asset.id}
           editFormData={editFormData}
           categories={categories}
+          editSubcategories={editSubcategories}
           statuses={statuses}
           vendors={vendors}
           equipmentOptions={equipmentOptions}
@@ -781,6 +1003,7 @@ const AssetCardsView = ({
           onCodeToggle={(type) => onCodeToggle(asset.id, type)}
           onCodeView={onCodeView}
           onCardClick={() => onCardClick?.(asset.id)}
+          onComponentsClick={() => onComponentsClick?.(asset.id)}
           isPending={isPending}
         />
       ))}

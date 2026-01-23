@@ -45,7 +45,7 @@ const ErrorPage = () => {
           </div>
         </div>
         
-        {process.env.NODE_ENV === 'development' && error?.stack && (
+        {import.meta.env.MODE === 'development' && error?.stack && (
              <div className="bg-slate-900 p-4 overflow-x-auto border-t border-slate-800">
              <summary className="text-xs font-mono text-slate-400 mb-2 cursor-pointer">Stack Trace</summary>
             <pre className="text-xs font-mono text-red-300 whitespace-pre-wrap">

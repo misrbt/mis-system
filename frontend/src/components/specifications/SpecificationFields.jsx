@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { HardDrive, Cpu, Printer, Wifi, Monitor, Camera } from 'lucide-react'
+import { HardDrive, Cpu, Printer, Wifi, Monitor, Camera, Laptop } from 'lucide-react'
 
 /**
  * Dynamic specification fields based on category
@@ -23,6 +23,7 @@ const SpecificationFields = ({ categoryName, subcategoryName, specifications = {
     if (name.includes('network') || name.includes('switch') || name.includes('router')) return 'network'
     if (name.includes('monitor') || name.includes('display')) return 'monitor'
     if (name.includes('cctv') || name.includes('camera')) return 'cctv'
+    if (name.includes('laptop') || name.includes('notebook')) return 'laptop'
     return null
   }
 
@@ -281,8 +282,19 @@ const SpecificationFields = ({ categoryName, subcategoryName, specifications = {
             <label className="block text-xs font-medium text-slate-700 mb-1">Speed (MHz)</label>
             <input
               type="number"
+              step="1"
+              min="0"
               value={specifications.speed || ''}
-              onChange={(e) => handleChange('speed', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value
+                if (value === '') {
+                  handleChange('speed', '')
+                  return
+                }
+
+                const numericValue = Number(value)
+                handleChange('speed', Number.isNaN(numericValue) ? value : Math.round(numericValue))
+              }}
               placeholder="e.g., 3200"
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
             />
@@ -577,6 +589,139 @@ const SpecificationFields = ({ categoryName, subcategoryName, specifications = {
               onChange={(e) => handleChange('storage_support', e.target.value)}
               placeholder="e.g., SD Card, NVR"
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Laptop specifications
+  if (categoryType === 'laptop') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Laptop className="w-5 h-5 text-amber-600" />
+          <h4 className="text-sm font-semibold text-slate-900">Laptop Specifications</h4>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              Processor <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={specifications.processor || ''}
+              onChange={(e) => handleChange('processor', e.target.value)}
+              placeholder="e.g., Intel Core i5-1235U"
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              RAM <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={specifications.ram || ''}
+                onChange={(e) => handleChange('ram', e.target.value)}
+                placeholder="e.g., 16"
+                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                required
+              />
+              <select
+                value={specifications.ram_unit || 'GB'}
+                onChange={(e) => handleChange('ram_unit', e.target.value)}
+                className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              >
+                <option value="GB">GB</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              Storage Capacity <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={specifications.storage_capacity || ''}
+                onChange={(e) => handleChange('storage_capacity', e.target.value)}
+                placeholder="e.g., 512"
+                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                required
+              />
+              <select
+                value={specifications.storage_unit || 'GB'}
+                onChange={(e) => handleChange('storage_unit', e.target.value)}
+                className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              >
+                <option value="GB">GB</option>
+                <option value="TB">TB</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Storage Type</label>
+            <select
+              value={specifications.storage_type || ''}
+              onChange={(e) => handleChange('storage_type', e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+            >
+              <option value="">Select type</option>
+              <option value="SSD">SSD</option>
+              <option value="HDD">HDD</option>
+              <option value="Hybrid">Hybrid</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              Screen Size (inches) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              value={specifications.screen_size || ''}
+              onChange={(e) => handleChange('screen_size', e.target.value)}
+              placeholder="e.g., 14"
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Resolution</label>
+            <select
+              value={specifications.resolution || ''}
+              onChange={(e) => handleChange('resolution', e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+            >
+              <option value="">Select resolution</option>
+              <option value="1366x768">1366x768 (HD)</option>
+              <option value="1920x1080">1920x1080 (Full HD)</option>
+              <option value="2560x1440">2560x1440 (QHD)</option>
+              <option value="3840x2160">3840x2160 (4K)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Graphics</label>
+            <input
+              type="text"
+              value={specifications.gpu || ''}
+              onChange={(e) => handleChange('gpu', e.target.value)}
+              placeholder="e.g., Intel Iris Xe"
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Operating System</label>
+            <input
+              type="text"
+              value={specifications.os || ''}
+              onChange={(e) => handleChange('os', e.target.value)}
+              placeholder="e.g., Windows 11 Pro"
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
             />
           </div>
         </div>

@@ -1,26 +1,15 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  ArrowLeft,
-  Package,
-  Plus,
-  Edit,
-  Trash2,
-  QrCode,
-  Barcode,
-  ArrowRight,
-  X,
-  Save,
-  Monitor,
-  User,
-  Activity,
-  RefreshCw,
-} from 'lucide-react'
+import { Package } from 'lucide-react'
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
-import SpecificationFields from '../../components/specifications/SpecificationFields'
+import AssetComponentsHeader from './asset-components/AssetComponentsHeader'
+import AssetComponentsAddModal from './asset-components/AssetComponentsAddModal'
+import AssetComponentsTransferModal from './asset-components/AssetComponentsTransferModal'
+import AssetComponentsCodeModal from './asset-components/AssetComponentsCodeModal'
+import AssetComponentsGrid from './asset-components/AssetComponentsGrid'
 
 function AssetComponentsPage() {
   const { id } = useParams()
@@ -103,6 +92,18 @@ function AssetComponentsPage() {
     enabled: !!addFormData.category_id && showAddModal,
   })
 
+  const editingCategoryId = editingComponent?.category_id
+
+  // Fetch subcategories for edit mode (based on selected category)
+  const { data: editSubcategoriesData, isLoading: isLoadingEditSubcategories } = useQuery({
+    queryKey: ['component-subcategories', editingCategoryId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/asset-categories/${editingCategoryId}/subcategories`)
+      return response.data
+    },
+    enabled: !!editingCategoryId && !!editingComponent,
+  })
+
   // Fetch vendors
   const { data: vendorsData } = useQuery({
     queryKey: ['vendors'],
@@ -113,11 +114,43 @@ function AssetComponentsPage() {
     enabled: showAddModal,
   })
 
+  // Fetch equipment list for brand/model dropdowns
+  const { data: equipmentData } = useQuery({
+    queryKey: ['equipment'],
+    queryFn: async () => {
+      const response = await apiClient.get('/equipment')
+      return response.data
+    },
+  })
+
   const statuses = statusesData || []
   const categories = categoriesData?.data || []
   const subcategories = subcategoriesData?.data || []
+  const editSubcategories = editSubcategoriesData?.data || []
   const vendors = vendorsData?.data || []
   const components = componentsData || []
+  const equipment = useMemo(
+    () => equipmentData?.data || equipmentData || [],
+    [equipmentData]
+  )
+
+  const equipmentOptions = useMemo(
+    () =>
+      (Array.isArray(equipment) ? equipment : []).map((eq) => ({
+        id: eq.id,
+        name: `${eq.brand || ''} ${eq.model || ''}`.trim(),
+        brand: eq.brand,
+        model: eq.model,
+        asset_category_id: eq.asset_category_id,
+        subcategory_id: eq.subcategory_id,
+        category_name: eq.category?.name,
+        subcategory_name: eq.subcategory?.name,
+      })),
+    [equipment]
+  )
+
+  const buildCategoryLabel = (eq) =>
+    [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')
 
   // Memoize employees to prevent unnecessary re-renders
   const employees = useMemo(() => employeesData?.data || [], [employeesData?.data])
@@ -255,12 +288,120 @@ function AssetComponentsPage() {
 
   const handleAddComponent = (e) => {
     e.preventDefault()
-    addComponentMutation.mutate(addFormData)
+    const normalizedSpecs = { ...(addFormData.specifications || {}) }
+    if (normalizedSpecs.speed !== undefined && normalizedSpecs.speed !== null && normalizedSpecs.speed !== '') {
+      const speedNum = Number(normalizedSpecs.speed)
+      normalizedSpecs.speed = Number.isNaN(speedNum) ? normalizedSpecs.speed : Math.round(speedNum)
+    }
+    addComponentMutation.mutate({
+      ...addFormData,
+      specifications: normalizedSpecs,
+    })
   }
 
   const handleGenerateSerial = () => {
     const serial = buildSerialNumber('COMP')
     setAddFormData((prev) => ({ ...prev, serial_number: serial }))
+  }
+
+  const getCategoryName = (categoryId) => {
+    if (!categoryId) return ''
+    return categories.find((cat) => cat.id == categoryId)?.name || ''
+  }
+
+  const getSubcategoryName = (subcategoryId, list = subcategories) => {
+    if (!subcategoryId) return ''
+    return list.find((sub) => sub.id == subcategoryId)?.name || ''
+  }
+
+  const buildSpecSummary = (categoryName, specs) => {
+    if (!specs || typeof specs !== 'object') return ''
+
+    const name = categoryName?.toLowerCase() || ''
+    const parts = []
+
+    const addPart = (value) => {
+      if (value === undefined || value === null || value === '') return
+      parts.push(String(value).trim())
+    }
+
+    if (name.includes('laptop')) {
+      addPart(specs.processor)
+      if (specs.ram) addPart(`${specs.ram}${specs.ram_unit || 'GB'} RAM`)
+      if (specs.storage_capacity) {
+        const storageLabel = specs.storage_type ? `${specs.storage_type}` : 'Storage'
+        addPart(`${specs.storage_capacity}${specs.storage_unit || 'GB'} ${storageLabel}`)
+      }
+      addPart(specs.screen_size ? `${specs.screen_size}"` : '')
+    } else if (name.includes('memory') || name.includes('ram')) {
+      const capacityValue = specs.capacity ? `${specs.capacity}${specs.capacity_unit || 'GB'}` : ''
+      const speedValue = specs.speed ? `${specs.speed}MHz` : ''
+      const ramParts = [capacityValue, specs.memory_type, speedValue, 'RAM'].filter(Boolean)
+      addPart(ramParts.join(' '))
+    } else if (name.includes('storage') || name.includes('hdd') || name.includes('ssd')) {
+      if (specs.capacity) addPart(`${specs.capacity}${specs.capacity_unit || 'GB'} Storage`)
+      addPart(specs.interface)
+      addPart(specs.form_factor)
+    } else if (name.includes('monitor') || name.includes('display')) {
+      addPart(specs.screen_size ? `${specs.screen_size}"` : '')
+      addPart(specs.resolution)
+      addPart(specs.refresh_rate ? `${specs.refresh_rate}Hz` : '')
+    } else {
+      if (specs.ram) addPart(`${specs.ram}${specs.ram_unit || 'GB'} RAM`)
+      if (specs.capacity) addPart(`${specs.capacity}${specs.capacity_unit || ''}`.trim())
+    }
+
+    return parts.filter(Boolean).join(' / ')
+  }
+
+  const buildComponentName = (data, subcategoryList = subcategories) => {
+    const categoryName = getCategoryName(data.category_id)
+    const subcategoryName = getSubcategoryName(data.subcategory_id, subcategoryList)
+    const baseParts = [categoryName, subcategoryName, data.brand]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean)
+
+    const specSummary = buildSpecSummary(categoryName, data.specifications)
+    const baseName = baseParts.join(' ').trim()
+
+    if (specSummary) {
+      return baseName ? `${baseName} (${specSummary})` : specSummary
+    }
+
+    return baseName
+  }
+
+  const updateAddFormField = (field, value) => {
+    setAddFormData((prev) => {
+      const next = { ...prev, [field]: value }
+      if (field === 'category_id') {
+        next.subcategory_id = ''
+      }
+      if (['category_id', 'subcategory_id', 'brand', 'model', 'specifications'].includes(field)) {
+        const generatedName = buildComponentName(next, subcategories)
+        if (generatedName) {
+          next.component_name = generatedName
+        }
+      }
+      return next
+    })
+  }
+
+  const updateEditField = (field, value) => {
+    setEditingComponent((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, [field]: value }
+      if (field === 'category_id') {
+        next.subcategory_id = ''
+      }
+      if (['category_id', 'subcategory_id', 'brand', 'model', 'specifications'].includes(field)) {
+        const generatedName = buildComponentName(next, editSubcategories)
+        if (generatedName) {
+          next.component_name = generatedName
+        }
+      }
+      return next
+    })
   }
 
   const handleEditSave = (component) => {
@@ -295,14 +436,22 @@ function AssetComponentsPage() {
       return
     }
 
+    const normalizedSpecs = { ...(editData.specifications || {}) }
+    if (normalizedSpecs.speed !== undefined && normalizedSpecs.speed !== null && normalizedSpecs.speed !== '') {
+      const speedNum = Number(normalizedSpecs.speed)
+      normalizedSpecs.speed = Number.isNaN(speedNum) ? normalizedSpecs.speed : Math.round(speedNum)
+    }
+
     const sanitizedData = {
       category_id: category_id,
+      subcategory_id: editData.subcategory_id ? Number(editData.subcategory_id) : null,
       component_name: editData.component_name.trim(),
       brand: editData.brand?.trim() || null,
       model: editData.model?.trim() || null,
       serial_number: editData.serial_number?.trim() || null,
       remarks: editData.remarks?.trim() || null,
       status_id: status_id,
+      specifications: normalizedSpecs,
     }
 
     updateComponentMutation.mutate({
@@ -410,7 +559,7 @@ function AssetComponentsPage() {
         <Package className="w-16 h-16 text-gray-400 mb-4" />
         <h2 className="text-2xl font-bold text-gray-700">Asset Not Found</h2>
         <button
-          onClick={() => navigate('/inventory/assets')}
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/inventory/assets'))}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           Back to Assets
@@ -419,784 +568,89 @@ function AssetComponentsPage() {
     )
   }
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate(`/inventory/assets/${id}`)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pb-8">
-      {/* Header */}
-      <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-4 mb-4">
-            <button
-              onClick={() => navigate(`/inventory/assets/${id}`)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                <Monitor className="w-4 h-4" />
-                <span>Desktop PC Components</span>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {asset.brand} {asset.model}
-              </h1>
-            </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Add Component
-            </button>
-          </div>
+      <AssetComponentsHeader
+        asset={asset}
+        components={components}
+        onBack={handleBack}
+        onAdd={() => setShowAddModal(true)}
+      />
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-blue-600 mb-1">
-                <Package className="w-4 h-4" />
-                <span className="text-xs font-medium">Total Components</span>
-              </div>
-              <p className="text-2xl font-bold text-blue-900">{components.length}</p>
-            </div>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-green-600 mb-1">
-                <Activity className="w-4 h-4" />
-                <span className="text-xs font-medium">Active</span>
-              </div>
-              <p className="text-2xl font-bold text-green-900">
-                {components.filter((c) => c.status?.name?.toLowerCase().includes('active')).length}
-              </p>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-amber-600 mb-1">
-                <RefreshCw className="w-4 h-4" />
-                <span className="text-xs font-medium">In Repair</span>
-              </div>
-              <p className="text-2xl font-bold text-amber-900">
-                {components.filter((c) => c.status?.name?.toLowerCase().includes('repair')).length}
-              </p>
-            </div>
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-indigo-600 mb-1">
-                <User className="w-4 h-4" />
-                <span className="text-xs font-medium">Assigned</span>
-              </div>
-              <p className="text-2xl font-bold text-indigo-900">
-                {components.filter((c) => c.assigned_employee).length}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Components Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        {components.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-            <Monitor className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">No Components Yet</h3>
-            <p className="text-gray-500 mb-4">Add components to track individual parts of this desktop PC</p>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors inline-flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Add First Component
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {components.map((component) => (
-              <div key={component.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                {editingComponent?.id === component.id ? (
-                  // Edit Mode
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        Category 
-                      </label>
-                      <select
-                        value={editingComponent.category_id || ''}
-                        onChange={(e) => setEditingComponent((prev) => ({ ...prev, category_id: Number(e.target.value) }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                        disabled={isLoadingCategories}
-                      >
-                        <option value="">
-                          {isLoadingCategories ? 'Loading categories...' :
-                           categoriesError ? `Error: ${categoriesError.message}` :
-                           !categories ? 'Loading...' :
-                           categories.length === 0 ? 'No categories available' :
-                           'Select Category'}
-                        </option>
-                        {categories && categories.length > 0 ? (
-                          categories.map((cat) => (
-                            <option key={cat.id} value={cat.id}>
-                              {cat.name} 
-                            </option>
-                          ))
-                        ) : null}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Component Name *</label>
-                      <input
-                        type="text"
-                        value={editingComponent.component_name || ''}
-                        onChange={(e) =>
-                          setEditingComponent((prev) => ({ ...prev, component_name: e.target.value }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Component Name"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Brand</label>
-                      <input
-                        type="text"
-                        value={editingComponent.brand || ''}
-                        onChange={(e) => setEditingComponent((prev) => ({ ...prev, brand: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Brand"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Model</label>
-                      <input
-                        type="text"
-                        value={editingComponent.model || ''}
-                        onChange={(e) => setEditingComponent((prev) => ({ ...prev, model: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Model"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Status *</label>
-                      <select
-                        value={editingComponent.status_id || ''}
-                        onChange={(e) => setEditingComponent((prev) => ({ ...prev, status_id: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      >
-                        <option value="">Select Status</option>
-                        {statuses.map((status) => (
-                          <option key={status.id} value={status.id}>
-                            {status.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Serial Number</label>
-                      <input
-                        type="text"
-                        value={editingComponent.serial_number || ''}
-                        onChange={(e) => setEditingComponent((prev) => ({ ...prev, serial_number: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Serial Number"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Remarks</label>
-                      <textarea
-                        value={editingComponent.remarks || ''}
-                        onChange={(e) => setEditingComponent((prev) => ({ ...prev, remarks: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Remarks"
-                        rows="2"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditSave(component)}
-                        className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
-                      >
-                        <Save className="w-4 h-4" />
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingComponent(null)}
-                        className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center gap-2"
-                      >
-                        <X className="w-4 h-4" />
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // View Mode
-                  <>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <span className="text-xs text-gray-500">{component.category?.name || 'Uncategorized'}</span>
-                        <h3 className="text-lg font-semibold text-gray-900">{component.component_name}</h3>
-                        <p className="text-sm text-gray-600">
-                          {component.brand || ''} {component.model || ''}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mb-4">
-                      {/* Serial Number */}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Serial:</span>
-                        <span className="font-medium text-gray-900">{component.serial_number || <span className="text-gray-400 italic">Not set</span>}</span>
-                      </div>
-
-                      {/* Status */}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Status:</span>
-                        <span className={`px-2 py-1 rounded-md text-xs font-semibold border ${getStatusColor(component.status?.name)}`}>
-                          {component.status?.name || 'N/A'}
-                        </span>
-                      </div>
-
-                      {/* Subcategory */}
-                      {component.subcategory && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Subcategory:</span>
-                          <span className="font-medium text-gray-900">{component.subcategory.name}</span>
-                        </div>
-                      )}
-
-                      {/* Purchase Date */}
-                      {component.purchase_date && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Purchase Date:</span>
-                          <span className="font-medium text-gray-900">{new Date(component.purchase_date).toLocaleDateString()}</span>
-                        </div>
-                      )}
-
-                      {/* Acquisition Cost */}
-                      {component.acq_cost && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Acq. Cost:</span>
-                          <span className="font-medium text-green-700">₱{Number(component.acq_cost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                      )}
-
-                      {/* Vendor */}
-                      {component.vendor && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Vendor:</span>
-                          <span className="font-medium text-gray-900 truncate max-w-[150px]" title={component.vendor.company_name}>{component.vendor.company_name}</span>
-                        </div>
-                      )}
-
-                      {/* Specifications */}
-                      {component.specifications && Object.keys(component.specifications).length > 0 && (
-                        <div className="pt-2 border-t border-gray-200">
-                          <div className="text-xs font-semibold text-gray-700 mb-2">Specifications</div>
-                          <div className="space-y-1">
-                            {Object.entries(component.specifications).map(([key, value]) => (
-                              value && (
-                                <div key={key} className="flex justify-between text-xs">
-                                  <span className="text-gray-500 capitalize">{key.replace(/_/g, ' ')}:</span>
-                                  <span className="font-medium text-gray-900">{value}</span>
-                                </div>
-                              )
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Remarks */}
-                      {component.remarks && (
-                        <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
-                          <span className="text-gray-600">Remarks:</span>
-                          <span className="font-medium text-gray-900">{component.remarks}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => setEditingComponent({
-                          id: component.id,
-                          category_id: component.category_id || '',
-                          component_name: component.component_name || '',
-                          brand: component.brand || '',
-                          model: component.model || '',
-                          serial_number: component.serial_number || '',
-                          status_id: component.status_id || '',
-                          remarks: component.remarks || '',
-                        })}
-                        className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-                      >
-                        <Edit className="w-4 h-4" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(component)}
-                        className="flex-1 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <button
-                        onClick={() => setShowTransferModal(component)}
-                        className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2"
-                      >
-                        <ArrowRight className="w-4 h-4" />
-                        Transfer
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setShowCodeModal({ component, type: 'qr' })
-                        }}
-                        className="flex-1 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2"
-                      >
-                        <QrCode className="w-4 h-4" />
-                        QR
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setShowCodeModal({ component, type: 'barcode' })
-                        }}
-                        className="flex-1 px-3 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 flex items-center justify-center gap-2"
-                      >
-                        <Barcode className="w-4 h-4" />
-                        Barcode
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <AssetComponentsGrid
+          components={components}
+          editingComponent={editingComponent}
+          isLoadingCategories={isLoadingCategories}
+          categoriesError={categoriesError}
+          categories={categories}
+          editSubcategories={editSubcategories}
+          isLoadingEditSubcategories={isLoadingEditSubcategories}
+          equipmentOptions={equipmentOptions}
+          buildCategoryLabel={buildCategoryLabel}
+          statuses={statuses}
+          updateEditField={updateEditField}
+          setEditingComponent={setEditingComponent}
+          handleEditSave={handleEditSave}
+          handleDelete={handleDelete}
+          setShowTransferModal={setShowTransferModal}
+          setShowCodeModal={setShowCodeModal}
+          getStatusColor={getStatusColor}
+          getCategoryName={getCategoryName}
+          getSubcategoryName={getSubcategoryName}
+          onAdd={() => setShowAddModal(true)}
+        />
       </div>
 
-      {/* Add Component Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Add Component</h2>
-                <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+      <AssetComponentsAddModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleAddComponent}
+        addFormData={addFormData}
+        updateAddFormField={updateAddFormField}
+        setAddFormData={setAddFormData}
+        handleGenerateSerial={handleGenerateSerial}
+        categories={categories}
+        subcategories={subcategories}
+        equipmentOptions={equipmentOptions}
+        buildCategoryLabel={buildCategoryLabel}
+        statuses={statuses}
+        vendors={vendors}
+        addComponentMutation={addComponentMutation}
+      />
 
-            <form onSubmit={handleAddComponent} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Component Category *</label>
-                <select
-                  value={addFormData.category_id}
-                  onChange={(e) => setAddFormData((prev) => ({ ...prev, category_id: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  required
-                >
-                  <option value="">Select Category</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      <AssetComponentsTransferModal
+        isOpen={!!showTransferModal}
+        component={showTransferModal}
+        employeeSearch={employeeSearch}
+        onEmployeeSearchChange={setEmployeeSearch}
+        filteredEmployees={filteredEmployees}
+        selectedEmployeeId={selectedEmployeeId}
+        onSelectEmployee={setSelectedEmployeeId}
+        onSubmit={handleSubmitTransfer}
+        isSubmitting={transferComponentMutation.isPending}
+        onClose={closeTransferModal}
+      />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Component Name *</label>
-                <input
-                  type="text"
-                  value={addFormData.component_name}
-                  onChange={(e) => setAddFormData((prev) => ({ ...prev, component_name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  placeholder="e.g., Intel Core i7 CPU"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-                  <input
-                    type="text"
-                    value={addFormData.brand}
-                    onChange={(e) => setAddFormData((prev) => ({ ...prev, brand: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    placeholder="e.g., Intel"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-                  <input
-                    type="text"
-                    value={addFormData.model}
-                    onChange={(e) => setAddFormData((prev) => ({ ...prev, model: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    placeholder="e.g., i7-12700K"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number <span className="text-red-500">*</span></label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={addFormData.serial_number}
-                    onChange={(e) => setAddFormData((prev) => ({ ...prev, serial_number: e.target.value }))}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
-                    placeholder="Serial number"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={handleGenerateSerial}
-                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                  >
-                    Generate
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
-                <select
-                  value={addFormData.status_id}
-                  onChange={(e) => setAddFormData((prev) => ({ ...prev, status_id: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  required
-                >
-                  <option value="">Select Status</option>
-                  {statuses.map((status) => (
-                    <option key={status.id} value={status.id}>
-                      {status.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
-                <textarea
-                  value={addFormData.remarks}
-                  onChange={(e) => setAddFormData((prev) => ({ ...prev, remarks: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  rows="3"
-                  placeholder="Additional notes..."
-                />
-              </div>
-
-              {/* Optional Fields Section */}
-              <div className="border-t border-slate-200 pt-4 mt-2">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">Optional Details</h4>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Subcategory</label>
-                      <select
-                        value={addFormData.subcategory_id}
-                        onChange={(e) => setAddFormData({ ...addFormData, subcategory_id: e.target.value })}
-                        disabled={!addFormData.category_id}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="">Select subcategory</option>
-                        {subcategories.map((subcategory) => (
-                          <option key={subcategory.id} value={subcategory.id}>
-                            {subcategory.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Purchase Date</label>
-                      <input
-                        type="date"
-                        value={addFormData.purchase_date}
-                        onChange={(e) => setAddFormData({ ...addFormData, purchase_date: e.target.value })}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Acquisition Cost</label>
-                      <input
-                        type="number"
-                        value={addFormData.acq_cost}
-                        onChange={(e) => setAddFormData({ ...addFormData, acq_cost: e.target.value })}
-                        placeholder="0.00"
-                        step="0.01"
-                        min="0"
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Vendor</label>
-                      <select
-                        value={addFormData.vendor_id}
-                        onChange={(e) => setAddFormData({ ...addFormData, vendor_id: e.target.value })}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select vendor</option>
-                        {vendors.map((vendor) => (
-                          <option key={vendor.id} value={vendor.id}>
-                            {vendor.company_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Specifications Section */}
-                  {addFormData.category_id && (
-                    <SpecificationFields
-                      categoryName={categories.find(c => c.id === parseInt(addFormData.category_id))?.name || ''}
-                      subcategoryName={subcategories.find(s => s.id === parseInt(addFormData.subcategory_id))?.name || ''}
-                      specifications={addFormData.specifications}
-                      onChange={(specs) => setAddFormData({ ...addFormData, specifications: specs })}
-                    />
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  disabled={addComponentMutation.isPending}
-                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {addComponentMutation.isPending ? 'Adding...' : 'Add Component'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Transfer Modal - Similar to Bulk Transfer */}
-      {showTransferModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="border-b border-gray-200 px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Transfer Component</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Transfer <strong>{showTransferModal.component_name}</strong> to an employee
-                  </p>
-                </div>
-                <button
-                  onClick={closeTransferModal}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Search Input */}
-            <div className="p-6 border-b border-gray-200">
-              <input
-                type="text"
-                placeholder="Search employees by name, position, branch, or email..."
-                value={employeeSearch}
-                onChange={(e) => setEmployeeSearch(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                autoFocus
-              />
-              <p className="text-sm text-gray-500 mt-2">
-                {filteredEmployees.length} employee(s) found
-              </p>
-            </div>
-
-            {/* Employee List */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {filteredEmployees.length === 0 ? (
-                <div className="text-center py-12">
-                  <User className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-500">
-                    {employeeSearch ? 'No employees found matching your search' : 'No employees available'}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-3">
-                  {filteredEmployees.map((emp) => (
-                    <button
-                      key={emp.id}
-                      onClick={() => setSelectedEmployeeId(emp.id.toString())}
-                      className={`p-4 border-2 rounded-lg text-left transition-all hover:border-indigo-500 hover:bg-indigo-50 ${
-                        selectedEmployeeId === emp.id.toString()
-                          ? 'border-indigo-500 bg-indigo-50'
-                          : 'border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <p className="font-semibold text-gray-900">{emp.fullname}</p>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                            {emp.position?.position_name && (
-                              <span className="flex items-center gap-1">
-                                <User className="w-3.5 h-3.5" />
-                                {emp.position.position_name}
-                              </span>
-                            )}
-                            {emp.branch?.branch_name && (
-                              <span>{emp.branch.branch_name}</span>
-                            )}
-                          </div>
-                          {emp.email && (
-                            <p className="text-xs text-gray-500 mt-1">{emp.email}</p>
-                          )}
-                        </div>
-                        {selectedEmployeeId === emp.id.toString() && (
-                          <div className="ml-4">
-                            <div className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
-                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Footer Actions */}
-            <div className="border-t border-gray-200 px-6 py-4 flex gap-3">
-              <button
-                onClick={handleSubmitTransfer}
-                disabled={!selectedEmployeeId || transferComponentMutation.isPending}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {transferComponentMutation.isPending ? 'Transferring...' : 'Transfer Component'}
-              </button>
-              <button
-                onClick={closeTransferModal}
-                disabled={transferComponentMutation.isPending}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* QR Code / Barcode Modal */}
-      {showCodeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
-            <div className="border-b border-gray-200 px-6 py-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">
-                  {showCodeModal.type === 'qr' ? 'QR Code' : 'Barcode'} - {showCodeModal.component.component_name}
-                </h2>
-                <button
-                  onClick={() => setShowCodeModal(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              {/* Display the code */}
-              <div className="flex justify-center items-center bg-gray-50 rounded-lg p-8 mb-6">
-                {showCodeModal.type === 'qr' ? (
-                  showCodeModal.component.qr_code ? (
-                    <img
-                      src={showCodeModal.component.qr_code}
-                      alt="QR Code"
-                      className="max-w-full h-auto"
-                      style={{ maxHeight: '400px' }}
-                    />
-                  ) : (
-                    <div className="text-center py-12">
-                      <QrCode className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                      <p className="text-gray-500">No QR code available</p>
-                    </div>
-                  )
-                ) : (
-                  showCodeModal.component.barcode ? (
-                    <img
-                      src={showCodeModal.component.barcode}
-                      alt="Barcode"
-                      className="max-w-full h-auto"
-                      style={{ maxHeight: '200px' }}
-                    />
-                  ) : (
-                    <div className="text-center py-12">
-                      <Barcode className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                      <p className="text-gray-500">No barcode available</p>
-                    </div>
-                  )
-                )}
-              </div>
-
-              {/* Component Info */}
-              <div className="bg-slate-50 rounded-lg p-4 mb-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-gray-600">Component:</span>
-                    <p className="font-semibold text-gray-900">{showCodeModal.component.component_name}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Category:</span>
-                    <p className="font-semibold text-gray-900">{showCodeModal.component.category?.name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Serial:</span>
-                    <p className="font-semibold text-gray-900">{showCodeModal.component.serial_number || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Status:</span>
-                    <p className="font-semibold text-gray-900">{showCodeModal.component.status?.name || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    if (showCodeModal.type === 'qr') {
-                      handleDownloadQR(showCodeModal.component)
-                    } else {
-                      handleDownloadBarcode(showCodeModal.component)
-                    }
-                  }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Download {showCodeModal.type === 'qr' ? 'QR Code' : 'Barcode'}
-                </button>
-                <button
-                  onClick={() => setShowCodeModal(null)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AssetComponentsCodeModal
+        showCodeModal={showCodeModal}
+        onClose={() => setShowCodeModal(null)}
+        onDownload={(payload) => {
+          if (payload.type === 'qr') {
+            handleDownloadQR(payload.component)
+          } else {
+            handleDownloadBarcode(payload.component)
+          }
+        }}
+      />
     </div>
   )
 }

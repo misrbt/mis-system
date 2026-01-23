@@ -25,6 +25,7 @@ function EmployeeAssetsView({
   showCodesFor,
   setShowCodesFor,
   categories,
+  editSubcategories,
   statuses,
   vendors,
   equipmentOptions,
@@ -38,6 +39,7 @@ function EmployeeAssetsView({
   onCodeView,
   onRemarksView,
   navigateToAsset,
+  navigateToAssetComponents,
   onAddClick,
   isPending,
   isLoadingHistory,
@@ -161,6 +163,7 @@ function EmployeeAssetsView({
                       editingAssetId={editingAssetId}
                       editFormData={editFormData}
                       categories={categories}
+                      editSubcategories={editSubcategories}
                       statuses={statuses}
                       vendors={vendors}
                       equipmentOptions={equipmentOptions}
@@ -179,6 +182,7 @@ function EmployeeAssetsView({
                       onCodeToggle={(assetId, type) => setShowCodesFor((prev) => ({ ...prev, [assetId]: prev[assetId] === type ? null : type }))}
                       onCodeView={onCodeView}
                       onCardClick={navigateToAsset}
+                      onComponentsClick={navigateToAssetComponents}
                       isPending={isPending}
                     />
                   )}

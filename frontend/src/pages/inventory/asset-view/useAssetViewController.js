@@ -189,8 +189,8 @@ export default function useAssetViewController({ id, employeeId }) {
         name: `${eq.brand} ${eq.model}`.trim(),
         brand: eq.brand,
         model: eq.model,
-        asset_category_id: eq.asset_category_id,
-        subcategory_id: eq.subcategory_id,
+        asset_category_id: eq.asset_category_id ?? eq.category_id ?? eq.category?.id ?? null,
+        subcategory_id: eq.subcategory_id ?? eq.subcategory?.id ?? null,
         category_name: eq.category?.name,
         subcategory_name: eq.subcategory?.name,
       })),
@@ -719,10 +719,13 @@ export default function useAssetViewController({ id, employeeId }) {
       ...prev,
       {
         id: Date.now(),
-        component_type: "system_unit",
+        category_id: "",
+        subcategory_id: "",
         component_name: "",
+        last_generated_name: "",
         brand: "",
         model: "",
+        specifications: {},
         serial_number: "",
         status_id: defaultStatus,
         acq_cost: "",
@@ -788,8 +791,19 @@ export default function useAssetViewController({ id, employeeId }) {
       return;
     }
 
+    const selectedCategory = categories.find(
+      (cat) => cat.id == addFormData.asset_category_id
+    );
+    const categoryCode =
+      selectedCategory?.code ||
+      selectedCategory?.name?.substring(0, 3).toUpperCase() ||
+      "AST";
+    const serialNumber =
+      addFormData.serial_number || buildSerialNumber(categoryCode);
+
     const dataToSubmit = {
       ...addFormData,
+      serial_number: serialNumber,
       assigned_to_employee_id: actualEmployeeId || null,
       asset_category_id: addFormData.asset_category_id
         ? Number(addFormData.asset_category_id)

@@ -97,9 +97,6 @@ function IndividualAssetView({
                 <h1 className="text-lg sm:text-2xl font-bold text-gray-900 leading-snug break-words">
                   {assetTitle}
                 </h1>
-                <p className="text-xs sm:text-sm text-gray-600 break-words">
-                  Serial: {asset.serial_number}
-                </p>
               </div>
             </div>
 
@@ -281,17 +278,17 @@ function IndividualAssetView({
             </div>
 
             {asset && (asset.category?.name?.toLowerCase().includes('desktop') || asset.category?.name?.toLowerCase().includes('pc')) && (
-              <div className="bg-gradient-to-r from-amber-600 to-orange-700 rounded-lg shadow-sm border border-amber-200 p-4 sm:p-6 text-white">
+              <div className="bg-gradient-to-r from-amber-600 to-orange-700 rounded-lg shadow-sm border border-amber-200 p-4 sm:p-6 text-white flex flex-col">
                 <div className="flex items-center gap-3 mb-3">
                   <LayoutGrid className="w-5 h-5" />
                   <h3 className="text-base sm:text-lg font-semibold">Desktop PC Components</h3>
                 </div>
-                <p className="text-sm text-amber-50 mb-4">
+                <p className="text-sm text-amber-50 mb-3">
                   Manage individual components of this desktop PC (System Unit, Monitor, Keyboard & Mouse, etc.)
                 </p>
                 <button
                   onClick={() => navigateToAssetComponents(asset.id)}
-                  className="w-full px-4 py-2 bg-white text-amber-700 font-medium rounded-lg hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
+                  className="w-full px-4 py-2 bg-white text-amber-700 font-medium rounded-lg hover:bg-amber-50 transition-colors flex items-center justify-center gap-2 mt-auto"
                 >
                   <Package className="w-4 h-4" />
                   View Components

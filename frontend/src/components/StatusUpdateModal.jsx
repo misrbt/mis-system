@@ -7,12 +7,12 @@ import apiClient from '../services/apiClient'
 
 function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
   const queryClient = useQueryClient()
-  const [formData, setFormData] = useState(() => ({
-    status_id: asset?.status_id || '',
-    reason: '',
-    remarks: '',
-  }))
+  const [draftStatusId, setDraftStatusId] = useState(null)
+  const [reason, setReason] = useState('')
+  const [remarks, setRemarks] = useState('')
   const [errors, setErrors] = useState({})
+
+  const selectedStatusId = draftStatusId ?? (asset?.status_id ? String(asset.status_id) : '')
 
   // Fetch statuses
   const { data: statusesData } = useQuery({
@@ -31,14 +31,14 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
   const updateStatusMutation = useMutation({
     mutationFn: (data) => apiClient.post(`/assets/${asset?.id}/movements/update-status`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['asset', asset?.id])
-      queryClient.invalidateQueries(['asset-movements', asset?.id])
-      queryClient.invalidateQueries(['asset-assignments', asset?.id])
-      queryClient.invalidateQueries(['asset-statistics', asset?.id])
-      queryClient.invalidateQueries(['assets'])
+      queryClient.invalidateQueries({ queryKey: ['asset', asset?.id] })
+      queryClient.invalidateQueries({ queryKey: ['asset-movements', asset?.id] })
+      queryClient.invalidateQueries({ queryKey: ['asset-assignments', asset?.id] })
+      queryClient.invalidateQueries({ queryKey: ['asset-statistics', asset?.id] })
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
 
       // Find the selected status to check if it's "Under Repair"
-      const selectedStatus = statuses.find(s => s.id === parseInt(formData.status_id))
+      const selectedStatus = statuses.find(s => s.id === parseInt(selectedStatusId))
 
       Swal.fire({
         icon: 'success',
@@ -72,18 +72,18 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
   const validateForm = () => {
     const newErrors = {}
 
-    if (!formData.status_id) {
+    if (!selectedStatusId) {
       newErrors.status_id = 'Please select a status'
     }
 
     // Check if status actually changed
-    if (formData.status_id === asset?.status_id) {
+    if (String(selectedStatusId) === String(asset?.status_id)) {
       newErrors.status_id = 'Please select a different status'
     }
 
-    if (!formData.reason || formData.reason.trim() === '') {
+    if (!reason || reason.trim() === '') {
       newErrors.reason = 'Reason is required'
-    } else if (formData.reason.trim().length < 10) {
+    } else if (reason.trim().length < 10) {
       newErrors.reason = 'Reason must be at least 10 characters'
     }
 
@@ -103,12 +103,16 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
       return
     }
 
-    updateStatusMutation.mutate(formData)
+    updateStatusMutation.mutate({
+      status_id: Number(selectedStatusId),
+      reason,
+      remarks,
+    })
   }
 
   const handleReasonChange = (e) => {
     const value = e.target.value
-    setFormData(prev => ({ ...prev, reason: value }))
+    setReason(value)
 
     // Clear error when user starts typing
     if (errors.reason) {
@@ -118,7 +122,7 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
 
   const handleStatusChange = (e) => {
     const value = e.target.value
-    setFormData(prev => ({ ...prev, status_id: value }))
+    setDraftStatusId(value)
 
     // Clear error when user selects
     if (errors.status_id) {
@@ -127,17 +131,15 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
   }
 
   const handleClose = () => {
-    setFormData({
-      status_id: asset?.status_id || '',
-      reason: '',
-      remarks: '',
-    })
+    setDraftStatusId(null)
+    setReason('')
+    setRemarks('')
     setErrors({})
     onClose()
   }
 
   const currentStatus = asset?.status
-  const selectedStatus = statuses.find(s => s.id === parseInt(formData.status_id))
+  const selectedStatus = statuses.find(s => s.id === parseInt(selectedStatusId))
 
   const footer = (
     <div className="flex gap-3 justify-end">
@@ -203,7 +205,7 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
             New Status <span className="text-red-500">*</span>
           </label>
           <select
-            value={formData.status_id}
+            value={selectedStatusId}
             onChange={handleStatusChange}
             className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
               errors.status_id ? 'border-red-300' : 'border-slate-300'
@@ -242,7 +244,7 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
             Reason for Status Change <span className="text-red-500">*</span>
           </label>
           <textarea
-            value={formData.reason}
+            value={reason}
             onChange={handleReasonChange}
             placeholder="Explain why the status is being changed (minimum 10 characters)"
             rows={4}
@@ -260,9 +262,9 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
               )}
             </div>
             <span className={`text-sm ${
-              formData.reason.length >= 10 ? 'text-green-600' : 'text-slate-500'
+              reason.length >= 10 ? 'text-green-600' : 'text-slate-500'
             }`}>
-              {formData.reason.length} / 10 characters
+              {reason.length} / 10 characters
             </span>
           </div>
         </div>
@@ -273,8 +275,8 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
             Additional Remarks (Optional)
           </label>
           <textarea
-            value={formData.remarks}
-            onChange={(e) => setFormData(prev => ({ ...prev, remarks: e.target.value }))}
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
             placeholder="Any additional notes or comments about this status change"
             rows={3}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"

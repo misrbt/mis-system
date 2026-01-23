@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Monitor, Cpu, FileText, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -16,6 +17,7 @@ import Swal from 'sweetalert2'
 function EquipmentPage() {
   const [equipmentList, setEquipmentList] = useState([])
   const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -33,7 +35,7 @@ function EquipmentPage() {
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
 
-  const fetchEquipment = async () => {
+  const fetchEquipment = useCallback(async () => {
     try {
       setLoading(true)
       const response = await equipmentService.getAll()
@@ -49,11 +51,11 @@ function EquipmentPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchEquipment()
-  }, [])
+  }, [fetchEquipment])
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -139,6 +141,7 @@ function EquipmentPage() {
         })
         setIsAddModalOpen(false)
         fetchEquipment()
+        queryClient.invalidateQueries({ queryKey: ['equipment'] })
       }
     } catch (error) {
       Swal.fire({
@@ -162,6 +165,7 @@ function EquipmentPage() {
         })
         setIsEditModalOpen(false)
         fetchEquipment()
+        queryClient.invalidateQueries({ queryKey: ['equipment'] })
       }
     } catch (error) {
       Swal.fire({
@@ -195,6 +199,7 @@ function EquipmentPage() {
             timer: 2000,
           })
           fetchEquipment()
+          queryClient.invalidateQueries({ queryKey: ['equipment'] })
         }
       } catch (error) {
         Swal.fire({

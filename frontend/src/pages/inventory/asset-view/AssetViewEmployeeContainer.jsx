@@ -19,6 +19,7 @@ function AssetViewEmployeeContainer({ controller }) {
     showCodesFor,
     setShowCodesFor,
     categories,
+    editSubcategories,
     statuses,
     vendors,
     statusColorMap,
@@ -37,6 +38,7 @@ function AssetViewEmployeeContainer({ controller }) {
     setCodeModal,
     setRemarksModal,
     navigateToAsset,
+    navigateToAssetComponents,
     navigateToAssets,
   } = controller;
 
@@ -75,6 +77,7 @@ function AssetViewEmployeeContainer({ controller }) {
       showCodesFor={showCodesFor}
       setShowCodesFor={setShowCodesFor}
       categories={categories}
+      editSubcategories={editSubcategories}
       statuses={statuses}
       vendors={vendors}
       statusColorMap={statusColorMap}
@@ -94,6 +97,7 @@ function AssetViewEmployeeContainer({ controller }) {
         })
       }
       navigateToAsset={navigateToAsset}
+      navigateToAssetComponents={navigateToAssetComponents}
       onAddClick={openAddModal}
       isPending={isPending}
       isLoadingHistory={isLoadingHistory}

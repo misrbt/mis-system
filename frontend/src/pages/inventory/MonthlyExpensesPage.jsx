@@ -185,7 +185,7 @@ function MonthlyExpensesPage() {
           <Calendar className="w-5 h-5 text-blue-600" />
           <h2 className="text-lg font-semibold text-slate-900">Select Period</h2>
         </div>
-
+        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Month Selector */}
           <div>

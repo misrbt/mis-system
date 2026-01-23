@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Modal from '../../../components/Modal'
 import SearchableSelect from '../../../components/SearchableSelect'
 import SpecificationFields from '../../../components/specifications/SpecificationFields'
 import { RefreshCw, Plus, X, Package, Sparkles } from 'lucide-react'
 import { generateAssetName, shouldAutoGenerateName } from '../../../utils/assetNameGenerator'
+import apiClient from '../../../services/apiClient'
 
 const AssetFormModal = ({
   isOpen,
@@ -34,10 +35,18 @@ const AssetFormModal = ({
   onComponentChange,
   onAddVendor,
   equipmentOptions = [],
+  isEditMode = false,
 }) => {
   // Ensure categories is always an array
-  const safeCategories = Array.isArray(categories) ? categories : []
-  const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
+  const safeCategories = useMemo(
+    () => (Array.isArray(categories) ? categories : []),
+    [categories]
+  )
+  const safeEquipmentOptions = useMemo(
+    () => (Array.isArray(equipmentOptions) ? equipmentOptions : []),
+    [equipmentOptions]
+  )
+  const [componentSubcategories, setComponentSubcategories] = useState({})
   const categoryId = formData.asset_category_id ? Number(formData.asset_category_id) : null
   const subcategoryId = formData.subcategory_id ? Number(formData.subcategory_id) : null
   const filteredEquipmentOptions = safeEquipmentOptions.filter((eq) => {
@@ -75,6 +84,46 @@ const AssetFormModal = ({
     categoryLabel,
   }))
 
+  const componentCategoryIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          components
+            .map((component) => Number(component.category_id))
+            .filter((value) => Number.isFinite(value))
+        )
+      ),
+    [components]
+  )
+
+  useEffect(() => {
+    let isMounted = true
+    const fetchSubcategories = async (catId) => {
+      try {
+        const response = await apiClient.get(`/asset-categories/${catId}/subcategories`)
+        const data = Array.isArray(response.data?.data)
+          ? response.data.data
+          : Array.isArray(response.data)
+            ? response.data
+            : []
+        if (!isMounted) return
+        setComponentSubcategories((prev) => ({ ...prev, [catId]: data }))
+      } catch {
+        if (!isMounted) return
+        setComponentSubcategories((prev) => ({ ...prev, [catId]: [] }))
+      }
+    }
+
+    componentCategoryIds.forEach((catId) => {
+      if (componentSubcategories[catId]) return
+      fetchSubcategories(catId)
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [componentCategoryIds, componentSubcategories])
+
   const placeholders = usePlaceholders
     ? {
         asset_name: 'Enter asset name',
@@ -97,6 +146,47 @@ const AssetFormModal = ({
     const category = safeCategories.find(c => c.id === parseInt(formData.asset_category_id))
     return category?.name?.toLowerCase().includes('desktop') ||
            category?.name?.toLowerCase().includes('pc')
+  }
+
+  const hasSubcategories = (subcategories?.length ?? 0) > 0
+  const shouldShowSubcategory = isEditMode
+    ? !!formData.subcategory_id
+    : !!formData.asset_category_id && hasSubcategories
+
+  const componentCategoryOptions = useMemo(
+    () =>
+      safeCategories.filter((cat) => {
+        const name = cat?.name?.toLowerCase() || ''
+        return !name.includes('desktop pc')
+      }),
+    [safeCategories]
+  )
+
+  const getCategoryName = (id) =>
+    safeCategories.find((cat) => Number(cat.id) === Number(id))?.name || ''
+
+  const getSubcategoryName = (categoryId, subcategoryId) =>
+    componentSubcategories[Number(categoryId)]?.find(
+      (subcat) => Number(subcat.id) === Number(subcategoryId)
+    )?.name || ''
+
+  const updateComponentAutoName = (component, nextPartial = {}) => {
+    const nextComponent = { ...component, ...nextPartial }
+    const categoryName = getCategoryName(nextComponent.category_id)
+    if (!categoryName || !shouldAutoGenerateName(categoryName)) return
+    const generatedName = generateAssetName(
+      categoryName,
+      nextComponent.brand,
+      nextComponent.specifications || {}
+    )
+    if (!generatedName) return
+    const shouldOverwrite =
+      !nextComponent.component_name ||
+      nextComponent.component_name === component.last_generated_name
+    if (shouldOverwrite) {
+      onComponentChange(component.id, 'component_name', generatedName)
+      onComponentChange(component.id, 'last_generated_name', generatedName)
+    }
   }
 
   // Get current category name
@@ -183,7 +273,7 @@ const AssetFormModal = ({
             </div>
 
             {/* Subcategory - Only show if category has subcategories */}
-            {formData.asset_category_id && subcategories?.length > 0 && (
+            {shouldShowSubcategory && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Subcategory <span className="text-red-500">*</span>
@@ -192,7 +282,7 @@ const AssetFormModal = ({
                   name="subcategory_id"
                   value={formData.subcategory_id || ''}
                   onChange={onInputChange}
-                  required
+                  required={!isEditMode}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Select subcategory</option>
@@ -258,57 +348,188 @@ const AssetFormModal = ({
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             <div>
-                              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Component Type <span className="text-red-500">*</span>
-                              </label>
-                              <select
-                                value={component.component_type}
-                                onChange={(e) => onComponentChange(component.id, 'component_type', e.target.value)}
-                                required
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              >
-                                <option value="system_unit">System Unit</option>
-                                <option value="monitor">Monitor</option>
-                                <option value="keyboard_mouse">Keyboard & Mouse</option>
-                                <option value="other">Other Accessories</option>
-                              </select>
-                            </div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Category Type <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={component.category_id || ''}
+                            onChange={(e) => {
+                              const nextValue = e.target.value
+                              onComponentChange(component.id, 'category_id', nextValue)
+                              onComponentChange(component.id, 'subcategory_id', '')
+                              onComponentChange(component.id, 'brand', '')
+                              onComponentChange(component.id, 'model', '')
+                              onComponentChange(component.id, 'specifications', {})
+                              updateComponentAutoName(component, {
+                                category_id: nextValue,
+                                subcategory_id: '',
+                                brand: '',
+                                model: '',
+                                specifications: {},
+                              })
+                            }}
+                            required
+                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select category</option>
+                            {componentCategoryOptions.map((cat) => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                            <div>
-                              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Component Name <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                value={component.component_name}
-                                onChange={(e) => onComponentChange(component.id, 'component_name', e.target.value)}
-                                required
-                                placeholder="e.g., Dell OptiPlex 7090"
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Asset Name <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={component.component_name}
+                            onChange={(e) => onComponentChange(component.id, 'component_name', e.target.value)}
+                            required
+                            placeholder="Enter asset name"
+                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
 
-                            <div>
-                              <label className="block text-xs font-semibold text-slate-700 mb-1">Brand</label>
-                              <input
-                                type="text"
-                                value={component.brand}
-                                onChange={(e) => onComponentChange(component.id, 'brand', e.target.value)}
-                                placeholder="e.g., Dell"
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            </div>
+                        {component.category_id &&
+                          (componentSubcategories[Number(component.category_id)]?.length ?? 0) > 0 && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Subcategory <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={component.subcategory_id || ''}
+                              onChange={(e) => {
+                                const nextValue = e.target.value
+                                onComponentChange(component.id, 'subcategory_id', nextValue)
+                                onComponentChange(component.id, 'brand', '')
+                                onComponentChange(component.id, 'model', '')
+                                updateComponentAutoName(component, {
+                                  subcategory_id: nextValue,
+                                  brand: '',
+                                  model: '',
+                                })
+                              }}
+                              required
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select subcategory</option>
+                              {componentSubcategories[Number(component.category_id)]?.map((subcategory) => (
+                                <option key={subcategory.id} value={subcategory.id}>
+                                  {subcategory.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
 
-                            <div>
-                              <label className="block text-xs font-semibold text-slate-700 mb-1">Model</label>
-                              <input
-                                type="text"
-                                value={component.model}
-                                onChange={(e) => onComponentChange(component.id, 'model', e.target.value)}
-                                placeholder="e.g., OptiPlex 7090"
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            </div>
+                        {component.category_id &&
+                          (!(componentSubcategories[Number(component.category_id)]?.length ?? 0) ||
+                            component.subcategory_id) && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Brand</label>
+                            <SearchableSelect
+                              label=""
+                              options={(() => {
+                                const compCategoryId = Number(component.category_id)
+                                const compSubcategoryId = component.subcategory_id ? Number(component.subcategory_id) : null
+                                const filtered = safeEquipmentOptions.filter((eq) => {
+                                  if (compCategoryId && Number(eq.asset_category_id) !== compCategoryId) return false
+                                  if (compSubcategoryId && Number(eq.subcategory_id) !== compSubcategoryId) return false
+                                  return true
+                                })
+                                const effective = compSubcategoryId
+                                  ? filtered
+                                  : filtered.length
+                                    ? filtered
+                                    : safeEquipmentOptions
+                                return Array.from(
+                                  new Map(
+                                    effective
+                                      .filter((eq) => eq.brand)
+                                      .map((eq) => [eq.brand, [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')])
+                                  ).entries()
+                                ).map(([brand, categoryLabel]) => ({
+                                  id: brand,
+                                  name: brand,
+                                  categoryLabel,
+                                }))
+                              })()}
+                              value={component.brand}
+                              onChange={(value) => {
+                                onComponentChange(component.id, 'brand', value)
+                                updateComponentAutoName(component, { brand: value })
+                              }}
+                              displayField="name"
+                              secondaryField="categoryLabel"
+                              placeholder="Select brand..."
+                              emptyMessage="No brands found"
+                            />
+                          </div>
+                        )}
+
+                        {component.category_id &&
+                          (!(componentSubcategories[Number(component.category_id)]?.length ?? 0) ||
+                            component.subcategory_id) && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Model</label>
+                            <SearchableSelect
+                              label=""
+                              options={(() => {
+                                const compCategoryId = Number(component.category_id)
+                                const compSubcategoryId = component.subcategory_id ? Number(component.subcategory_id) : null
+                                const filtered = safeEquipmentOptions.filter((eq) => {
+                                  if (compCategoryId && Number(eq.asset_category_id) !== compCategoryId) return false
+                                  if (compSubcategoryId && Number(eq.subcategory_id) !== compSubcategoryId) return false
+                                  return true
+                                })
+                                const effective = compSubcategoryId
+                                  ? filtered
+                                  : filtered.length
+                                    ? filtered
+                                    : safeEquipmentOptions
+                                return Array.from(
+                                  new Map(
+                                    effective
+                                      .filter((eq) => eq.model)
+                                      .map((eq) => [eq.model, [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')])
+                                  ).entries()
+                                ).map(([model, categoryLabel]) => ({
+                                  id: model,
+                                  name: model,
+                                  categoryLabel,
+                                }))
+                              })()}
+                              value={component.model}
+                              onChange={(value) => {
+                                onComponentChange(component.id, 'model', value)
+                                updateComponentAutoName(component, { model: value })
+                              }}
+                              displayField="name"
+                              secondaryField="categoryLabel"
+                              placeholder="Select model..."
+                              emptyMessage="No models found"
+                            />
+                          </div>
+                        )}
+
+                        {component.category_id && (
+                          <div className="md:col-span-2">
+                            <SpecificationFields
+                              categoryName={getCategoryName(component.category_id)}
+                              subcategoryName={getSubcategoryName(
+                                component.category_id,
+                                component.subcategory_id
+                              )}
+                              specifications={component.specifications || {}}
+                              onChange={(specs) => {
+                                onComponentChange(component.id, 'specifications', specs)
+                                updateComponentAutoName(component, { specifications: specs })
+                              }}
+                            />
+                          </div>
+                        )}
 
                             <div className="md:col-span-2">
                               <label className="block text-xs font-semibold text-slate-700 mb-1">Serial Number</label>
@@ -604,7 +825,9 @@ const AssetFormModal = ({
             </div>
 
             {/* Category-Specific Specifications */}
-            {!isDesktopPCCategory() && (
+            {!isDesktopPCCategory() &&
+              formData.asset_category_id &&
+              (!hasSubcategories || formData.subcategory_id) && (
               <div className={remarksWrapperClass}>
                 <SpecificationFields
                   categoryName={safeCategories.find(c => c.id === parseInt(formData.asset_category_id))?.name}

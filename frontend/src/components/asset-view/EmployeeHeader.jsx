@@ -38,7 +38,7 @@ const EmployeeHeader = ({ employee, assetCount = 0, totalAcqCost = 0 }) => {
               <span className="text-sm font-bold">{assetCount} {assetCount === 1 ? 'Asset' : 'Assets'}</span>
             </div>
             <div className="flex items-center gap-2 justify-end">
-              <span className="text-xs font-semibold text-indigo-100">Total: {formatCurrency(totalAcqCost)}</span>
+              <span className="text-sm sm:text-base font-semibold text-white">Total: {formatCurrency(totalAcqCost)}</span>
             </div>
           </div>
         )}
