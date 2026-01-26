@@ -3,7 +3,6 @@ import Footer from '../components/navigation/Footer'
 
 function AuthLayout() {
   return (
-<<<<<<< HEAD
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/50 to-slate-100 overflow-x-hidden overflow-y-auto relative">
       {/* Subtle static background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -14,15 +13,6 @@ function AuthLayout() {
       {/* Main content */}
       <main className="flex-1 flex justify-center items-start md:items-center px-4 sm:px-6 lg:px-8 pt-10 sm:pt-12 pb-28 relative z-10">
         <div className="w-full max-w-md sm:max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
-=======
-    <div className="min-h-screen overflow-hidden flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      {/* Clean, subtle background */}
-      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_25%,rgba(59,130,246,0.08),transparent_32%),radial-gradient(circle_at_80%_20%,rgba(14,165,233,0.08),transparent_32%),radial-gradient(circle_at_70%_80%,rgba(99,102,241,0.05),transparent_35%),linear-gradient(120deg,rgba(15,23,42,0.03),rgba(15,23,42,0.01))]"></div>
-
-      {/* Main content */}
-      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-10 relative z-10">
-        <div className="w-full">
->>>>>>> staging
           <Outlet />
         </div>
       </main>
