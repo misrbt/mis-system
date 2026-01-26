@@ -25,6 +25,7 @@ function AssetViewModals({ controller, isEmployeeView }) {
     showEditModal,
     editModalData,
     editFormData,
+    editComponents,
     isVendorModalOpen,
     vendorFormData,
     isBulkTransferModalOpen,
@@ -46,6 +47,10 @@ function AssetViewModals({ controller, isEmployeeView }) {
     handleComponentAdd,
     handleComponentRemove,
     handleComponentChange,
+    handleEditComponentAdd,
+    handleEditComponentRemove,
+    handleEditComponentChange,
+    generateEditComponentSerialNumber,
     openVendorModal,
     handleVendorInputChange,
     handleCreateVendor,
@@ -157,6 +162,11 @@ function AssetViewModals({ controller, isEmployeeView }) {
             onChange={(field, value) => handleInputChange(field, value)}
             onSave={handleSaveEdit}
             isPending={updateAssetPending}
+            components={editComponents}
+            onComponentAdd={handleEditComponentAdd}
+            onComponentRemove={handleEditComponentRemove}
+            onComponentChange={handleEditComponentChange}
+            onGenerateComponentSerial={generateEditComponentSerialNumber}
           />
 
           <RepairFormModal

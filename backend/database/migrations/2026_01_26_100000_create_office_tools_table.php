@@ -11,9 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('assets', function (Blueprint $table) {
-            $table->timestamp('defective_at')->nullable()->after('status_id');
-            $table->index('defective_at');
+        Schema::create('office_tools', function (Blueprint $table) {
+            $table->id();
+            $table->string('name')->unique();
+            $table->string('version')->nullable();
+            $table->text('description')->nullable();
+            $table->timestamps();
         });
     }
 
@@ -22,9 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('assets', function (Blueprint $table) {
-            $table->dropIndex(['defective_at']);
-            $table->dropColumn('defective_at');
-        });
+        Schema::dropIfExists('office_tools');
     }
 };

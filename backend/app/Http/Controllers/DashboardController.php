@@ -319,8 +319,9 @@ class DashboardController extends Controller
     {
         try {
             $year = $request->get('year', now()->year);
+            $month = $request->get('month');
 
-            $breakdown = DB::table('assets')
+            $query = DB::table('assets')
                 ->join('asset_categories', 'assets.asset_category_id', '=', 'asset_categories.id')
                 ->select(
                     'asset_categories.category_name',
@@ -328,7 +329,14 @@ class DashboardController extends Controller
                     DB::raw('COALESCE(SUM(assets.acq_cost), 0) as total_acquisition'),
                     DB::raw('COALESCE(SUM(assets.book_value), 0) as total_book_value')
                 )
-                ->whereYear('assets.purchase_date', $year)
+                ->whereYear('assets.purchase_date', $year);
+
+            // Add month filter if provided
+            if ($month) {
+                $query->whereMonth('assets.purchase_date', $month);
+            }
+
+            $breakdown = $query
                 ->groupBy('asset_categories.id', 'asset_categories.category_name')
                 ->orderByDesc('total_acquisition')
                 ->get()

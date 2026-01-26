@@ -23,6 +23,7 @@ const RepairsPage = lazy(() => import('../pages/inventory/RepairsPage'))
 const ReportsPage = lazy(() => import('../pages/inventory/ReportsPage'))
 const AuditLogsPage = lazy(() => import('../pages/inventory/AuditLogsPage'))
 const MonthlyExpensesPage = lazy(() => import('../pages/inventory/MonthlyExpensesPage'))
+const SoftwareLicensePage = lazy(() => import('../pages/inventory/SoftwareLicensePage'))
 
 const inventoryRoutes = {
   path: '/inventory',
@@ -112,6 +113,10 @@ const inventoryRoutes = {
     {
       path: 'monthly-expenses',
       element: <MonthlyExpensesPage />,
+    },
+    {
+      path: 'software-licenses',
+      element: <SoftwareLicensePage />,
     },
   ],
 }

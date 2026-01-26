@@ -18,6 +18,8 @@ use App\Http\Controllers\RepairController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AssetMovementController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\SoftwareLicenseController;
+use App\Http\Controllers\OfficeToolController;
 
 // Health check endpoint
 Route::get('/ping', function () {
@@ -162,4 +164,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Bulk transfer route (outside the {id} prefix)
     Route::post('assets/movements/bulk-transfer', [AssetMovementController::class, 'bulkTransfer']);
+
+    // Software License routes
+    Route::post('software-licenses/bulk-delete', [SoftwareLicenseController::class, 'bulkDelete']);
+    Route::apiResource('software-licenses', SoftwareLicenseController::class);
+
+    // Office Tool routes
+    Route::post('office-tools/bulk-delete', [OfficeToolController::class, 'bulkDelete']);
+    Route::apiResource('office-tools', OfficeToolController::class);
 });

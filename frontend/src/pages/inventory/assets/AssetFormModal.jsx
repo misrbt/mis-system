@@ -632,37 +632,45 @@ const AssetFormModal = ({
               </div>
             )}
 
-            {!isDesktopPCCategory() && (
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Serial Number</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name="serial_number"
-                    value={formData.serial_number}
-                    onChange={onInputChange}
-                    className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder={placeholders.serial_number || 'Enter serial number or generate'}
-                  />
-                  {onGenerateSerial && (
-                    <button
-                      type="button"
-                      onClick={onGenerateSerial}
-                      className="px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm whitespace-nowrap flex items-center gap-2"
-                      title="Generate Serial Number"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      <span className="hidden sm:inline">Generate</span>
-                    </button>
-                  )}
-                </div>
-                {onGenerateSerial && formData.asset_category_id && (
-                  <p className="mt-1.5 text-xs text-slate-500">
-                    Click "Generate" to auto-create a unique serial number
-                  </p>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Serial Number
+                {isDesktopPCCategory() && (
+                  <span className="ml-2 text-xs font-normal text-slate-500">(For Desktop PC Unit)</span>
+                )}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  name="serial_number"
+                  value={formData.serial_number}
+                  onChange={onInputChange}
+                  className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={isDesktopPCCategory() ? "Enter Desktop PC unit serial number or generate" : (placeholders.serial_number || 'Enter serial number or generate')}
+                />
+                {onGenerateSerial && (
+                  <button
+                    type="button"
+                    onClick={onGenerateSerial}
+                    className="px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm whitespace-nowrap flex items-center gap-2"
+                    title="Generate Serial Number"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span className="hidden sm:inline">Generate</span>
+                  </button>
                 )}
               </div>
-            )}
+              {onGenerateSerial && formData.asset_category_id && !isDesktopPCCategory() && (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Click "Generate" to auto-create a unique serial number
+                </p>
+              )}
+              {isDesktopPCCategory() && (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  This is for the Desktop PC unit itself. Component serial numbers are managed separately below.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

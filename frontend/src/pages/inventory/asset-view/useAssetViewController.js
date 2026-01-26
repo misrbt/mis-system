@@ -44,6 +44,7 @@ export default function useAssetViewController({ id, employeeId }) {
     assigned_to_employee_id: "",
   });
   const [components, setComponents] = useState([]);
+  const [editComponents, setEditComponents] = useState([]);
 
   // Movement tracking state (for individual asset view)
   const [activeTab, setActiveTab] = useState("timeline");
@@ -524,7 +525,40 @@ export default function useAssetViewController({ id, employeeId }) {
     }
   };
 
-  const handleEditClick = (empAsset) => {
+  const handleEditClick = async (empAsset) => {
+    // Fetch components if this is a Desktop PC
+    const category = categories?.find(c => c.id === empAsset.asset_category_id);
+    const isDesktopPC = category?.name?.toLowerCase().includes('desktop') ||
+                        category?.name?.toLowerCase().includes('pc');
+
+    let fetchedComponents = [];
+    if (isDesktopPC) {
+      try {
+        const response = await apiClient.get(`/assets/${empAsset.id}/components`);
+        fetchedComponents = Array.isArray(response.data?.data) ? response.data.data : [];
+        // Transform backend components to match component state structure
+        fetchedComponents = fetchedComponents.map(comp => ({
+          id: comp.id || Date.now() + Math.random(),
+          category_id: comp.asset_category_id || "",
+          subcategory_id: comp.subcategory_id || "",
+          component_name: comp.component_name || "",
+          last_generated_name: comp.component_name || "",
+          brand: comp.brand || "",
+          model: comp.model || "",
+          specifications: comp.specifications || {},
+          serial_number: comp.serial_number || "",
+          status_id: comp.status_id || "",
+          acq_cost: comp.acq_cost || "",
+          remarks: comp.remarks || "",
+        }));
+      } catch (error) {
+        console.error('Error fetching components:', error);
+        fetchedComponents = [];
+      }
+    }
+
+    setEditComponents(fetchedComponents);
+
     if (viewMode === "table") {
       setEditModalData(empAsset);
       setEditFormData({
@@ -587,6 +621,8 @@ export default function useAssetViewController({ id, employeeId }) {
       assigned_to_employee_id: editFormData.assigned_to_employee_id
         ? Number(editFormData.assigned_to_employee_id)
         : null,
+      // Include components if any
+      components: editComponents.filter((c) => c.component_name?.trim() !== ""),
     };
     if (editModalData) {
       const equipmentId = resolveEquipmentId(editFormData.brand, editFormData.model);
@@ -612,6 +648,7 @@ export default function useAssetViewController({ id, employeeId }) {
   const handleCancelEdit = () => {
     setEditingAssetId(null);
     setEditFormData({});
+    setEditComponents([]);
     setShowEditModal(false);
     setEditModalData(null);
   };
@@ -634,6 +671,54 @@ export default function useAssetViewController({ id, employeeId }) {
       // Clear subcategory when category changes
       if (field === 'asset_category_id') {
         newData.subcategory_id = '';
+
+        // Check if changing to Desktop PC category
+        const category = categories?.find(cat => cat.id == value);
+        const categoryName = category?.name?.toLowerCase() || '';
+        const isDesktopPC = categoryName.includes('desktop') || (categoryName.includes('pc') && !categoryName.includes('laptop'));
+
+        // Check if we were previously on Desktop PC
+        const prevCategory = categories?.find(cat => cat.id == prev.asset_category_id);
+        const prevCategoryName = prevCategory?.name?.toLowerCase() || '';
+        const wasDesktopPC = prevCategoryName.includes('desktop') || (prevCategoryName.includes('pc') && !prevCategoryName.includes('laptop'));
+
+        // If changing TO Desktop PC (and wasn't before), fetch components
+        if (isDesktopPC && !wasDesktopPC) {
+          // Immediately set empty array so component section shows while fetching
+          setEditComponents([]);
+
+          // Then fetch actual components if editing existing asset
+          if (editModalData?.id) {
+            apiClient.get(`/assets/${editModalData.id}/components`)
+              .then(response => {
+                const fetchedComponents = Array.isArray(response.data?.data) ? response.data.data : [];
+                const transformedComponents = fetchedComponents.map(comp => ({
+                  id: comp.id || Date.now() + Math.random(),
+                  category_id: comp.asset_category_id || "",
+                  subcategory_id: comp.subcategory_id || "",
+                  component_name: comp.component_name || "",
+                  last_generated_name: comp.component_name || "",
+                  brand: comp.brand || "",
+                  model: comp.model || "",
+                  specifications: comp.specifications || {},
+                  serial_number: comp.serial_number || "",
+                  status_id: comp.status_id || "",
+                  acq_cost: comp.acq_cost || "",
+                  remarks: comp.remarks || "",
+                }));
+                // Update with fetched components
+                setEditComponents(transformedComponents);
+              })
+              .catch(error => {
+                console.error('Error fetching components:', error);
+                // Keep empty array on error
+              });
+          }
+        }
+        // If changing FROM Desktop PC to something else, clear components
+        else if (!isDesktopPC && wasDesktopPC) {
+          setEditComponents([]);
+        }
       }
 
       // Auto-generate asset name when relevant fields change
@@ -744,6 +829,45 @@ export default function useAssetViewController({ id, employeeId }) {
     );
   };
 
+  // Edit mode component handlers
+  const handleEditComponentAdd = () => {
+    const defaultStatus =
+      statuses.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('functional')
+      )?.id ??
+      statuses.find((status) =>
+        (status.name || status.label || '').toLowerCase().includes('working')
+      )?.id ??
+      "";
+    setEditComponents((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        category_id: "",
+        subcategory_id: "",
+        component_name: "",
+        last_generated_name: "",
+        brand: "",
+        model: "",
+        specifications: {},
+        serial_number: "",
+        status_id: defaultStatus,
+        acq_cost: "",
+        remarks: "",
+      },
+    ]);
+  };
+
+  const handleEditComponentRemove = (componentId) => {
+    setEditComponents((prev) => prev.filter((c) => c.id !== componentId));
+  };
+
+  const handleEditComponentChange = (componentId, field, value) => {
+    setEditComponents((prev) =>
+      prev.map((c) => (c.id === componentId ? { ...c, [field]: value } : c))
+    );
+  };
+
   const generateSerialNumber = () => {
     const selectedCategory = categories.find(
       (cat) => cat.id == addFormData.asset_category_id
@@ -775,6 +899,15 @@ export default function useAssetViewController({ id, employeeId }) {
   const generateComponentSerialNumber = (componentId) => {
     const serialNumber = buildSerialNumber("COMP");
     setComponents((prev) =>
+      prev.map((c) =>
+        c.id === componentId ? { ...c, serial_number: serialNumber } : c
+      )
+    );
+  };
+
+  const generateEditComponentSerialNumber = (componentId) => {
+    const serialNumber = buildSerialNumber("COMP");
+    setEditComponents((prev) =>
       prev.map((c) =>
         c.id === componentId ? { ...c, serial_number: serialNumber } : c
       )
@@ -1014,6 +1147,7 @@ export default function useAssetViewController({ id, employeeId }) {
 
   const navigateBack = () => navigate(-1);
   const navigateToAssets = () => navigate("/inventory/assets");
+  const navigateToEmployeeList = () => navigate("/inventory/employee-list");
   const navigateToAsset = (assetId) => navigate(`/inventory/assets/${assetId}`);
   const navigateToEmployeeAssets = (empId) =>
     navigate(`/inventory/employees/${empId}/assets`);
@@ -1080,6 +1214,7 @@ export default function useAssetViewController({ id, employeeId }) {
     editModalData,
     addFormData,
     components,
+    editComponents,
     isTransferModalOpen,
     isReturnModalOpen,
     isStatusModalOpen,
@@ -1119,8 +1254,12 @@ export default function useAssetViewController({ id, employeeId }) {
     handleComponentAdd,
     handleComponentRemove,
     handleComponentChange,
+    handleEditComponentAdd,
+    handleEditComponentRemove,
+    handleEditComponentChange,
     generateSerialNumber,
     generateComponentSerialNumber,
+    generateEditComponentSerialNumber,
     handleAddAsset,
     openAddModal,
     handleQuickStatusChange,
@@ -1137,6 +1276,7 @@ export default function useAssetViewController({ id, employeeId }) {
     handlePrintCode,
     navigateBack,
     navigateToAssets,
+    navigateToEmployeeList,
     navigateToAsset,
     navigateToEmployeeAssets,
     navigateToAssetComponents,

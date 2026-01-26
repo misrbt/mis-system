@@ -22,6 +22,7 @@ import {
   FileSearch,
   Calendar,
   Monitor,
+  Key,
 } from 'lucide-react'
 import Logo from '../../assets/logos.png'
 
@@ -101,6 +102,11 @@ function InventoryNavBarContent({ user, onLogout, location }) {
         { name: 'Subcategories', icon: Package, path: '/inventory/asset-subcategories' },
         { name: 'Asset Status', icon: CheckCircle, path: '/inventory/statuses' },
       ],
+    },
+    {
+      label: 'Software License',
+      type: 'link',
+      item: { name: 'Software License', icon: Key, path: '/inventory/software-licenses' },
     },
     {
       label: 'Service & Maintenance',

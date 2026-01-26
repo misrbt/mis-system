@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   TrendingUp,
@@ -58,23 +58,68 @@ function MonthlyExpensesPage() {
     { value: 12, label: 'December' },
   ]
 
+  const normalizeObject = (payload) =>
+    payload?.data?.data ?? payload?.data ?? payload ?? {}
+  const normalizeArray = (payload) => {
+    const value = payload?.data?.data ?? payload?.data ?? payload ?? []
+    return Array.isArray(value) ? value : []
+  }
+
+  const { data: yearlyExpensesData } = useQuery({
+    queryKey: ['yearly-expenses'],
+    queryFn: () => dashboardService.fetchYearlyExpenses(),
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+  })
+
+  const yearlyExpenses = useMemo(() => normalizeArray(yearlyExpensesData), [yearlyExpensesData])
+
+  // Prepare chart data
+  const toNumber = (value) => {
+    const parsed = Number(value)
+    return Number.isNaN(parsed) ? 0 : parsed
+  }
+
+  const effectiveYear = (() => {
+    if (selectedYear !== currentYear) return selectedYear
+    if (!yearlyExpenses.length) return selectedYear
+
+    const currentYearData = yearlyExpenses.find((item) => Number(item.year) === currentYear)
+    if (currentYearData && toNumber(currentYearData.total_cost) > 0) return selectedYear
+
+    const fallback = [...yearlyExpenses]
+      .sort((a, b) => Number(b.year) - Number(a.year))
+      .find((item) => toNumber(item.total_cost) > 0)
+
+    return fallback ? Number(fallback.year) : selectedYear
+  })()
+
   // Check if viewing current month
-  const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth
+  const isCurrentMonth = effectiveYear === currentYear && selectedMonth === currentMonth
 
   // Fetch expense trends for selected period
   const { data: trendsData, isLoading: trendsLoading, refetch: refetchTrends } = useQuery({
-    queryKey: ['expense-trends', selectedYear, selectedMonth],
-    queryFn: () => dashboardService.fetchExpenseTrends(selectedYear, selectedMonth),
+    queryKey: ['expense-trends', effectiveYear, selectedMonth],
+    queryFn: () => dashboardService.fetchExpenseTrends(effectiveYear, selectedMonth),
     refetchInterval: isCurrentMonth ? 30000 : false, // Refetch every 30 seconds for current month
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   })
 
-  // Fetch expense breakdown
+  // Fetch expense breakdown (category)
   const { data: breakdownData, isLoading: breakdownLoading, refetch: refetchBreakdown } = useQuery({
-    queryKey: ['expense-breakdown', selectedYear, selectedMonth],
-    queryFn: () => dashboardService.fetchExpenseBreakdown(selectedYear, selectedMonth),
+    queryKey: ['expense-breakdown', effectiveYear, selectedMonth],
+    queryFn: () => dashboardService.fetchExpenseBreakdown(effectiveYear, selectedMonth),
     refetchInterval: isCurrentMonth ? 30000 : false, // Refetch every 30 seconds for current month
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+  })
+
+  // Fetch branch statistics for branch expenses
+  const { data: branchStatsData, refetch: refetchBranchStats } = useQuery({
+    queryKey: ['branch-statistics', 12],
+    queryFn: () => dashboardService.fetchBranchStatistics(12),
+    refetchInterval: 60000,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   })
@@ -93,6 +138,7 @@ function MonthlyExpensesPage() {
     refetchTrends()
     refetchBreakdown()
     refetchYearly()
+    refetchBranchStats()
     setLastUpdated(new Date())
   }
 
@@ -106,9 +152,11 @@ function MonthlyExpensesPage() {
     return lastUpdated.toLocaleTimeString()
   }
 
-  const trends = trendsData?.data?.data || {}
-  const breakdown = breakdownData?.data?.data || {}
-  const yearlyTrend = yearlyTrendData?.data?.data || []
+  const trends = useMemo(() => normalizeObject(trendsData), [trendsData])
+  const breakdownList = useMemo(() => normalizeArray(breakdownData), [breakdownData])
+  const breakdownObject = useMemo(() => normalizeObject(breakdownData), [breakdownData])
+  const yearlyTrend = useMemo(() => normalizeArray(yearlyTrendData), [yearlyTrendData])
+  const branchStats = useMemo(() => normalizeObject(branchStatsData), [branchStatsData])
 
   const assetPurchases = trends.asset_purchases || {}
   const repairs = trends.repairs || {}
@@ -127,22 +175,53 @@ function MonthlyExpensesPage() {
     setSelectedMonth(date.getMonth() + 1)
   }
 
-  // Prepare chart data
-  const categoryChartData = breakdown.by_category
-    ? Object.entries(breakdown.by_category).map(([name, data]) => ({
-        name,
-        value: data.total_cost || 0,
-        count: data.count || 0,
-      }))
-    : []
+  const categoryChartData = useMemo(() => {
+    const source = breakdownList.length
+      ? breakdownList
+      : Array.isArray(breakdownObject.by_category)
+        ? breakdownObject.by_category
+        : []
+    return source.map((item) => ({
+      name: item.category || item.name || 'Uncategorized',
+      value: toNumber(
+        item.total_acquisition ??
+          item.total_acquisition_cost ??
+          item.total_cost ??
+          item.total ??
+          item.value ??
+          0
+      ),
+      count: toNumber(item.asset_count ?? item.count ?? 0),
+    }))
+  }, [breakdownList, breakdownObject.by_category])
 
-  const branchChartData = breakdown.by_branch
-    ? Object.entries(breakdown.by_branch).map(([name, data]) => ({
+  const branchChartData = useMemo(() => {
+    const totals = new Map()
+    const trends = Array.isArray(branchStats.monthly_trends) ? branchStats.monthly_trends : []
+
+    trends.forEach((month) => {
+      const branches = month?.branches || {}
+      Object.entries(branches).forEach(([name, data]) => {
+        const value = toNumber(data?.total_expense ?? data?.total_cost ?? data?.total ?? 0)
+        totals.set(name, (totals.get(name) || 0) + value)
+      })
+    })
+
+    if (totals.size > 0) {
+      return Array.from(totals.entries()).map(([name, value]) => ({
         name,
-        value: data.total_cost || 0,
-        count: data.count || 0,
+        value,
+        count: 0,
       }))
-    : []
+    }
+
+    const summary = Array.isArray(branchStats.summary) ? branchStats.summary : []
+    return summary.map((item) => ({
+      name: item.branch_name || item.branch || 'Unknown',
+      value: toNumber(item.total_acquisition_cost ?? item.total_cost ?? item.total ?? 0),
+      count: toNumber(item.total_assets ?? 0),
+    }))
+  }, [branchStats])
 
   const trendChartData = yearlyTrend
     .slice(-12)
@@ -207,7 +286,7 @@ function MonthlyExpensesPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Year</label>
             <select
-              value={selectedYear}
+              value={effectiveYear}
               onChange={(e) => setSelectedYear(Number(e.target.value))}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
@@ -258,7 +337,7 @@ function MonthlyExpensesPage() {
               <div>
                 <p className="text-sm opacity-90 mb-1">Asset Purchases</p>
                 <p className="text-3xl font-bold">
-                  ₱{((assetPurchases.total_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+                  ₱{(toNumber(assetPurchases.total_cost).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
                 </p>
               </div>
             </div>
@@ -274,7 +353,7 @@ function MonthlyExpensesPage() {
               <div>
                 <p className="text-sm opacity-90 mb-1">Repair Costs</p>
                 <p className="text-3xl font-bold">
-                  ₱{((repairs.total_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+                  ₱{(toNumber(repairs.total_cost).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
                 </p>
               </div>
             </div>
@@ -287,7 +366,7 @@ function MonthlyExpensesPage() {
               <div>
                 <p className="text-sm opacity-90 mb-1">Total Expenses</p>
                 <p className="text-3xl font-bold">
-                  ₱{(totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+                  ₱{(toNumber(totalExpenses).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
                 </p>
               </div>
             </div>
@@ -319,7 +398,7 @@ function MonthlyExpensesPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value) => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      formatter={(value) => `₱${toNumber(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -343,7 +422,7 @@ function MonthlyExpensesPage() {
                     <XAxis dataKey="name" />
                     <YAxis />
                     <Tooltip
-                      formatter={(value) => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      formatter={(value) => `₱${toNumber(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                     />
                     <Bar dataKey="value" fill="#8b5cf6" />
                   </BarChart>
@@ -369,7 +448,7 @@ function MonthlyExpensesPage() {
                   <XAxis dataKey="month" />
                   <YAxis />
                   <Tooltip
-                    formatter={(value) => `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    formatter={(value) => `₱${toNumber(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   />
                   <Legend />
                   <Line type="monotone" dataKey="assets" stroke="#3b82f6" name="Asset Purchases" strokeWidth={2} />
@@ -440,7 +519,7 @@ function MonthlyExpensesPage() {
                                 {asset.assigned_employee?.branch?.branch_name || 'Unassigned'}
                               </td>
                               <td className="px-4 py-2 text-sm text-slate-900 font-medium text-right">
-                                ₱{(asset.acq_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                ₱{toNumber(asset.acq_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
                             </tr>
                           ))}
@@ -493,7 +572,7 @@ function MonthlyExpensesPage() {
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-sm text-slate-900 font-medium text-right">
-                                ₱{(repair.repair_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                ₱{toNumber(repair.repair_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
                             </tr>
                           ))}

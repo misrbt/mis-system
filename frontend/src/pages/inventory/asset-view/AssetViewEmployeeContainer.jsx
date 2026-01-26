@@ -39,7 +39,8 @@ function AssetViewEmployeeContainer({ controller }) {
     setRemarksModal,
     navigateToAsset,
     navigateToAssetComponents,
-    navigateToAssets,
+    navigateBack,
+    navigateToEmployeeList,
   } = controller;
 
   // Show loading state while employee data is fetching
@@ -101,7 +102,7 @@ function AssetViewEmployeeContainer({ controller }) {
       onAddClick={openAddModal}
       isPending={isPending}
       isLoadingHistory={isLoadingHistory}
-      navigateBack={navigateToAssets}
+      navigateBack={() => (window.history.length > 1 ? navigateBack() : navigateToEmployeeList())}
     />
   );
 }

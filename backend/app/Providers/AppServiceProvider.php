@@ -13,6 +13,8 @@ use App\Models\RepairRemark;
 use App\Models\Section;
 use App\Models\Status;
 use App\Models\Vendor;
+use App\Models\SoftwareLicense;
+use App\Models\OfficeTool;
 use App\Observers\AssetCategoryObserver;
 use App\Observers\AssetComponentObserver;
 use App\Observers\AssetObserver;
@@ -24,6 +26,8 @@ use App\Observers\RepairRemarkObserver;
 use App\Observers\SectionObserver;
 use App\Observers\StatusObserver;
 use App\Observers\VendorObserver;
+use App\Observers\SoftwareLicenseObserver;
+use App\Observers\OfficeToolObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -53,6 +57,10 @@ class AppServiceProvider extends ServiceProvider
         Branch::observe(BranchObserver::class);
         Section::observe(SectionObserver::class);
         Employee::observe(EmployeeObserver::class);
+
+        // Register observers for software license management audit logging
+        SoftwareLicense::observe(SoftwareLicenseObserver::class);
+        OfficeTool::observe(OfficeToolObserver::class);
 
         // Register cache observer to invalidate dashboard cache on data changes
         Asset::observe(DashboardCacheObserver::class);

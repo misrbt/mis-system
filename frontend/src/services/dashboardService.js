@@ -1,20 +1,31 @@
 import apiClient from './apiClient'
 
+const fetchWithFallback = async (primaryUrl, fallbackUrl, config = {}) => {
+  try {
+    const response = await apiClient.get(primaryUrl, config)
+    return response.data
+  } catch (error) {
+    if (!fallbackUrl) {
+      throw error
+    }
+    const response = await apiClient.get(fallbackUrl, config)
+    return response.data
+  }
+}
+
 const dashboardService = {
   /**
    * Get monthly expenses for the last 12 months
    */
   fetchMonthlyExpenses: async () => {
-    const response = await apiClient.get('/dashboard/monthly-expenses')
-    return response.data
+    return fetchWithFallback('/dashboard/monthly-expenses', '/monthly-expenses')
   },
 
   /**
    * Get yearly expenses comparison
    */
   fetchYearlyExpenses: async () => {
-    const response = await apiClient.get('/dashboard/yearly-expenses')
-    return response.data
+    return fetchWithFallback('/dashboard/yearly-expenses', '/yearly-expenses')
   },
 
   /**
@@ -27,8 +38,7 @@ const dashboardService = {
     if (month) {
       params.month = month
     }
-    const response = await apiClient.get('/dashboard/expense-trends', { params })
-    return response.data
+    return fetchWithFallback('/dashboard/expense-trends', '/expense-trends', { params })
   },
 
   /**
@@ -41,8 +51,7 @@ const dashboardService = {
     if (month) {
       params.month = month
     }
-    const response = await apiClient.get('/dashboard/expense-breakdown', { params })
-    return response.data
+    return fetchWithFallback('/dashboard/expense-breakdown', '/expense-breakdown', { params })
   },
 
   /**

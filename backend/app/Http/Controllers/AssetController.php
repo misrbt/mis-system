@@ -238,12 +238,34 @@ class AssetController extends Controller
         if ($request->has('components')) {
             $componentValidator = Validator::make($request->all(), [
                 'components' => 'array',
-                'components.*.component_type' => 'required|in:system_unit,monitor,keyboard_mouse,other',
+                'components.*.component_type' => 'nullable|string|max:255',
+                'components.*.category_id' => 'required|exists:asset_category,id',
+                'components.*.subcategory_id' => [
+                    'nullable',
+                    'exists:asset_subcategories,id',
+                    function ($attribute, $value, $fail) use ($request) {
+                        if (!$value) {
+                            return;
+                        }
+                        if (preg_match('/components\\.(\\d+)\\.subcategory_id/', $attribute, $matches)) {
+                            $index = $matches[1];
+                            $categoryId = $request->input("components.{$index}.category_id");
+                            if ($categoryId) {
+                                $subcategory = \App\Models\AssetSubcategory::find($value);
+                                if ($subcategory && $subcategory->category_id != $categoryId) {
+                                    $fail('The selected subcategory does not belong to the selected category.');
+                                }
+                            }
+                        }
+                    },
+                ],
                 'components.*.component_name' => 'required|string|max:255',
                 'components.*.brand' => 'nullable|string|max:255',
                 'components.*.model' => 'nullable|string|max:255',
                 'components.*.serial_number' => 'nullable|string|max:255|unique:asset_components,serial_number',
                 'components.*.acq_cost' => 'nullable|numeric|min:0',
+                'components.*.status_id' => 'required|exists:status,id',
+                'components.*.specifications' => 'nullable|array',
                 'components.*.remarks' => 'nullable|string',
             ]);
 
@@ -340,13 +362,15 @@ class AssetController extends Controller
                 foreach ($request->components as $componentData) {
                     $component = AssetComponent::create([
                         'parent_asset_id' => $asset->id,
-                        'component_type' => $componentData['component_type'],
+                        'category_id' => $componentData['category_id'],
+                        'subcategory_id' => $componentData['subcategory_id'] ?? null,
                         'component_name' => $componentData['component_name'],
                         'brand' => $componentData['brand'] ?? null,
                         'model' => $componentData['model'] ?? null,
                         'serial_number' => $componentData['serial_number'] ?? null,
+                        'specifications' => $componentData['specifications'] ?? null,
                         'acq_cost' => $componentData['acq_cost'] ?? null,
-                        'status_id' => $asset->status_id, // Inherit parent status initially
+                        'status_id' => $componentData['status_id'] ?? $asset->status_id,
                         'assigned_to_employee_id' => $asset->assigned_to_employee_id, // Inherit parent assignment
                         'remarks' => $componentData['remarks'] ?? null,
                     ]);
