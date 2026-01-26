@@ -38,15 +38,20 @@ class AssetObserver
      */
     public function deleted(Asset $asset): void
     {
-        $changedFields = $this->buildDeletedFields($asset);
+        try {
+            $changedFields = $this->buildDeletedFields($asset);
 
-        $this->logMovement($asset, 'disposed', [
-            'from_status_id' => $asset->status_id,
-            'from_employee_id' => $asset->assigned_to_employee_id,
-            'from_branch_id' => $asset->assignedEmployee?->branch_id,
-            'metadata' => $this->buildChangeMetadata($changedFields),
-            'remarks' => 'Asset deleted',
-        ]);
+            $this->logMovement($asset, 'disposed', [
+                'asset_id' => null,
+                'from_status_id' => $asset->status_id,
+                'from_employee_id' => $asset->assigned_to_employee_id,
+                'from_branch_id' => $asset->assignedEmployee?->branch_id,
+                'metadata' => $this->buildChangeMetadata($changedFields),
+                'remarks' => 'Asset deleted',
+            ]);
+        } catch (\Exception $e) {
+            // Avoid blocking asset deletion if movement logging fails.
+        }
     }
 
     /**
@@ -57,6 +62,17 @@ class AssetObserver
     {
         // Store original values in an observer-scoped cache for use in updated()
         $this->originalValues[$asset->id] = $asset->getOriginal();
+
+        if ($asset->isDirty('status_id')) {
+            $defectiveStatus = \App\Models\Status::where('name', 'Defective')->first();
+            if ($defectiveStatus && (int) $asset->status_id === (int) $defectiveStatus->id) {
+                $asset->defective_at = now();
+                $asset->delete_after_at = now()->addMonth();
+            } else {
+                $asset->defective_at = null;
+                $asset->delete_after_at = null;
+            }
+        }
     }
 
     /**

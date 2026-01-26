@@ -53,10 +53,26 @@ export const useAssetDropdownData = () => {
     cacheTime: 10 * 60 * 1000,
   })
 
+  // Fetch equipment
+  const {
+    data: equipmentData,
+    isLoading: isLoadingEquipment,
+    error: equipmentError,
+  } = useQuery({
+    queryKey: ['equipment'],
+    queryFn: async () => {
+      const response = await apiClient.get('/equipment')
+      return normalizeArrayResponse(response.data)
+    },
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
+  })
+
   // Normalize data
   const categories = Array.isArray(categoriesData) ? categoriesData : []
   const statuses = Array.isArray(statusesData) ? statusesData : []
   const vendors = Array.isArray(vendorsData) ? vendorsData : []
+  const equipment = Array.isArray(equipmentData) ? equipmentData : []
 
   // Create status color map for easy lookup
   const statusColorMap = statuses.reduce((acc, status) => {
@@ -81,6 +97,7 @@ export const useAssetDropdownData = () => {
     categories,
     statuses,
     vendors,
+    equipment,
 
     // Helper maps
     statusColorMap,
@@ -88,15 +105,17 @@ export const useAssetDropdownData = () => {
     vendorNameMap,
 
     // Loading states
-    isLoading: isLoadingCategories || isLoadingStatuses || isLoadingVendors,
+    isLoading: isLoadingCategories || isLoadingStatuses || isLoadingVendors || isLoadingEquipment,
     isLoadingCategories,
     isLoadingStatuses,
     isLoadingVendors,
+    isLoadingEquipment,
 
     // Error states
-    hasError: !!categoriesError || !!statusesError || !!vendorsError,
+    hasError: !!categoriesError || !!statusesError || !!vendorsError || !!equipmentError,
     categoriesError,
     statusesError,
     vendorsError,
+    equipmentError,
   }
 }

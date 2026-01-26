@@ -12,13 +12,18 @@ const EmployeePage = lazy(() => import('../pages/inventory/EmployeePage'))
 const EmployeeListPage = lazy(() => import('../pages/inventory/EmployeeListPage'))
 const StatusPage = lazy(() => import('../pages/inventory/StatusPage'))
 const VendorsPage = lazy(() => import('../pages/inventory/VendorsPage'))
+const EquipmentPage = lazy(() => import('../pages/inventory/EquipmentPage'))
 const AssetCategoryPage = lazy(() => import('../pages/inventory/AssetCategoryPage'))
+const SubcategoryPage = lazy(() => import('../pages/inventory/SubcategoryPage'))
 const AssetsPage = lazy(() => import('../pages/inventory/AssetsPage'))
 const AssetViewPage = lazy(() => import('../pages/inventory/AssetViewPage'))
+const AssetComponentsPage = lazy(() => import('../pages/inventory/AssetComponentsPage'))
+
 const RepairsPage = lazy(() => import('../pages/inventory/RepairsPage'))
 const ReportsPage = lazy(() => import('../pages/inventory/ReportsPage'))
 const AuditLogsPage = lazy(() => import('../pages/inventory/AuditLogsPage'))
 const MonthlyExpensesPage = lazy(() => import('../pages/inventory/MonthlyExpensesPage'))
+const SoftwareLicensePage = lazy(() => import('../pages/inventory/SoftwareLicensePage'))
 
 const inventoryRoutes = {
   path: '/inventory',
@@ -65,8 +70,16 @@ const inventoryRoutes = {
       element: <AssetCategoryPage />,
     },
     {
+      path: 'asset-subcategories',
+      element: <SubcategoryPage />,
+    },
+    {
       path: 'vendors',
       element: <VendorsPage />,
+    },
+    {
+      path: 'equipment',
+      element: <EquipmentPage />,
     },
     {
       path: 'repairs',
@@ -80,6 +93,11 @@ const inventoryRoutes = {
       path: 'assets/:id',
       element: <AssetViewPage />,
     },
+    {
+      path: 'assets/:id/components',
+      element: <AssetComponentsPage />,
+    },
+
     {
       path: 'employees/:employeeId/assets',
       element: <AssetViewPage />,
@@ -95,6 +113,10 @@ const inventoryRoutes = {
     {
       path: 'monthly-expenses',
       element: <MonthlyExpensesPage />,
+    },
+    {
+      path: 'software-licenses',
+      element: <SoftwareLicensePage />,
     },
   ],
 }

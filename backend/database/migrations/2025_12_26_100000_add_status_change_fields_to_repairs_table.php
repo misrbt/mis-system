@@ -20,7 +20,7 @@ return new class extends Migration
             // Fields for "In Repair" status
             $table->enum('delivered_by_type', ['employee', 'branch'])->nullable()->after('job_order_path');
             $table->foreignId('delivered_by_employee_id')->nullable()->after('delivered_by_type')->constrained('employee')->onDelete('set null');
-            $table->foreignId('delivered_by_branch_id')->nullable()->after('delivered_by_employee_id')->constrained('branches')->onDelete('set null');
+            $table->foreignId('delivered_by_branch_id')->nullable()->after('delivered_by_employee_id')->constrained('branch')->onDelete('set null');
 
             // Add indexes
             $table->index('delivered_by_employee_id');

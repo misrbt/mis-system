@@ -50,7 +50,7 @@ class AssetComponentObserver
         $this->trackFieldChanges($component, $original);
     }
 
-    public function deleted(AssetComponent $component): void
+    public function deleting(AssetComponent $component): void
     {
         $this->logMovement($component, 'disposed', [
             'from_status_id' => $component->status_id,
@@ -59,6 +59,11 @@ class AssetComponentObserver
             'parent_asset_id' => $component->parent_asset_id,
             'remarks' => 'Component deleted',
         ]);
+    }
+
+    public function deleted(AssetComponent $component): void
+    {
+        // No-op: movement already logged in deleting() before FK removal.
     }
 
     protected function trackAssignmentChange(AssetComponent $component, array $original): void

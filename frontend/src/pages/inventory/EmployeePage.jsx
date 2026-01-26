@@ -129,10 +129,11 @@ function EmployeePage() {
         fetchEmployees()
       }
     } catch (error) {
+      const fullnameError = error.response?.data?.errors?.fullname?.[0]
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Failed to create employee',
+        text: fullnameError || error.response?.data?.message || 'Failed to create employee',
       })
     }
   }
@@ -152,10 +153,11 @@ function EmployeePage() {
         fetchEmployees()
       }
     } catch (error) {
+      const fullnameError = error.response?.data?.errors?.fullname?.[0]
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Failed to update employee',
+        text: fullnameError || error.response?.data?.message || 'Failed to update employee',
       })
     }
   }
@@ -208,7 +210,6 @@ function EmployeePage() {
     []
   )
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const mobileTable = useReactTable({
     data: employees,
     columns: mobileColumns,

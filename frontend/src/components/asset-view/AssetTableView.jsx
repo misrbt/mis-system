@@ -10,9 +10,7 @@ import AssetEmptyState from './AssetEmptyState'
 
 const AssetTableView = ({
   assets,
-  categories,
   statuses,
-  vendors,
   statusColorMap,
   statusPickerFor,
   totalEmployeeAcqCost,
@@ -43,6 +41,9 @@ const AssetTableView = ({
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Brand & Model
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Equipment
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Serial #

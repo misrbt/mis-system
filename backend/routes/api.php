@@ -7,8 +7,10 @@ use App\Http\Controllers\SectionController;
 use App\Http\Controllers\PositionController;
 use App\Http\Controllers\StatusController;
 use App\Http\Controllers\VendorController;
+use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetCategoryController;
+use App\Http\Controllers\AssetSubcategoryController;
 use App\Http\Controllers\AssetComponentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ReportController;
@@ -16,6 +18,8 @@ use App\Http\Controllers\RepairController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AssetMovementController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\SoftwareLicenseController;
+use App\Http\Controllers\OfficeToolController;
 
 // Health check endpoint
 Route::get('/ping', function () {
@@ -72,8 +76,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Vendor routes
     Route::apiResource('vendors', VendorController::class);
 
+    // Equipment routes
+    Route::apiResource('equipment', EquipmentController::class);
+
     // Asset Category routes
     Route::apiResource('asset-categories', AssetCategoryController::class);
+
+    // Asset Subcategory routes
+    Route::get('asset-categories/{categoryId}/subcategories', [AssetSubcategoryController::class, 'getByCategory']);
+    Route::apiResource('asset-subcategories', AssetSubcategoryController::class);
 
     // Employee routes
     Route::get('employees/{id}/asset-history', [EmployeeController::class, 'getAssetHistory']);
@@ -153,4 +164,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Bulk transfer route (outside the {id} prefix)
     Route::post('assets/movements/bulk-transfer', [AssetMovementController::class, 'bulkTransfer']);
+
+    // Software License routes
+    Route::post('software-licenses/bulk-delete', [SoftwareLicenseController::class, 'bulkDelete']);
+    Route::apiResource('software-licenses', SoftwareLicenseController::class);
+
+    // Office Tool routes
+    Route::post('office-tools/bulk-delete', [OfficeToolController::class, 'bulkDelete']);
+    Route::apiResource('office-tools', OfficeToolController::class);
 });

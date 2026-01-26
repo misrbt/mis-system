@@ -20,4 +20,17 @@ class AssetCategory extends Model
     {
         return $this->hasMany(Asset::class, 'asset_category_id');
     }
+
+    public function subcategories()
+    {
+        return $this->hasMany(AssetSubcategory::class, 'category_id');
+    }
+
+    /**
+     * Check if category can be deleted (has no subcategories)
+     */
+    public function canBeDeleted()
+    {
+        return $this->subcategories()->count() === 0;
+    }
 }

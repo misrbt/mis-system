@@ -23,11 +23,13 @@ class AssetController extends Controller
         try {
             $query = Asset::with([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             // Advanced filtering
@@ -39,6 +41,10 @@ class AssetController extends Controller
 
             if ($request->has('category_id') && $request->category_id) {
                 $query->where('asset_category_id', $request->category_id);
+            }
+
+            if ($request->has('subcategory_id') && $request->subcategory_id) {
+                $query->where('subcategory_id', $request->subcategory_id);
             }
 
             if ($request->has('status_id') && $request->status_id) {
@@ -68,9 +74,11 @@ class AssetController extends Controller
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('asset_name', 'like', "%{$search}%")
-                      ->orWhere('serial_number', 'like', "%{$search}%")
-                      ->orWhere('brand', 'like', "%{$search}%")
-                      ->orWhere('model', 'like', "%{$search}%");
+                        ->orWhere('serial_number', 'like', "%{$search}%")
+                        ->orWhereHas('equipment', function ($eq) use ($search) {
+                            $eq->where('brand', 'like', "%{$search}%")
+                                ->orWhere('model', 'like', "%{$search}%");
+                        });
                 });
             }
 
@@ -87,7 +95,7 @@ class AssetController extends Controller
             $returnAll = $request->boolean('all', false);
             if (!$hasEmployeeFilter && !$returnAll) {
                 $assets = $assets
-                    ->unique(fn ($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
+                    ->unique(fn($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
                     ->values();
             }
 
@@ -122,6 +130,10 @@ class AssetController extends Controller
                 $query->where('asset_category_id', $request->category_id);
             }
 
+            if ($request->has('subcategory_id') && $request->subcategory_id) {
+                $query->where('subcategory_id', $request->subcategory_id);
+            }
+
             if ($request->has('status_id') && $request->status_id) {
                 $query->where('status_id', $request->status_id);
             }
@@ -147,8 +159,10 @@ class AssetController extends Controller
                 $query->where(function ($q) use ($search) {
                     $q->where('asset_name', 'like', "%{$search}%")
                         ->orWhere('serial_number', 'like', "%{$search}%")
-                        ->orWhere('brand', 'like', "%{$search}%")
-                        ->orWhere('model', 'like', "%{$search}%");
+                        ->orWhereHas('equipment', function ($eq) use ($search) {
+                            $eq->where('brand', 'like', "%{$search}%")
+                                ->orWhere('model', 'like', "%{$search}%");
+                        });
                 });
             }
 
@@ -156,7 +170,7 @@ class AssetController extends Controller
                 ->selectRaw('assigned_to_employee_id, COALESCE(SUM(acq_cost), 0) as total_acq_cost')
                 ->groupBy('assigned_to_employee_id')
                 ->get()
-                ->map(fn ($row) => [
+                ->map(fn($row) => [
                     'employee_id' => $row->assigned_to_employee_id,
                     'total_acq_cost' => (float) $row->total_acq_cost,
                 ]);
@@ -180,11 +194,26 @@ class AssetController extends Controller
      */
     public function store(Request $request)
     {
+        $request->merge([
+            'subcategory_id' => $request->input('subcategory_id') ?: null,
+            'equipment_id' => $request->input('equipment_id') ?: null,
+        ]);
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
-            'brand' => 'nullable|string|max:255',
-            'model' => 'nullable|string|max:255',
+            'subcategory_id' => [
+                'nullable',
+                'exists:asset_subcategories,id',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($value && $request->asset_category_id) {
+                        $subcategory = \App\Models\AssetSubcategory::find($value);
+                        if ($subcategory && $subcategory->category_id != $request->asset_category_id) {
+                            $fail('The selected subcategory does not belong to the selected category.');
+                        }
+                    }
+                },
+            ],
+            'equipment_id' => 'nullable|exists:equipment,id',
             'serial_number' => 'nullable|string|max:255',
             'purchase_date' => 'required|date',
             'acq_cost' => 'nullable|numeric|min:0',
@@ -209,12 +238,34 @@ class AssetController extends Controller
         if ($request->has('components')) {
             $componentValidator = Validator::make($request->all(), [
                 'components' => 'array',
-                'components.*.component_type' => 'required|in:system_unit,monitor,keyboard_mouse,other',
+                'components.*.component_type' => 'nullable|string|max:255',
+                'components.*.category_id' => 'required|exists:asset_category,id',
+                'components.*.subcategory_id' => [
+                    'nullable',
+                    'exists:asset_subcategories,id',
+                    function ($attribute, $value, $fail) use ($request) {
+                        if (!$value) {
+                            return;
+                        }
+                        if (preg_match('/components\\.(\\d+)\\.subcategory_id/', $attribute, $matches)) {
+                            $index = $matches[1];
+                            $categoryId = $request->input("components.{$index}.category_id");
+                            if ($categoryId) {
+                                $subcategory = \App\Models\AssetSubcategory::find($value);
+                                if ($subcategory && $subcategory->category_id != $categoryId) {
+                                    $fail('The selected subcategory does not belong to the selected category.');
+                                }
+                            }
+                        }
+                    },
+                ],
                 'components.*.component_name' => 'required|string|max:255',
                 'components.*.brand' => 'nullable|string|max:255',
                 'components.*.model' => 'nullable|string|max:255',
                 'components.*.serial_number' => 'nullable|string|max:255|unique:asset_components,serial_number',
                 'components.*.acq_cost' => 'nullable|numeric|min:0',
+                'components.*.status_id' => 'required|exists:status,id',
+                'components.*.specifications' => 'nullable|array',
                 'components.*.remarks' => 'nullable|string',
             ]);
 
@@ -228,7 +279,23 @@ class AssetController extends Controller
         }
 
         try {
-            $data = $request->except(['status_id', 'book_value']); // Remove status and book_value from request
+            $data = $request->only([
+                'asset_name',
+                'asset_category_id',
+                'subcategory_id',
+                'equipment_id',
+                'serial_number',
+                'purchase_date',
+                'acq_cost',
+                'waranty_expiration_date',
+                'estimate_life',
+                'vendor_id',
+                'remarks',
+                'specifications',
+                'assigned_to_employee_id',
+                'warranty_duration_value',
+                'warranty_duration_unit',
+            ]);
 
             // Compute warranty expiration if duration is provided; otherwise respect provided date or leave null
             $data['waranty_expiration_date'] = $this->calculateWarrantyExpiration(
@@ -295,13 +362,15 @@ class AssetController extends Controller
                 foreach ($request->components as $componentData) {
                     $component = AssetComponent::create([
                         'parent_asset_id' => $asset->id,
-                        'component_type' => $componentData['component_type'],
+                        'category_id' => $componentData['category_id'],
+                        'subcategory_id' => $componentData['subcategory_id'] ?? null,
                         'component_name' => $componentData['component_name'],
                         'brand' => $componentData['brand'] ?? null,
                         'model' => $componentData['model'] ?? null,
                         'serial_number' => $componentData['serial_number'] ?? null,
+                        'specifications' => $componentData['specifications'] ?? null,
                         'acq_cost' => $componentData['acq_cost'] ?? null,
-                        'status_id' => $asset->status_id, // Inherit parent status initially
+                        'status_id' => $componentData['status_id'] ?? $asset->status_id,
                         'assigned_to_employee_id' => $asset->assigned_to_employee_id, // Inherit parent assignment
                         'remarks' => $componentData['remarks'] ?? null,
                     ]);
@@ -324,11 +393,13 @@ class AssetController extends Controller
             // Load relationships
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             return response()->json([
@@ -355,11 +426,13 @@ class AssetController extends Controller
         try {
             $asset = Asset::with([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ])->findOrFail($id);
 
             // Calculate depreciation information
@@ -385,11 +458,26 @@ class AssetController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $request->merge([
+            'subcategory_id' => $request->input('subcategory_id') ?: null,
+            'equipment_id' => $request->input('equipment_id') ?: null,
+        ]);
         $validator = Validator::make($request->all(), [
             'asset_name' => 'required|string|max:255',
             'asset_category_id' => 'required|exists:asset_category,id',
-            'brand' => 'nullable|string|max:255',
-            'model' => 'nullable|string|max:255',
+            'subcategory_id' => [
+                'nullable',
+                'exists:asset_subcategories,id',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($value && $request->asset_category_id) {
+                        $subcategory = \App\Models\AssetSubcategory::find($value);
+                        if ($subcategory && $subcategory->category_id != $request->asset_category_id) {
+                            $fail('The selected subcategory does not belong to the selected category.');
+                        }
+                    }
+                },
+            ],
+            'equipment_id' => 'nullable|exists:equipment,id',
             'serial_number' => 'nullable|string|max:255',
             'purchase_date' => 'required|date',
             'acq_cost' => 'nullable|numeric|min:0',
@@ -420,7 +508,24 @@ class AssetController extends Controller
                 || $request->has('estimate_life');
 
             // Update asset (excluding book_value from request)
-            $data = $request->except(['book_value']);
+            $data = $request->only([
+                'asset_name',
+                'asset_category_id',
+                'subcategory_id',
+                'equipment_id',
+                'serial_number',
+                'purchase_date',
+                'acq_cost',
+                'waranty_expiration_date',
+                'estimate_life',
+                'vendor_id',
+                'status_id',
+                'remarks',
+                'specifications',
+                'assigned_to_employee_id',
+                'warranty_duration_value',
+                'warranty_duration_unit',
+            ]);
 
             // Auto-adjust status based on purchase date if:
             // 1. Purchase date is being changed
@@ -473,11 +578,13 @@ class AssetController extends Controller
             // Load relationships
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             $response = [
@@ -491,7 +598,7 @@ class AssetController extends Controller
                 $response['message'] .= ' (book value recalculated)';
             }
 
-        return response()->json($response, 200);
+            return response()->json($response, 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -666,8 +773,8 @@ class AssetController extends Controller
             $allowedFields = [
                 'asset_name',
                 'asset_category_id',
-                'brand',
-                'model',
+                'subcategory_id',
+                'equipment_id',
                 'serial_number',
                 'purchase_date',
                 'acq_cost',
@@ -702,11 +809,13 @@ class AssetController extends Controller
 
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
+                'equipment'
             ]);
 
             $response = [
@@ -758,6 +867,7 @@ class AssetController extends Controller
 
             $asset->load([
                 'category',
+                'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',

@@ -12,11 +12,58 @@ class Asset extends Model
 
     protected $table = 'assets';
 
+    /**
+     * The "booted" method of the model.
+     * Auto-cleanup defective assets - works exactly like book value calculation
+     * NO SCHEDULER NEEDED - Automatic cleanup whenever assets are queried
+     */
+    protected static function booted()
+    {
+        // Global scope to automatically exclude AND delete expired defective assets
+        // This runs on EVERY query, ensuring real-time cleanup
+        static::addGlobalScope('auto_delete_expired_defective', function ($query) {
+            // First, delete any assets that have passed their delete_after_at timestamp
+            // This happens in the background without blocking the query
+            try {
+                // Get assets ready for deletion (outside global scope to avoid recursion)
+                $assetsToDelete = static::withoutGlobalScope('auto_delete_expired_defective')
+                    ->whereNotNull('delete_after_at')
+                    ->where('delete_after_at', '<=', now())
+                    ->limit(50) // Batch delete to avoid performance issues
+                    ->get();
+
+                if ($assetsToDelete->isNotEmpty()) {
+                    foreach ($assetsToDelete as $asset) {
+                        try {
+                            \Illuminate\Support\Facades\Log::info("Auto-deleted defective asset", [
+                                'asset_id' => $asset->id,
+                                'asset_name' => $asset->asset_name,
+                                'defective_at' => $asset->defective_at,
+                                'delete_after_at' => $asset->delete_after_at,
+                            ]);
+                            $asset->delete();
+                        } catch (\Exception $e) {
+                            \Illuminate\Support\Facades\Log::error("Failed to auto-delete asset {$asset->id}: " . $e->getMessage());
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // Silent fail - don't break queries
+            }
+
+            // Then exclude any remaining expired assets from the query results
+            $query->where(function ($q) {
+                $q->whereNull('delete_after_at')
+                  ->orWhere('delete_after_at', '>', now());
+            });
+        });
+    }
+
     protected $fillable = [
         'asset_name',
         'asset_category_id',
-        'brand',
-        'model',
+        'subcategory_id',
+        'equipment_id',
         'book_value',
         'serial_number',
         'purchase_date',
@@ -25,7 +72,10 @@ class Asset extends Model
         'estimate_life',
         'vendor_id',
         'status_id',
+        'defective_at',
+        'delete_after_at',
         'remarks',
+        'specifications',
         'assigned_to_employee_id',
         'qr_code',
         'barcode',
@@ -37,6 +87,9 @@ class Asset extends Model
         'book_value' => 'float',
         'acq_cost' => 'float',
         'estimate_life' => 'float',
+        'specifications' => 'array',
+        'defective_at' => 'datetime',
+        'delete_after_at' => 'datetime',
     ];
 
     public function category()
@@ -44,9 +97,19 @@ class Asset extends Model
         return $this->belongsTo(AssetCategory::class, 'asset_category_id');
     }
 
+    public function subcategory()
+    {
+        return $this->belongsTo(AssetSubcategory::class, 'subcategory_id');
+    }
+
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function equipment()
+    {
+        return $this->belongsTo(Equipment::class, 'equipment_id');
     }
 
     public function status()
@@ -387,4 +450,5 @@ class Asset extends Model
         $this->save();
         return $this->barcode;
     }
+
 }
