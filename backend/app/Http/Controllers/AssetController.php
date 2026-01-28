@@ -338,10 +338,19 @@ class AssetController extends Controller
             $asset->save();
 
             // Generate QR code for the asset (non-blocking - won't fail asset creation)
+            $qrCodeResult = null;
+            $qrCodeWarning = null;
             try {
-                $asset->generateAndSaveQRCode();
+                $qrCodeResult = $asset->generateAndSaveQRCode('full', true);
+                if (!$qrCodeResult['success']) {
+                    $qrCodeWarning = $qrCodeResult['error'] ?? 'Failed to generate QR code';
+                    Log::warning("QR code generation failed for asset {$asset->id}", $qrCodeResult);
+                } elseif (isset($qrCodeResult['warning'])) {
+                    $qrCodeWarning = $qrCodeResult['warning'];
+                }
             } catch (\Exception $e) {
                 // Log error but don't fail asset creation
+                $qrCodeWarning = 'Failed to generate QR code: ' . $e->getMessage();
                 Log::warning("Failed to generate QR code for asset {$asset->id}: " . $e->getMessage());
             }
 
@@ -402,13 +411,25 @@ class AssetController extends Controller
                 'equipment'
             ]);
 
-            return response()->json([
+            $response = [
                 'success' => true,
                 'message' => "Asset created successfully with status \"{$statusName}\"",
                 'data' => $asset,
                 'depreciation_info' => $bookValueCalc,
                 'components_created' => count($createdComponents),
-            ], 201);
+            ];
+
+            // Add QR code generation info
+            if ($qrCodeResult) {
+                $response['qr_code_source'] = $qrCodeResult['source'] ?? null;
+            }
+
+            // Add warning if QR code generation had issues
+            if ($qrCodeWarning) {
+                $response['qr_code_warning'] = $qrCodeWarning;
+            }
+
+            return response()->json($response, 201);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -896,7 +917,16 @@ class AssetController extends Controller
     {
         try {
             $asset = Asset::findOrFail($id);
-            $qrCode = $asset->generateAndSaveQRCode();
+            $result = $asset->generateAndSaveQRCode('full', true);
+
+            if (!$result['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['error'] ?? 'Failed to generate QR code',
+                    'error_code' => $result['error_code'] ?? 'GENERATION_FAILED',
+                    'error' => $result['error'],
+                ], 500);
+            }
 
             // Log QR code generation
             InventoryAuditLogService::logCodeGeneration(
@@ -905,19 +935,41 @@ class AssetController extends Controller
                 $asset->asset_name
             );
 
-            return response()->json([
+            $response = [
                 'success' => true,
                 'message' => 'QR code generated successfully',
                 'data' => [
                     'id' => $asset->id,
-                    'qr_code' => $qrCode,
+                    'qr_code' => $result['qr_code'],
+                    'source' => $result['source'],
                 ],
-            ], 200);
+            ];
+
+            // Add warning if fallback was used
+            if (isset($result['warning'])) {
+                $response['warning'] = $result['warning'];
+                $response['message'] = 'QR code generated using fallback method';
+            }
+
+            return response()->json($response, 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Asset not found',
+                'error' => 'Asset with ID ' . $id . ' does not exist',
+            ], 404);
         } catch (\Exception $e) {
+            Log::error("Failed to generate QR code for asset {$id}", [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to generate QR code',
                 'error' => $e->getMessage(),
+                'error_code' => 'UNEXPECTED_ERROR',
             ], 500);
         }
     }

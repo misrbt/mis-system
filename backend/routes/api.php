@@ -98,6 +98,41 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
     Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
     Route::get('assets/totals', [AssetController::class, 'totals']);
+
+    // QR Code test endpoint - generates a test QR code to verify API configuration
+    Route::post('qr-code/test', function (\Illuminate\Http\Request $request) {
+        $data = $request->input('data', 'TEST-QR-CODE-123');
+
+        $qrCode = \App\Services\QRCodeMonkeyService::generate($data, [
+            'size' => $request->input('size', 300),
+        ]);
+
+        if ($qrCode) {
+            return response()->json([
+                'success' => true,
+                'message' => 'QR code generated successfully',
+                'data' => [
+                    'qr_code' => $qrCode,
+                    'encoded_data' => $data,
+                    'config' => [
+                        'body' => 'square',
+                        'eye' => 'frame0',
+                        'eyeBall' => 'ball0',
+                        'bodyColor' => '#000000',
+                        'bgColor' => '#FFFFFF',
+                    ],
+                ],
+            ]);
+        }
+
+        $error = \App\Services\QRCodeMonkeyService::getLastError();
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to generate QR code',
+            'error' => $error,
+        ], 500);
+    });
+
     Route::apiResource('assets', AssetController::class);
 
     // Asset Component routes (for Desktop PC components)
