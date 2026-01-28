@@ -5,7 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+<<<<<<< HEAD
 use Illuminate\Support\Facades\Schema;
+=======
+use App\Services\QRCodeMonkeyService;
+>>>>>>> 0c3ad75a5a0a2d92c9fa84b803b1099b3167c18c
 
 class Asset extends Model
 {
@@ -345,71 +349,64 @@ class Asset extends Model
     }
 
     /**
-     * Generate QR code for this asset
-     * Returns base64 encoded SVG image
+     * Generate QR code for this asset using QR Code Monkey API
+     * Returns base64 encoded PNG image with square design (frame0, ball0)
+     *
+     * @param string $type Type of QR code: 'simple' (serial only), 'url' (asset URL), 'full' (all info)
+     * @return string|null Base64 encoded PNG image
      */
-    public function generateQRCode()
+    public function generateQRCode(string $type = 'simple')
+    {
+        switch ($type) {
+            case 'url':
+                // Generate QR with URL to asset page
+                $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:5173'));
+                return QRCodeMonkeyService::generateForAssetWithUrl($this, $baseUrl);
+
+            case 'full':
+                // Generate QR with full asset information
+                return QRCodeMonkeyService::generateForAssetWithInfo($this);
+
+            case 'simple':
+            default:
+                // Generate QR with just serial number (default - most scannable)
+                return QRCodeMonkeyService::generateForAsset($this);
+        }
+    }
+
+    /**
+     * Legacy method - Generate QR code using local library (fallback)
+     * Returns base64 encoded SVG image
+     * Simple table format - easy to read when scanned
+     */
+    public function generateQRCodeLegacy()
     {
         $purchaseDate = $this->purchase_date
             ? \Carbon\Carbon::parse($this->purchase_date)->toDateString()
-            : 'N/A';
+            : '-';
         $warrantyDate = $this->waranty_expiration_date
             ? \Carbon\Carbon::parse($this->waranty_expiration_date)->toDateString()
-            : 'N/A';
-        $vendorName = $this->vendor?->company_name ?? 'N/A';
-        $statusName = $this->status?->name ?? 'N/A';
-        $assignedTo = $this->assignedEmployee?->fullname ?? 'Unassigned';
-        $branchName = $this->assignedEmployee?->branch?->branch_name ?? 'N/A';
-        $acqCost = !is_null($this->acq_cost) ? number_format($this->acq_cost, 2) : 'N/A';
-        $bookValue = !is_null($this->book_value) ? number_format($this->book_value, 2) : 'N/A';
+            : '-';
+        $acqCost = !is_null($this->acq_cost) ? 'PHP ' . number_format($this->acq_cost, 2) : '-';
+        $bookValue = !is_null($this->book_value) ? 'PHP ' . number_format($this->book_value, 2) : '-';
 
-        // Professional formatted text payload for QR code (ASCII compatible)
-        $qrData = "================================\n";
-        $qrData .= "    ASSET INFORMATION\n";
-        $qrData .= "================================\n\n";
+        // Simple table format - clean and easy to read
+        $qrData = "ASSET INFO\n";
+        $qrData .= "Name: " . ($this->asset_name ?? '-') . "\n";
+        $qrData .= "Serial: " . ($this->serial_number ?? '-') . "\n";
+        $qrData .= "Category: " . ($this->category?->name ?? '-') . "\n";
+        $qrData .= "Status: " . ($this->status?->name ?? '-') . "\n";
+        $qrData .= "Assigned Personnel: " . ($this->assignedEmployee?->fullname ?? 'Unassigned') . "\n";
+        $qrData .= "Branch: " . ($this->assignedEmployee?->branch?->branch_name ?? '-') . "\n";
+        $qrData .= "Purchase: " . $purchaseDate . "\n";
+        $qrData .= "Warranty: " . $warrantyDate . "\n";
+        $qrData .= "Cost: " . $acqCost . "\n";
+        $qrData .= "Book Value: " . $bookValue;
 
-        // Basic Information
-        $qrData .= "[BASIC INFO]\n";
-        $qrData .= "--------------------------------\n";
-        $qrData .= "* Equipment ID:\n  " . ($this->category?->code ?? 'N/A') . "\n\n";
-        $qrData .= "* Asset Name:\n  " . ($this->asset_name ?? 'N/A') . "\n\n";
-        $qrData .= "* Category:\n  " . ($this->category?->name ?? 'N/A') . "\n\n";
-        $qrData .= "* Serial Number:\n  " . ($this->serial_number ?? 'N/A') . "\n\n";
-
-        // Product Details
-        $qrData .= "[PRODUCT DETAILS]\n";
-        $qrData .= "--------------------------------\n";
-        $qrData .= "* Brand:\n  " . ($this->brand ?? 'N/A') . "\n\n";
-        $qrData .= "* Model:\n  " . ($this->model ?? 'N/A') . "\n\n";
-
-        // Purchase & Warranty
-        $qrData .= "[PURCHASE & WARRANTY]\n";
-        $qrData .= "--------------------------------\n";
-        $qrData .= "* Purchase Date:\n  " . $purchaseDate . "\n\n";
-        $qrData .= "* Warranty Expiration:\n  " . $warrantyDate . "\n\n";
-        $qrData .= "* Vendor:\n  " . $vendorName . "\n\n";
-
-        // Financial Information
-        $qrData .= "[FINANCIAL INFO]\n";
-        $qrData .= "--------------------------------\n";
-        $qrData .= "* Acquisition Cost:\n  PHP " . $acqCost . "\n\n";
-        $qrData .= "* Book Value:\n  PHP " . $bookValue . "\n\n";
-
-        // Status & Assignment
-        $qrData .= "[STATUS & ASSIGNMENT]\n";
-        $qrData .= "--------------------------------\n";
-        $qrData .= "* Status:\n  " . $statusName . "\n\n";
-        $qrData .= "* Assigned To:\n  " . $assignedTo . "\n\n";
-        $qrData .= "* Branch:\n  " . $branchName . "\n\n";
-
-        $qrData .= "================================";
-
-        // Use SVG format to avoid image library dependencies
         $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')
-            // Larger base size + margin + highest error correction to keep codes scannable even when printed small
-            ->size(600)
+            ->size(400)
             ->margin(2)
-            ->errorCorrection('H')
+            ->errorCorrection('M')
             ->generate($qrData);
 
         return 'data:image/svg+xml;base64,' . base64_encode($qrCode);
@@ -417,12 +414,64 @@ class Asset extends Model
 
     /**
      * Generate and save QR code for this asset
+     * Uses QR Code Monkey API with fallback to legacy local generation
+     *
+     * @param string $type Type of QR code: 'simple', 'url', or 'full'
+     * @param bool $useFallback Whether to use legacy fallback if API fails
+     * @return array Result with 'success', 'qr_code', 'source', and optionally 'error'
      */
-    public function generateAndSaveQRCode()
+    public function generateAndSaveQRCode(string $type = 'simple', bool $useFallback = true): array
     {
-        $this->qr_code = $this->generateQRCode();
-        $this->save();
-        return $this->qr_code;
+        $result = [
+            'success' => false,
+            'qr_code' => null,
+            'source' => null,
+            'error' => null,
+        ];
+
+        // Try QR Code Monkey API first
+        $qrCode = $this->generateQRCode($type);
+
+        if ($qrCode) {
+            $this->qr_code = $qrCode;
+            $this->save();
+
+            $result['success'] = true;
+            $result['qr_code'] = $qrCode;
+            $result['source'] = 'qr_code_monkey';
+
+            return $result;
+        }
+
+        // Get error information from the service
+        $apiError = QRCodeMonkeyService::getLastError();
+
+        if ($useFallback) {
+            // Fallback to legacy if API fails
+            \Illuminate\Support\Facades\Log::warning("QR Code Monkey API failed for asset {$this->id}, using legacy generator", [
+                'error' => $apiError,
+            ]);
+
+            $qrCode = $this->generateQRCodeLegacy();
+
+            if ($qrCode) {
+                $this->qr_code = $qrCode;
+                $this->save();
+
+                $result['success'] = true;
+                $result['qr_code'] = $qrCode;
+                $result['source'] = 'legacy';
+                $result['warning'] = $apiError ? $apiError['message'] : 'QR Code Monkey API unavailable, used local generator';
+
+                return $result;
+            }
+        }
+
+        // Both methods failed
+        $result['error'] = $apiError ? $apiError['message'] : 'Failed to generate QR code';
+        $result['error_code'] = $apiError ? $apiError['code'] : 'GENERATION_FAILED';
+
+        return $result;
     }
 
     /**
