@@ -49,9 +49,14 @@ class DashboardController extends Controller
     public function getAssetTrend()
     {
         try {
+            $driver = DB::getDriverName();
+            $monthExpression = $driver === 'pgsql'
+                ? "TO_CHAR(purchase_date, 'YYYY-MM')"
+                : "DATE_FORMAT(purchase_date, '%Y-%m')";
+
             $trend = DB::table('assets')
                 ->select(
-                    DB::raw('DATE_FORMAT(purchase_date, "%Y-%m") as month'),
+                    DB::raw($monthExpression . ' as month'),
                     DB::raw('COUNT(*) as count')
                 )
                 ->where('purchase_date', '>=', now()->subMonths(12))
@@ -85,8 +90,8 @@ class DashboardController extends Controller
 
             $activities = DB::table('asset_movements')
                 ->join('assets', 'asset_movements.asset_id', '=', 'assets.id')
-                ->leftJoin('employees as from_emp', 'asset_movements.from_employee_id', '=', 'from_emp.id')
-                ->leftJoin('employees as to_emp', 'asset_movements.to_employee_id', '=', 'to_emp.id')
+                ->leftJoin('employee as from_emp', 'asset_movements.from_employee_id', '=', 'from_emp.id')
+                ->leftJoin('employee as to_emp', 'asset_movements.to_employee_id', '=', 'to_emp.id')
                 ->leftJoin('status as from_status', 'asset_movements.from_status_id', '=', 'from_status.id')
                 ->leftJoin('status as to_status', 'asset_movements.to_status_id', '=', 'to_status.id')
                 ->select(
@@ -96,8 +101,8 @@ class DashboardController extends Controller
                     'asset_movements.reason',
                     'assets.asset_name',
                     'assets.serial_number',
-                    DB::raw('CONCAT(COALESCE(from_emp.first_name, ""), " ", COALESCE(from_emp.last_name, "")) as from_employee'),
-                    DB::raw('CONCAT(COALESCE(to_emp.first_name, ""), " ", COALESCE(to_emp.last_name, "")) as to_employee'),
+                    DB::raw("COALESCE(from_emp.fullname, '') as from_employee"),
+                    DB::raw("COALESCE(to_emp.fullname, '') as to_employee"),
                     'from_status.name as from_status',
                     'to_status.name as to_status'
                 )
@@ -322,9 +327,9 @@ class DashboardController extends Controller
             $month = $request->get('month');
 
             $query = DB::table('assets')
-                ->join('asset_categories', 'assets.asset_category_id', '=', 'asset_categories.id')
+                ->join('asset_category', 'assets.asset_category_id', '=', 'asset_category.id')
                 ->select(
-                    'asset_categories.category_name',
+                    'asset_category.name as category_name',
                     DB::raw('COUNT(assets.id) as asset_count'),
                     DB::raw('COALESCE(SUM(assets.acq_cost), 0) as total_acquisition'),
                     DB::raw('COALESCE(SUM(assets.book_value), 0) as total_book_value')
@@ -337,7 +342,7 @@ class DashboardController extends Controller
             }
 
             $breakdown = $query
-                ->groupBy('asset_categories.id', 'asset_categories.category_name')
+                ->groupBy('asset_category.id', 'asset_category.name')
                 ->orderByDesc('total_acquisition')
                 ->get()
                 ->map(function ($item) {
@@ -372,13 +377,27 @@ class DashboardController extends Controller
     {
         try {
             $limit = min($request->get('limit', 50), 100);
+            $now = now();
+            $oneMonthFromNow = $now->copy()->addMonth();
+            $threeMonthsFromNow = $now->copy()->addMonths(3);
+            $priorityOrderCase = 'CASE
+                WHEN assets.waranty_expiration_date < ? THEN 1
+                WHEN status.name = ? THEN 2
+                ELSE 3
+            END';
+            $priorityCase = "CASE
+                WHEN assets.waranty_expiration_date < ? THEN 'High'
+                WHEN status.name = ? THEN 'High'
+                WHEN assets.waranty_expiration_date <= ? THEN 'Medium'
+                ELSE 'Low'
+            END";
 
             // Single optimized query with all joins
             $assets = DB::table('assets')
-                ->leftJoin('asset_categories', 'assets.asset_category_id', '=', 'asset_categories.id')
+                ->leftJoin('asset_category', 'assets.asset_category_id', '=', 'asset_category.id')
                 ->leftJoin('status', 'assets.status_id', '=', 'status.id')
-                ->leftJoin('employees', 'assets.assigned_to_employee_id', '=', 'employees.id')
-                ->leftJoin('branches', 'employees.branch_id', '=', 'branches.id')
+                ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
+                ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
                 ->select(
                     'assets.id',
                     'assets.asset_name',
@@ -386,28 +405,19 @@ class DashboardController extends Controller
                     'assets.waranty_expiration_date as warranty_expiration',
                     'assets.updated_at',
                     'assets.created_at',
-                    'asset_categories.category_name',
+                    'asset_category.name as category_name',
                     'status.name as status_name',
                     'status.color as status_color',
-                    'branches.branch_name',
-                    DB::raw('CONCAT(COALESCE(employees.first_name, ""), " ", COALESCE(employees.last_name, "")) as employee_name'),
-                    DB::raw('CASE
-                        WHEN assets.waranty_expiration_date < NOW() THEN 1
-                        WHEN status.name = "Under Repair" THEN 2
-                        ELSE 3
-                    END as priority_order'),
-                    DB::raw('CASE
-                        WHEN assets.waranty_expiration_date < NOW() THEN "High"
-                        WHEN status.name = "Under Repair" THEN "High"
-                        WHEN assets.waranty_expiration_date <= DATE_ADD(NOW(), INTERVAL 1 MONTH) THEN "Medium"
-                        ELSE "Low"
-                    END as priority')
+                    'branch.branch_name',
+                    'employee.fullname as employee_name'
                 )
-                ->where(function ($query) {
+                ->selectRaw($priorityOrderCase . ' as priority_order', [$now, 'Under Repair'])
+                ->selectRaw($priorityCase . ' as priority', [$now, 'Under Repair', $oneMonthFromNow])
+                ->where(function ($query) use ($threeMonthsFromNow) {
                     // Warranty expiring within 3 months or already expired
-                    $query->where(function ($q) {
+                    $query->where(function ($q) use ($threeMonthsFromNow) {
                         $q->whereNotNull('assets.waranty_expiration_date')
-                          ->where('assets.waranty_expiration_date', '<=', now()->addMonths(3));
+                          ->where('assets.waranty_expiration_date', '<=', $threeMonthsFromNow);
                     })
                     // Or under repair
                     ->orWhere('status.name', 'Under Repair');
@@ -416,19 +426,22 @@ class DashboardController extends Controller
                 ->orderBy('assets.waranty_expiration_date')
                 ->limit($limit)
                 ->get()
-                ->map(function ($asset) {
+                ->map(function ($asset) use ($now) {
                     // Calculate next maintenance
                     $lastUpdate = $asset->updated_at ?: $asset->created_at;
                     $nextMaintenance = date('Y-m-d', strtotime($lastUpdate . ' +30 days'));
 
                     // Determine reason
                     $reason = 'Scheduled maintenance';
-                    if ($asset->warranty_expiration && $asset->warranty_expiration < now()) {
+                    $warrantyExpiration = $asset->warranty_expiration
+                        ? \Carbon\Carbon::parse($asset->warranty_expiration)
+                        : null;
+                    if ($warrantyExpiration && $warrantyExpiration->lt($now)) {
                         $reason = 'Warranty expired';
                     } elseif ($asset->status_name === 'Under Repair') {
                         $reason = 'Currently under repair';
-                    } elseif ($asset->warranty_expiration) {
-                        $daysUntilExpiry = now()->diffInDays($asset->warranty_expiration, false);
+                    } elseif ($warrantyExpiration) {
+                        $daysUntilExpiry = $now->diffInDays($warrantyExpiration, false);
                         if ($daysUntilExpiry <= 30) {
                             $reason = "Warranty expiring in {$daysUntilExpiry} days";
                         } else {

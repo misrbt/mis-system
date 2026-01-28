@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Facades\Schema;
 
 class Asset extends Model
 {
@@ -19,6 +20,10 @@ class Asset extends Model
      */
     protected static function booted()
     {
+        if (!Schema::hasColumn('assets', 'delete_after_at')) {
+            return;
+        }
+
         // Global scope to automatically exclude AND delete expired defective assets
         // This runs on EVERY query, ensuring real-time cleanup
         static::addGlobalScope('auto_delete_expired_defective', function ($query) {

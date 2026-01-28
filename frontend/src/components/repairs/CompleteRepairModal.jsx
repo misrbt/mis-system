@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { DollarSign, FileText, Download, AlertCircle, FileImage } from 'lucide-react'
 import Modal from '../Modal'
+import { getApiBaseUrl } from '../../utils/env'
+
+const apiBaseUrl = getApiBaseUrl()
 
 function CompleteRepairModal({ isOpen, onClose, onSubmit, repair, isSubmitting }) {
   const [formData, setFormData] = useState({
@@ -19,8 +22,8 @@ function CompleteRepairModal({ isOpen, onClose, onSubmit, repair, isSubmitting }
     const loadJobOrderPreview = async () => {
       if (isOpen && repair?.job_order_path) {
         try {
-          const url = `${import.meta.env.VITE_API_BASE_URL}/api/repairs/${repair.id}/job-order`
-          const token = localStorage.getItem('token')
+          const url = `${apiBaseUrl}/repairs/${repair.id}/job-order`
+          const token = localStorage.getItem('auth_token')
 
           const response = await fetch(url, {
             headers: {
@@ -90,8 +93,8 @@ function CompleteRepairModal({ isOpen, onClose, onSubmit, repair, isSubmitting }
   const handleDownloadJobOrder = async () => {
     if (repair?.id) {
       try {
-        const url = `${import.meta.env.VITE_API_BASE_URL}/api/repairs/${repair.id}/job-order`
-        const token = localStorage.getItem('token')
+        const url = `${apiBaseUrl}/repairs/${repair.id}/job-order`
+        const token = localStorage.getItem('auth_token')
 
         // Fetch with authentication
         const response = await fetch(url, {
