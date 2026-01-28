@@ -5,11 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Casts\Attribute;
-<<<<<<< HEAD
 use Illuminate\Support\Facades\Schema;
-=======
 use App\Services\QRCodeMonkeyService;
->>>>>>> 0c3ad75a5a0a2d92c9fa84b803b1099b3167c18c
 
 class Asset extends Model
 {
