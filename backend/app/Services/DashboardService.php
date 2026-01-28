@@ -192,7 +192,7 @@ class DashboardService
                     'category' => $asset->category_name ?? 'Unknown',
                     'status' => $asset->status_name ?? 'Unknown',
                     'branch' => $asset->branch_name ?? 'Unassigned',
-                    'assigned_to' => trim($asset->employee_name) ?: 'Unassigned',
+                    'assigned_to' => trim($asset->employee_name ?? '') ?: 'Unassigned',
                     'created_at' => $asset->created_at,
                     'book_value' => (float) $asset->book_value,
                 ];
@@ -419,19 +419,36 @@ class DashboardService
      */
     public function getBranchStatistics(int $months = 12): array
     {
+        // Clear cache first to ensure fresh data
         $cacheKey = "dashboard:branch_statistics:{$months}";
+        Cache::forget($cacheKey);
 
-        return Cache::remember($cacheKey, self::CACHE_DURATION, function () use ($months) {
+        try {
             $summary = $this->getAllBranchStats();
-            $monthlyTrends = $this->getBranchMonthlyTrends($months);
-            $statusBreakdown = $this->getBranchStatusBreakdown();
+        } catch (\Exception $e) {
+            \Log::error('Branch stats error: ' . $e->getMessage());
+            $summary = [];
+        }
 
-            return [
-                'summary' => $summary,
-                'monthly_trends' => $monthlyTrends,
-                'status_breakdown' => $statusBreakdown,
-            ];
-        });
+        try {
+            $monthlyTrends = $this->getBranchMonthlyTrends($months);
+        } catch (\Exception $e) {
+            \Log::error('Branch monthly trends error: ' . $e->getMessage());
+            $monthlyTrends = [];
+        }
+
+        try {
+            $statusBreakdown = $this->getBranchStatusBreakdown();
+        } catch (\Exception $e) {
+            \Log::error('Branch status breakdown error: ' . $e->getMessage());
+            $statusBreakdown = [];
+        }
+
+        return [
+            'summary' => $summary,
+            'monthly_trends' => $monthlyTrends,
+            'status_breakdown' => $statusBreakdown,
+        ];
     }
 
     /**
@@ -453,7 +470,7 @@ class DashboardService
                 DB::raw('COALESCE(SUM(assets.acq_cost), 0) as total_acquisition_cost')
             )
             ->groupBy('branch.id', 'branch.branch_name', 'branch.brcode')
-            ->orderBy('branch.branch_name')
+            ->orderBy('branch.brcode')
             ->get()
             ->map(function ($branch) {
                 return [
@@ -573,77 +590,74 @@ class DashboardService
 
     /**
      * Get status breakdown per branch
-     * Shows all assets grouped by their current or last known branch and status
+     * Shows ALL branches with their asset status distribution
+     * Includes branches even if they have no assets
+     * Optimized for PostgreSQL
      *
      * @return array
      */
     private function getBranchStatusBreakdown(): array
     {
-        // Get assets with current branch assignment
-        $currentlyAssigned = DB::table('assets')
-            ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
-            ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
-            ->join('status', 'assets.status_id', '=', 'status.id')
-            ->whereNotNull('branch.id')
-            ->select(
-                'assets.id as asset_id',
-                'branch.id as branch_id',
-                'branch.branch_name',
-                'status.name as status_name',
-                'status.color as status_color'
-            );
+        // Get all branches first
+        $allBranches = DB::table('branch')
+            ->select('id', 'branch_name', 'brcode')
+            ->orderBy('brcode')
+            ->get();
 
-        // Get assets with last known branch from asset_movements (for unassigned assets)
-        $fromMovements = DB::table('assets')
-            ->join('status', 'assets.status_id', '=', 'status.id')
-            ->leftJoin('employee as current_emp', 'assets.assigned_to_employee_id', '=', 'current_emp.id')
-            ->join(
-                DB::raw('(
-                    SELECT DISTINCT ON (am.asset_id)
-                        am.asset_id,
-                        am.to_branch_id as branch_id
-                    FROM asset_movements am
-                    WHERE am.movement_type IN (\'assigned\', \'transferred\', \'returned\')
-                        AND am.to_branch_id IS NOT NULL
-                    ORDER BY am.asset_id, am.created_at DESC
-                ) as last_movement'),
-                'assets.id',
-                '=',
-                'last_movement.asset_id'
-            )
-            ->join('branch', 'last_movement.branch_id', '=', 'branch.id')
-            ->whereNull('current_emp.id') // Only unassigned assets
-            ->select(
-                'assets.id as asset_id',
-                'branch.id as branch_id',
-                'branch.branch_name',
-                'status.name as status_name',
-                'status.color as status_color'
-            );
-
-        // Combine both result sets
-        $data = $currentlyAssigned
-            ->unionAll($fromMovements)
+        // Get all statuses
+        $allStatuses = DB::table('status')
+            ->select('id', 'name', 'color')
             ->get()
-            ->groupBy('branch_name');
+            ->keyBy('id');
 
-        // Count statuses per branch
-        $result = [];
-        foreach ($data as $branchName => $assets) {
-            $statusCounts = $assets->groupBy('status_name')->map(function ($group) {
-                $first = $group->first();
-                return [
-                    'status' => $first->status_name,
-                    'color' => $first->status_color,
-                    'count' => $group->count(),
-                ];
-            })->values()->toArray();
+        // Get asset counts per branch and status
+        // Using LEFT JOIN to include all combinations
+        $assetCounts = DB::table('branch')
+            ->leftJoin('employee', 'branch.id', '=', 'employee.branch_id')
+            ->leftJoin('assets', 'employee.id', '=', 'assets.assigned_to_employee_id')
+            ->leftJoin('status', 'assets.status_id', '=', 'status.id')
+            ->select(
+                'branch.id as branch_id',
+                'branch.branch_name',
+                'branch.brcode',
+                'status.id as status_id',
+                'status.name as status_name',
+                'status.color as status_color',
+                DB::raw('COUNT(assets.id) as count')
+            )
+            ->groupBy('branch.id', 'branch.branch_name', 'branch.brcode', 'status.id', 'status.name', 'status.color')
+            ->orderBy('branch.brcode')
+            ->get();
 
-            $result[] = [
-                'branch_name' => $branchName,
-                'statuses' => $statusCounts,
+        // Group the results by branch
+        $branchData = [];
+
+        // Initialize all branches with empty statuses
+        foreach ($allBranches as $branch) {
+            $branchData[$branch->branch_name] = [
+                'branch_name' => $branch->branch_name,
+                'brcode' => $branch->brcode,
+                'statuses' => [],
             ];
         }
+
+        // Populate with actual counts
+        foreach ($assetCounts as $row) {
+            $branchName = $row->branch_name;
+            if ($row->status_name && $row->count > 0) {
+                $branchData[$branchName]['statuses'][] = [
+                    'status' => $row->status_name,
+                    'color' => $row->status_color ?? '#64748b',
+                    'count' => (int) $row->count,
+                ];
+            }
+        }
+
+        // Convert to array and sort by brcode
+        $result = array_values($branchData);
+        usort($result, function ($a, $b) {
+            return ($a['brcode'] ?? '') <=> ($b['brcode'] ?? '');
+        });
 
         return $result;
     }

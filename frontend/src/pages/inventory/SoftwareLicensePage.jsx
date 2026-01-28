@@ -293,7 +293,6 @@ function SoftwareLicensePage() {
               title="Edit license"
             >
               <Edit className="w-3.5 h-3.5" />
-              <span>Edit</span>
             </button>
             <button
               onClick={() => handleDelete(row.original)}
@@ -301,7 +300,6 @@ function SoftwareLicensePage() {
               title="Delete license"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete</span>
             </button>
           </div>
         ),

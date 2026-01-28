@@ -154,16 +154,19 @@ export const BranchExpenseTrendsChart = React.memo(({ data, selectedBranches, br
   // Transform data for Recharts
   const chartData = data.map((monthData) => {
     const row = { month: monthData.month }
-    Object.entries(monthData.branches).forEach(([branchName, branchData]) => {
-      if (!selectedBranches || selectedBranches.includes(branchName)) {
-        row[branchName] = branchData.total_expense
-      }
-    })
+    if (monthData.branches && typeof monthData.branches === 'object') {
+      Object.entries(monthData.branches).forEach(([branchName, branchData]) => {
+        if (!selectedBranches || selectedBranches.includes(branchName)) {
+          row[branchName] = branchData?.total_expense || 0
+        }
+      })
+    }
     return row
   })
 
   // Get branch names for lines
-  let branchNames = selectedBranches || Object.keys(data[0]?.branches || {})
+  const firstMonthBranches = data[0]?.branches || {}
+  let branchNames = selectedBranches || (typeof firstMonthBranches === 'object' ? Object.keys(firstMonthBranches) : [])
 
   // Sort branch names by brcode if branchSummary is provided
   if (branchSummary && Array.isArray(branchSummary)) {
@@ -250,15 +253,17 @@ export const BranchStatusBreakdownChart = React.memo(({ data, statusColorMap, br
   // Transform data for stacked bar chart
   const chartData = sortedData.map((branch) => {
     const row = { branch: branch.branch_name }
-    branch.statuses.forEach((status) => {
-      row[status.status] = status.count
-    })
+    if (branch.statuses && Array.isArray(branch.statuses)) {
+      branch.statuses.forEach((status) => {
+        row[status.status] = status.count
+      })
+    }
     return row
   })
 
   // Get all unique status names
   const allStatuses = [
-    ...new Set(data.flatMap((b) => b.statuses.map((s) => s.status))),
+    ...new Set(data.flatMap((b) => (b.statuses && Array.isArray(b.statuses) ? b.statuses.map((s) => s.status) : []))),
   ]
 
   // Enhanced status color map with more distinct, professional colors
@@ -281,12 +286,14 @@ export const BranchStatusBreakdownChart = React.memo(({ data, statusColorMap, br
   // Aggregate status data for pie chart
   const statusAggregation = {}
   data.forEach(branch => {
-    branch.statuses.forEach(status => {
-      if (!statusAggregation[status.status]) {
-        statusAggregation[status.status] = 0
-      }
-      statusAggregation[status.status] += status.count
-    })
+    if (branch.statuses && Array.isArray(branch.statuses)) {
+      branch.statuses.forEach(status => {
+        if (!statusAggregation[status.status]) {
+          statusAggregation[status.status] = 0
+        }
+        statusAggregation[status.status] += status.count
+      })
+    }
   })
 
   const pieChartData = Object.entries(statusAggregation).map(([status, count]) => ({
@@ -320,11 +327,11 @@ export const BranchStatusBreakdownChart = React.memo(({ data, statusColorMap, br
         <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
           <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">Avg per Branch</p>
           <p className="text-2xl font-bold text-amber-900 mt-1">
-            {Math.round(chartData.reduce((sum, branch) => {
+            {sortedData.length > 0 ? Math.round(chartData.reduce((sum, branch) => {
               return sum + Object.entries(branch).reduce((branchSum, [key, value]) => {
                 return key !== 'branch' ? branchSum + (value || 0) : branchSum
               }, 0)
-            }, 0) / sortedData.length)}
+            }, 0) / sortedData.length) : 0}
           </p>
         </div>
       </div>
@@ -337,46 +344,43 @@ export const BranchStatusBreakdownChart = React.memo(({ data, statusColorMap, br
           <ResponsiveContainer width="100%" height={dynamicHeight}>
             <BarChart
               data={chartData}
-              layout="horizontal"
-              margin={{ top: 20, right: 60, left: 180, bottom: 30 }}
-              barSize={35}
+              layout="vertical"
+              margin={{ top: 20, right: 80, left: 140, bottom: 30 }}
+              barSize={28}
+              barGap={4}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={true} vertical={false} />
               <XAxis
                 type="number"
-                tick={{ fontSize: 12, fontWeight: 500 }}
-                stroke="#64748b"
-                tickLine={{ stroke: '#cbd5e1' }}
-                label={{
-                  value: 'Number of Assets',
-                  position: 'insideBottom',
-                  offset: -15,
-                  style: { fontSize: 13, fontWeight: 600, fill: '#475569' }
-                }}
+                tick={{ fontSize: 11, fontWeight: 500, fill: '#64748b' }}
+                stroke="#e2e8f0"
+                tickLine={false}
+                axisLine={{ stroke: '#e2e8f0' }}
               />
               <YAxis
                 dataKey="branch"
                 type="category"
-                tick={{ fontSize: 12, fontWeight: 500 }}
-                stroke="#64748b"
-                width={165}
-                tickLine={{ stroke: '#cbd5e1' }}
+                tick={{ fontSize: 12, fontWeight: 600, fill: '#334155' }}
+                stroke="#e2e8f0"
+                width={130}
+                tickLine={false}
+                axisLine={false}
               />
               <Tooltip
                 content={<BranchTooltip />}
-                cursor={{ fill: 'rgba(148, 163, 184, 0.1)' }}
+                cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
               />
               <Legend
                 wrapperStyle={{
-                  paddingTop: '25px',
-                  paddingBottom: '10px'
+                  paddingTop: '20px',
+                  paddingBottom: '5px'
                 }}
                 iconType="circle"
                 iconSize={10}
                 formatter={(value) => (
                   <span style={{
-                    marginLeft: '8px',
-                    fontSize: '13px',
+                    marginLeft: '6px',
+                    fontSize: '12px',
                     fontWeight: 500,
                     color: '#475569'
                   }}>
@@ -384,83 +388,103 @@ export const BranchStatusBreakdownChart = React.memo(({ data, statusColorMap, br
                   </span>
                 )}
               />
-              {allStatuses.map((status) => (
+              {allStatuses.map((status, index) => (
                 <Bar
                   key={status}
                   dataKey={status}
                   stackId="a"
                   fill={colorMap[status] || '#64748b'}
                   name={status}
-                  radius={[0, 4, 4, 0]}
+                  radius={index === allStatuses.length - 1 ? [0, 6, 6, 0] : [0, 0, 0, 0]}
                 />
               ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Pie Chart - Overall Status Distribution (1/3 width) */}
+        {/* Donut Chart - Overall Status Distribution (1/3 width) */}
         <div className="flex flex-col">
           <h4 className="text-sm font-semibold text-slate-700 mb-4">Overall Status Distribution</h4>
-          <div className="flex-1 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height={500}>
+
+          {/* Donut Chart with Center Total */}
+          <div className="relative w-full" style={{ height: '300px' }}>
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={pieChartData}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                  outerRadius={120}
-                  fill="#8884d8"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={2}
                   dataKey="value"
                 >
                   {pieChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.color}
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value, name) => [value.toLocaleString(), name]}
+                  formatter={(value, name) => [value.toLocaleString() + ' assets', name]}
                   contentStyle={{
                     backgroundColor: 'white',
                     border: '1px solid #e2e8f0',
                     borderRadius: '8px',
-                    padding: '12px'
+                    padding: '12px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                   }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  iconType="circle"
-                  iconSize={10}
-                  formatter={(value) => (
-                    <span style={{
-                      marginLeft: '8px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      color: '#475569'
-                    }}>
-                      {value}
-                    </span>
-                  )}
                 />
               </PieChart>
             </ResponsiveContainer>
+            {/* Center text showing total */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-slate-900">
+                  {pieChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-slate-500">Total Assets</p>
+              </div>
+            </div>
           </div>
 
-          {/* Status Legend with Counts */}
-          <div className="mt-6 space-y-2">
-            {pieChartData.map((item) => (
-              <div key={item.name} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-xs font-medium text-slate-700">{item.name}</span>
-                </div>
-                <span className="text-sm font-bold text-slate-900">{item.value.toLocaleString()}</span>
-              </div>
-            ))}
+          {/* Status Legend with Progress Bars */}
+          <div className="mt-4 space-y-3">
+            {pieChartData
+              .sort((a, b) => b.value - a.value)
+              .map((item) => {
+                const total = pieChartData.reduce((sum, i) => sum + i.value, 0)
+                const percentage = total > 0 ? ((item.value / total) * 100).toFixed(1) : 0
+                return (
+                  <div key={item.name} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-xs font-medium text-slate-700">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">{percentage}%</span>
+                        <span className="text-sm font-bold text-slate-900">{item.value.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${percentage}%`,
+                          backgroundColor: item.color
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
           </div>
         </div>
       </div>
