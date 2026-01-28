@@ -209,7 +209,7 @@ function EquipmentPage() {
         })
       }
     }
-  }, [])
+  }, [fetchEquipment, queryClient])
 
   const columns = useMemo(
     () => [

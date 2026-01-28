@@ -1,4 +1,5 @@
 import React, { useState, lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Package,
   Wrench,
@@ -48,6 +49,8 @@ const BranchContributionBars = lazy(() =>
  * Clean architecture with separation of concerns
  */
 function InventoryHome() {
+  const navigate = useNavigate()
+
   // State Management
   const [selectedBranchesForTrend, setSelectedBranchesForTrend] = useState(null) // null = all branches
   const [showBranchSection, setShowBranchSection] = useState(true)
@@ -90,10 +93,11 @@ function InventoryHome() {
     {
       label: 'Total Assets',
       value: kpiMetrics.totalAssets.toLocaleString(),
-      trend: null,
+      trend: 'View all assets',
       trendUp: null,
       icon: Package,
       color: 'blue',
+      onClick: () => navigate('/inventory/assets'),
     },
     {
       label: "This Month's Expenses",
@@ -103,14 +107,16 @@ function InventoryHome() {
       icon: TrendingUp,
       color: 'indigo',
       isMonetary: true,
+      onClick: () => navigate('/inventory/reports'),
     },
     {
       label: 'Under Repair',
       value: kpiMetrics.underRepair.toLocaleString(),
-      trend: 'Needs attention',
+      trend: 'View repairs',
       trendUp: null,
       icon: Wrench,
       color: 'amber',
+      onClick: () => navigate('/inventory/repairs'),
     },
     {
       label: 'Due for Maintenance',
@@ -119,6 +125,7 @@ function InventoryHome() {
       trendUp: null,
       icon: Clock,
       color: 'orange',
+      onClick: () => navigate('/inventory/assets?filter=warranty_expiring'),
     },
   ]
 
