@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Package,
   Calendar,
@@ -17,12 +17,15 @@ import {
   Barcode,
   Eye,
   Boxes,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
 import SearchableSelect from '../SearchableSelect'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
 import apiClient from '../../services/apiClient'
 import SpecificationFields from '../specifications/SpecificationFields'
 import Swal from 'sweetalert2'
+import { getAssetQRCode, regenerateQRCode, QR_ERROR_CODES, getErrorMessage } from '../../services/qrCodeService'
 
 // Small helper component for info cards
 const InfoCard = ({ label, value, icon }) => (
@@ -34,6 +37,221 @@ const InfoCard = ({ label, value, icon }) => (
     <div className="text-base font-semibold text-slate-900 truncate">{value}</div>
   </div>
 )
+
+// QR Code Section Component - Handles QR code generation on demand
+const QRCodeSection = ({ asset, onCodeView }) => {
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [localQRCode, setLocalQRCode] = useState(asset?.qr_code || null)
+  const queryClient = useQueryClient()
+
+  // Update local state when asset changes
+  useEffect(() => {
+    setLocalQRCode(asset?.qr_code || null)
+  }, [asset?.qr_code])
+
+  const handleViewQRCode = useCallback(async (e) => {
+    e.stopPropagation()
+
+    // If QR code already exists, show it
+    if (localQRCode) {
+      onCodeView({
+        src: localQRCode,
+        asset_name: asset.asset_name,
+        serial_number: asset.serial_number,
+        type: 'qr',
+      })
+      return
+    }
+
+    // Check internet connection first
+    if (!navigator.onLine) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No Internet Connection',
+        text: 'Please check your internet connection and try again.',
+        confirmButtonColor: '#3b82f6',
+      })
+      return
+    }
+
+    // Generate QR code on demand
+    setIsGenerating(true)
+    try {
+      const result = await getAssetQRCode(asset, false)
+      setLocalQRCode(result.src)
+
+      // Update cache if it was generated via backend
+      if (result.source === 'backend') {
+        queryClient.invalidateQueries(['asset', asset.id])
+        queryClient.invalidateQueries(['employeeAssets'])
+      }
+
+      onCodeView({
+        src: result.src,
+        asset_name: asset.asset_name,
+        serial_number: asset.serial_number,
+        type: 'qr',
+      })
+    } catch (error) {
+      console.error('Failed to generate QR code:', error)
+
+      let title = 'QR Code Generation Failed'
+      let text = error.message || 'Failed to generate QR code. Please try again.'
+
+      if (error.code === QR_ERROR_CODES.NO_INTERNET || error.code === QR_ERROR_CODES.NETWORK_ERROR) {
+        title = 'Connection Error'
+        text = getErrorMessage(error.code, error.message)
+      } else if (error.code === QR_ERROR_CODES.API_TIMEOUT) {
+        title = 'Request Timeout'
+        text = getErrorMessage(error.code, error.message)
+      }
+
+      Swal.fire({
+        icon: 'error',
+        title,
+        text,
+        confirmButtonColor: '#3b82f6',
+      })
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [asset, localQRCode, onCodeView, queryClient])
+
+  const handleRegenerateQRCode = useCallback(async (e) => {
+    e.stopPropagation()
+
+    // Check internet connection first
+    if (!navigator.onLine) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No Internet Connection',
+        text: 'Unable to connect to QR Code Monkey API. Please check your internet connection.',
+        confirmButtonColor: '#3b82f6',
+      })
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      const response = await regenerateQRCode(asset.id)
+      const newQRCode = response.data?.qr_code
+
+      if (newQRCode) {
+        setLocalQRCode(newQRCode)
+
+        // Update cache
+        queryClient.invalidateQueries(['asset', asset.id])
+        queryClient.invalidateQueries(['employeeAssets'])
+
+        onCodeView({
+          src: newQRCode,
+          asset_name: asset.asset_name,
+          serial_number: asset.serial_number,
+          type: 'qr',
+        })
+
+        // Check if fallback was used
+        if (response.warning) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'QR Code Generated (Fallback)',
+            text: response.warning,
+            confirmButtonColor: '#3b82f6',
+          })
+        } else {
+          Swal.fire({
+            icon: 'success',
+            title: 'QR Code Regenerated',
+            text: 'New QR code has been generated successfully.',
+            timer: 2000,
+            showConfirmButton: false,
+          })
+        }
+      } else {
+        throw new Error('No QR code returned from server')
+      }
+    } catch (error) {
+      console.error('Failed to regenerate QR code:', error)
+
+      let title = 'Regeneration Failed'
+      let text = error.message || 'Failed to regenerate QR code. Please try again.'
+
+      if (error.code === QR_ERROR_CODES.NO_INTERNET || error.code === QR_ERROR_CODES.NETWORK_ERROR) {
+        title = 'Connection Error'
+        text = 'Unable to connect to QR Code Monkey API. Please check your internet connection.'
+      } else if (error.code === QR_ERROR_CODES.API_TIMEOUT) {
+        title = 'Request Timeout'
+        text = 'The QR Code Monkey API took too long to respond. Please try again.'
+      }
+
+      Swal.fire({
+        icon: 'error',
+        title,
+        text,
+        confirmButtonColor: '#3b82f6',
+      })
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [asset, onCodeView, queryClient])
+
+  const handleViewBarcode = useCallback((e) => {
+    e.stopPropagation()
+    if (asset.barcode) {
+      onCodeView({
+        src: asset.barcode,
+        asset_name: asset.asset_name,
+        serial_number: asset.serial_number,
+        type: 'barcode',
+      })
+    }
+  }, [asset, onCodeView])
+
+  return (
+    <div className="pt-2 border-t border-slate-200 flex gap-2">
+      {/* QR Code Button - Always visible */}
+      <button
+        onClick={handleViewQRCode}
+        disabled={isGenerating}
+        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded hover:bg-blue-100 border border-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isGenerating ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <QrCode className="w-3.5 h-3.5" />
+        )}
+        {localQRCode ? 'QR Code' : 'Generate QR'}
+      </button>
+
+      {/* Regenerate Button - Only show if QR code exists */}
+      {localQRCode && (
+        <button
+          onClick={handleRegenerateQRCode}
+          disabled={isGenerating}
+          className="py-1.5 px-2 flex items-center justify-center bg-amber-50 text-amber-700 text-xs font-medium rounded hover:bg-amber-100 border border-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Regenerate QR Code"
+        >
+          {isGenerating ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
+
+      {/* Barcode Button */}
+      {asset.barcode && (
+        <button
+          onClick={handleViewBarcode}
+          className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded hover:bg-slate-200 border border-slate-200 transition-colors"
+        >
+          <Barcode className="w-3.5 h-3.5" />
+          Barcode
+        </button>
+      )}
+    </div>
+  )
+}
 
 const AssetCard = ({
   asset,
@@ -880,29 +1098,11 @@ const AssetCard = ({
                   </div>
                 )}
 
-                 {/* QR/Barcode */}
-                {(asset.qr_code || asset.barcode) && (
-                  <div className="pt-2 border-t border-slate-200 flex gap-2">
-                     {asset.qr_code && (
-                       <button
-                        onClick={() => onCodeView({ src: asset.qr_code, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'qr' })}
-                        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded hover:bg-blue-100 border border-blue-100 transition-colors"
-                       >
-                         <QrCode className="w-3.5 h-3.5" />
-                         QR Code
-                       </button>
-                     )}
-                     {asset.barcode && (
-                       <button
-                        onClick={() => onCodeView({ src: asset.barcode, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'barcode' })}
-                        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded hover:bg-slate-200 border border-slate-200 transition-colors"
-                       >
-                         <Barcode className="w-3.5 h-3.5" />
-                         Barcode
-                       </button>
-                     )}
-                  </div>
-                )}
+                 {/* QR/Barcode - Always show QR button, generate on demand if needed */}
+                <QRCodeSection
+                  asset={asset}
+                  onCodeView={onCodeView}
+                />
               </div>
             )}
           </div>
