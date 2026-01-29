@@ -11,6 +11,7 @@ import {
   Eye,
   History,
   Edit,
+  Trash2,
 } from 'lucide-react'
 import {
   flexRender,
@@ -49,7 +50,6 @@ const INITIAL_FILTERS = {
   vendor_id: '',
   purchase_date_from: '',
   purchase_date_to: '',
-  search: '',
 }
 
 const INITIAL_PIVOT_CONFIG = {
@@ -141,6 +141,7 @@ function AssetsPage() {
     return 'table'
   }) // 'table' | 'pivot' | 'cards'
   const [showFilters, setShowFilters] = useState(false)
+  const [tableGlobalFilter, setTableGlobalFilter] = useState('')
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
   const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
@@ -181,7 +182,6 @@ function AssetsPage() {
   const [filters, setFilters] = useState(() => ({ ...INITIAL_FILTERS }))
   const deferredFilters = useDeferredValue(filters)
   const isFiltering = deferredFilters !== filters
-  const [searchInput, setSearchInput] = useState(INITIAL_FILTERS.search)
   const deferredMobileGlobalFilter = useDeferredValue(mobileGlobalFilter)
 
   // Form state
@@ -544,24 +544,7 @@ function AssetsPage() {
 
   const clearFilters = useCallback(() => {
     setFilters({ ...INITIAL_FILTERS })
-    setSearchInput(INITIAL_FILTERS.search)
   }, [])
-
-  useEffect(() => {
-    setSearchInput(filters.search)
-  }, [filters.search])
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setFilters((prev) => (
-        prev.search === searchInput
-          ? prev
-          : { ...prev, search: searchInput }
-      ))
-    }, 300)
-
-    return () => clearTimeout(timeoutId)
-  }, [searchInput])
 
   const openAddModal = useCallback(() => {
     setFormData(buildFormData())
@@ -574,6 +557,8 @@ function AssetsPage() {
     setFormData(buildFormData(asset))
     setIsEditModalOpen(true)
   }, [])
+
+
 
   useEffect(() => {
     if (!isEditModalOpen || !selectedAsset) return
@@ -919,17 +904,34 @@ function AssetsPage() {
   const assetsList = Array.isArray(assetsData?.data) ? assetsData.data : []
   const isMobileView = viewMode === 'cards'
 
+  const deferredTableGlobalFilter = useDeferredValue(tableGlobalFilter)
+
+  // Custom global filter that searches employee name, asset name, serial number
+  const globalFilterFn = useCallback((row, _columnId, filterValue) => {
+    if (!filterValue) return true
+    const search = filterValue.toLowerCase()
+    const employee = row.original.assigned_employee
+    const employeeName = (employee?.fullname || '').toLowerCase()
+    const assetName = (row.original.asset_name || '').toLowerCase()
+    const serialNumber = (row.original.serial_number || '').toLowerCase()
+    return employeeName.includes(search) || assetName.includes(search) || serialNumber.includes(search)
+  }, [])
+
   // Table instance
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: isTableView ? assetsList : [],
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    globalFilterFn,
     state: {
       rowSelection: selectedRows,
+      globalFilter: deferredTableGlobalFilter,
     },
+    onGlobalFilterChange: setTableGlobalFilter,
     onRowSelectionChange: setSelectedRows,
     enableRowSelection: true,
   })
@@ -963,6 +965,9 @@ function AssetsPage() {
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
   const selectedCount = Object.values(selectedRows).filter(Boolean).length
+  const tableFilteredCount = deferredTableGlobalFilter
+    ? table.getFilteredRowModel().rows.length
+    : assetsList.length
   const totalAssets = assetsList.length
 
   // Group assets by employee
@@ -1167,8 +1172,6 @@ function AssetsPage() {
         isFiltering={isFiltering}
         onCloseFilters={() => setShowFilters(false)}
         onOpenFilters={() => setShowFilters(true)}
-        searchInput={searchInput}
-        onSearchInputChange={setSearchInput}
         filters={filters}
         onFilterChange={handleFilterChange}
         branches={branches}
@@ -1189,6 +1192,19 @@ function AssetsPage() {
       {/* Table View */}
       {viewMode === 'table' && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+          {/* Table Search */}
+          <div className="px-3 sm:px-4 py-3 border-b border-slate-200">
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={tableGlobalFilter}
+                onChange={(e) => setTableGlobalFilter(e.target.value)}
+                placeholder="Search by employee, asset name, serial..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
           {/* Mobile scroll hint */}
           <div className="bg-blue-50 border-b border-blue-200 px-3 py-2 sm:hidden">
             <p className="text-xs text-blue-800 text-center">
@@ -1271,19 +1287,19 @@ function AssetsPage() {
                 <div className="text-xs sm:text-sm text-slate-700 text-center xs:text-left">
                   <span className="hidden sm:inline">Showing </span>
                   <span className="font-semibold">
-                    {totalAssets === 0 ? 0 : table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}
+                    {tableFilteredCount === 0 ? 0 : table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}
                   </span>
                   <span className="hidden xs:inline">-</span>
                   <span className="xs:hidden"> to </span>
                   <span className="font-semibold">
                     {Math.min(
                       (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                      totalAssets
+                      tableFilteredCount
                     )}
                   </span>
                   <span className="hidden xs:inline"> of </span>
                   <span className="xs:hidden"> / </span>
-                  <span className="font-semibold">{totalAssets}</span>
+                  <span className="font-semibold">{tableFilteredCount}</span>
                   <span className="hidden sm:inline"> assets</span>
                 </div>
 

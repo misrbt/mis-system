@@ -482,7 +482,7 @@ function IndividualAssetView({
                   <ChevronDown className="w-3 h-3" />
                 </button>
                 {statusPickerFor === asset.id && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
                     <div className="max-h-56 overflow-y-auto py-1">
                       {statuses.length ? (
                         statuses.map((status) => {

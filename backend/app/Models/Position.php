@@ -15,6 +15,13 @@ class Position extends Model
         'title',
     ];
 
+    protected $appends = ['position_name'];
+
+    public function getPositionNameAttribute()
+    {
+        return $this->title;
+    }
+
     public function employees()
     {
         return $this->hasMany(Employee::class);

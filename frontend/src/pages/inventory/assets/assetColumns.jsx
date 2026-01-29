@@ -324,13 +324,11 @@ export const getAssetColumns = ({
         <div
           className="text-sm text-slate-700 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
           onDoubleClick={() => setEditingCell(`${row.id}-acq_cost`)}
-          title="Total acquisition cost for this employee"
+          title="Acquisition cost of this asset"
         >
-          {isLoadingTotals
-            ? emptyValue
-            : typeof totalValue === 'number'
-              ? `${currencyPrefix}${Number(totalValue).toLocaleString()}`
-              : emptyValue}
+          {value !== null && value !== undefined && value !== ''
+            ? `${currencyPrefix}${Number(value).toLocaleString()}`
+            : emptyValue}
         </div>
       )
     },

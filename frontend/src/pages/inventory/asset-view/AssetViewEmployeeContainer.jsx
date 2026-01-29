@@ -41,6 +41,11 @@ function AssetViewEmployeeContainer({ controller }) {
     navigateToAssetComponents,
     navigateBack,
     navigateToEmployeeList,
+    editComponents,
+    handleEditComponentAdd,
+    handleEditComponentRemove,
+    handleEditComponentChange,
+    generateEditComponentSerialNumber,
   } = controller;
 
   // Show loading state while employee data is fetching
@@ -103,6 +108,11 @@ function AssetViewEmployeeContainer({ controller }) {
       isPending={isPending}
       isLoadingHistory={isLoadingHistory}
       navigateBack={() => (window.history.length > 1 ? navigateBack() : navigateToEmployeeList())}
+      editComponents={editComponents}
+      onEditComponentAdd={handleEditComponentAdd}
+      onEditComponentRemove={handleEditComponentRemove}
+      onEditComponentChange={handleEditComponentChange}
+      onGenerateEditComponentSerial={generateEditComponentSerialNumber}
     />
   );
 }

@@ -278,6 +278,11 @@ const AssetCard = ({
   onCardClick,
   onComponentsClick,
   isPending,
+  editComponents,
+  onEditComponentAdd,
+  onEditComponentRemove,
+  onEditComponentChange,
+  onGenerateEditComponentSerial,
 }) => {
   // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
@@ -336,9 +341,18 @@ const AssetCard = ({
     categoryLabel,
   }))
 
-  // Check if asset is Desktop PC
+  // Check if asset is Desktop PC (based on original category)
   const isDesktopPC = asset.category?.name?.toLowerCase().includes('desktop') ||
                       asset.category?.name?.toLowerCase().includes('pc')
+
+  // Check if the SELECTED category in edit form is Desktop PC
+  const editSelectedCategory = categories.find(
+    (cat) => String(cat.id) === String(editFormData.asset_category_id)
+  )
+  const isEditDesktopPC = isEditing && (
+    editSelectedCategory?.name?.toLowerCase().includes('desktop') ||
+    editSelectedCategory?.name?.toLowerCase().includes('pc')
+  )
 
   // Fetch components for Desktop PC assets
   const { data: componentsData } = useQuery({
@@ -462,7 +476,7 @@ const AssetCard = ({
 
   return (
     <div
-      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 flex flex-col box-border ${
+      className={`group relative bg-white rounded-xl shadow-sm border transition-all duration-300 flex flex-col box-border ${
         isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200 border'
       } ${
         !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1' : ''
@@ -541,7 +555,7 @@ const AssetCard = ({
                 ))}
               </select>
             </div>
-            {(editFormData.subcategory_id || asset.subcategory?.id) && (
+            {resolvedEditSubcategories.length > 0 && (
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600">Subcategory</label>
                 <select
@@ -550,13 +564,7 @@ const AssetCard = ({
                   className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   disabled={!editFormData.asset_category_id}
                 >
-                  <option value="">
-                    {!editFormData.asset_category_id
-                      ? 'Select category first'
-                      : resolvedEditSubcategories.length === 0
-                        ? 'No subcategories available'
-                        : 'Select Subcategory'}
-                  </option>
+                  <option value="">Select Subcategory</option>
                   {resolvedEditSubcategories.map((subcategory) => (
                     <option key={subcategory.id} value={subcategory.id}>
                       {subcategory.name}
@@ -565,7 +573,7 @@ const AssetCard = ({
                 </select>
               </div>
             )}
-            {!isDesktopPC && (
+            {!isEditDesktopPC && (
               <div className="space-y-1">
                 <SearchableSelect
                   label="Brand"
@@ -579,7 +587,7 @@ const AssetCard = ({
                 />
               </div>
             )}
-            {!isDesktopPC && (
+            {!isEditDesktopPC && (
               <div className="space-y-1">
                 <SearchableSelect
                   label="Model"
@@ -593,7 +601,7 @@ const AssetCard = ({
                 />
               </div>
             )}
-            {!isDesktopPC &&
+            {!isEditDesktopPC &&
               editFormData.asset_category_id &&
               (!resolvedEditSubcategories.length || editFormData.subcategory_id) && (
                 <SpecificationFields
@@ -610,11 +618,26 @@ const AssetCard = ({
                   onChange={(specs) => onChange('specifications', specs)}
                 />
               )}
-            {isDesktopPC && (
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600">Desktop PC Components</label>
-                {componentEdits.length ? (
-                  <div className="space-y-3">
+            {isEditDesktopPC && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                    <Boxes className="w-3.5 h-3.5 text-amber-600" />
+                    Desktop PC Components
+                  </label>
+                  {onEditComponentAdd && (
+                    <button
+                      type="button"
+                      onClick={onEditComponentAdd}
+                      className="px-2 py-1 bg-green-600 text-white text-[10px] font-medium rounded hover:bg-green-700 transition-colors flex items-center gap-1"
+                    >
+                      <span>+ Add</span>
+                    </button>
+                  )}
+                </div>
+                {/* Existing components */}
+                {componentEdits.length > 0 && (
+                  <div className="space-y-2">
                     {componentEdits.map((comp) => {
                       const original = componentsById.get(comp.id)
                       return (
@@ -622,7 +645,7 @@ const AssetCard = ({
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
                               <div className="text-xs font-semibold text-slate-600">Component</div>
-                              <div className="font-semibold text-slate-900 truncate">
+                              <div className="font-semibold text-slate-900 truncate text-sm">
                                 {original?.component_name || comp.component_name || 'Component'}
                               </div>
                             </div>
@@ -660,9 +683,114 @@ const AssetCard = ({
                       )
                     })}
                   </div>
-                ) : (
-                  <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                    No components yet. Use the Components page to add brand/model.
+                )}
+                {/* New components being added */}
+                {editComponents && editComponents.length > 0 && (
+                  <div className="space-y-2">
+                    {editComponents.map((comp, index) => (
+                      <div key={comp.id} className="border border-amber-200 rounded-lg p-3 bg-amber-50 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-amber-700">New Component {index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => onEditComponentRemove?.(comp.id)}
+                            className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-600">Category Type</label>
+                            <select
+                              value={comp.category_id || ''}
+                              onChange={(e) => onEditComponentChange?.(comp.id, 'category_id', e.target.value)}
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select category</option>
+                              {categories
+                                .filter((cat) => {
+                                  const name = cat?.name?.toLowerCase() || ''
+                                  return !name.includes('desktop pc')
+                                })
+                                .map((cat) => (
+                                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-600">Asset Name</label>
+                            <input
+                              type="text"
+                              value={comp.component_name || ''}
+                              onChange={(e) => onEditComponentChange?.(comp.id, 'component_name', e.target.value)}
+                              placeholder="Enter asset name"
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-600">Brand</label>
+                            <input
+                              type="text"
+                              value={comp.brand || ''}
+                              onChange={(e) => onEditComponentChange?.(comp.id, 'brand', e.target.value)}
+                              placeholder="Enter brand"
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-600">Model</label>
+                            <input
+                              type="text"
+                              value={comp.model || ''}
+                              onChange={(e) => onEditComponentChange?.(comp.id, 'model', e.target.value)}
+                              placeholder="Enter model"
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="sm:col-span-2 space-y-1">
+                            <label className="text-xs font-semibold text-slate-600">Serial Number</label>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                value={comp.serial_number || ''}
+                                onChange={(e) => onEditComponentChange?.(comp.id, 'serial_number', e.target.value)}
+                                placeholder="Enter serial number"
+                                className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                              {onGenerateEditComponentSerial && (
+                                <button
+                                  type="button"
+                                  onClick={() => onGenerateEditComponentSerial(comp.id)}
+                                  className="px-2 py-1.5 bg-indigo-600 text-white text-[10px] font-medium rounded hover:bg-indigo-700 transition-colors whitespace-nowrap flex items-center gap-1"
+                                >
+                                  <RefreshCw className="w-3 h-3" />
+                                  Generate
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="sm:col-span-2 space-y-1">
+                            <label className="text-xs font-semibold text-slate-600">Status</label>
+                            <select
+                              value={comp.status_id || ''}
+                              onChange={(e) => onEditComponentChange?.(comp.id, 'status_id', e.target.value)}
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select status</option>
+                              {statuses.map((status) => (
+                                <option key={status.id} value={status.id}>{status.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {componentEdits.length === 0 && (!editComponents || editComponents.length === 0) && (
+                  <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-center">
+                    No components yet. Click "+ Add" to add components.
                   </div>
                 )}
               </div>
@@ -812,7 +940,7 @@ const AssetCard = ({
                 </button>
                 {/* Status Dropdown - Same as before */}
                 {showStatusPicker && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
                     <div className="max-h-56 overflow-y-auto py-1">
                       {statuses.length ? (
                         statuses.map((status) => {
@@ -1169,6 +1297,11 @@ const AssetCardsView = ({
   onCardClick,
   onComponentsClick,
   isPending,
+  editComponents,
+  onEditComponentAdd,
+  onEditComponentRemove,
+  onEditComponentChange,
+  onGenerateEditComponentSerial,
 }) => {
   const isSelected = (assetId) => selectedAssets?.includes(assetId)
 
@@ -1205,6 +1338,11 @@ const AssetCardsView = ({
           onCardClick={() => onCardClick?.(asset.id)}
           onComponentsClick={() => onComponentsClick?.(asset.id)}
           isPending={isPending}
+          editComponents={editComponents}
+          onEditComponentAdd={onEditComponentAdd}
+          onEditComponentRemove={onEditComponentRemove}
+          onEditComponentChange={onEditComponentChange}
+          onGenerateEditComponentSerial={onGenerateEditComponentSerial}
         />
       ))}
     </div>

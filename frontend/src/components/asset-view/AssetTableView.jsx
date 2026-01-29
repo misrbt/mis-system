@@ -22,6 +22,7 @@ const AssetTableView = ({
   onCardClick,
   onAddClick,
   onRemarksView,
+  onViewDetails,
   isPending,
 }) => {
   // Empty state
@@ -32,7 +33,7 @@ const AssetTableView = ({
   return (
     <div className="overflow-x-auto -mx-4 sm:mx-0">
       <div className="inline-block min-w-full align-middle">
-        <div className="overflow-hidden shadow-sm ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+        <div className="overflow-visible shadow-sm ring-1 ring-black ring-opacity-5 sm:rounded-lg">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-gradient-to-r from-slate-50 to-slate-100">
               <tr>
@@ -41,9 +42,6 @@ const AssetTableView = ({
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Brand & Model
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                  Equipment
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Serial #
@@ -75,7 +73,7 @@ const AssetTableView = ({
                 <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   QR/Barcode
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wider sticky right-0 bg-gradient-to-r from-slate-50 to-slate-100">
+                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider sticky right-0 bg-gradient-to-r from-slate-50 to-slate-100">
                   Actions
                 </th>
               </tr>
@@ -99,6 +97,7 @@ const AssetTableView = ({
                   onCodeView={onCodeView}
                   onRemarksView={() => onRemarksView?.(asset)}
                   onRowClick={() => onCardClick?.(asset.id)}
+                  onViewDetails={() => onViewDetails?.(asset)}
                   isPending={isPending}
                 />
               ))}

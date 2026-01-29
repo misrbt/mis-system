@@ -295,6 +295,20 @@ const AssetFormModal = ({
               </div>
             )}
 
+            {/* Category-Specific Specifications - placed after subcategory */}
+            {!isDesktopPCCategory() &&
+              formData.asset_category_id &&
+              (!hasSubcategories || formData.subcategory_id) && (
+              <div className="md:col-span-2">
+                <SpecificationFields
+                  categoryName={safeCategories.find(c => c.id === parseInt(formData.asset_category_id))?.name}
+                  subcategoryName={subcategories?.find(s => s.id === parseInt(formData.subcategory_id))?.name}
+                  specifications={formData.specifications || {}}
+                  onChange={(specs) => onInputChange({ target: { name: 'specifications', value: specs } })}
+                />
+              </div>
+            )}
+
             {/* Desktop PC Components Section - Appears immediately after category selection */}
             {isDesktopPCCategory() && (
               <div className="md:col-span-2">
@@ -829,22 +843,9 @@ const AssetFormModal = ({
                 tertiaryField="branch"
                 placeholder="Select employee or search..."
                 emptyMessage="No employees found"
+                required
               />
             </div>
-
-            {/* Category-Specific Specifications */}
-            {!isDesktopPCCategory() &&
-              formData.asset_category_id &&
-              (!hasSubcategories || formData.subcategory_id) && (
-              <div className={remarksWrapperClass}>
-                <SpecificationFields
-                  categoryName={safeCategories.find(c => c.id === parseInt(formData.asset_category_id))?.name}
-                  subcategoryName={subcategories?.find(s => s.id === parseInt(formData.subcategory_id))?.name}
-                  specifications={formData.specifications || {}}
-                  onChange={(specs) => onInputChange({ target: { name: 'specifications', value: specs } })}
-                />
-              </div>
-            )}
 
             <div className={remarksWrapperClass}>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Remarks</label>

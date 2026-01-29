@@ -23,9 +23,9 @@ const AssetsHeaderBar = ({
           Track and manage all company assets with ease
         </p>
       </div>
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
         {/* View mode and refresh buttons row */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2">
           <div className="inline-flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1 flex-1 sm:flex-initial sm:ml-auto">
             <button
               onClick={() => onViewModeChange('table')}
@@ -75,7 +75,7 @@ const AssetsHeaderBar = ({
         </div>
 
         {/* Action buttons row */}
-        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3 lg:gap-4">
+        <div className="flex flex-row items-center justify-center gap-2 sm:justify-end sm:gap-3 lg:gap-4">
           <button
             onClick={onAddAsset}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"

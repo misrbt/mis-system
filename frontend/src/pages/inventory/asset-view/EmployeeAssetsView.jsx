@@ -1,8 +1,10 @@
+import { useState, useCallback } from 'react'
 import { ArrowLeft, ArrowRight, History, LayoutGrid, Package, Table } from 'lucide-react'
 import EmployeeHeader from '../../../components/asset-view/EmployeeHeader'
 import AssetCardsView from '../../../components/asset-view/AssetCardsView'
 import AssetTableView from '../../../components/asset-view/AssetTableView'
 import EmployeeAssetHistory from '../../../components/employee/EmployeeAssetHistory'
+import AssetDetailModal from '../assets/AssetDetailModal'
 
 function EmployeeAssetsView({
   employee,
@@ -44,7 +46,21 @@ function EmployeeAssetsView({
   isPending,
   isLoadingHistory,
   navigateBack,
+  editComponents,
+  onEditComponentAdd,
+  onEditComponentRemove,
+  onEditComponentChange,
+  onGenerateEditComponentSerial,
 }) {
+  const [detailAsset, setDetailAsset] = useState(null)
+
+  const handleViewDetails = useCallback((asset) => {
+    setDetailAsset(asset)
+  }, [])
+
+  const handleCloseDetails = useCallback(() => {
+    setDetailAsset(null)
+  }, [])
   return (
     <div className="space-y-6 pb-6 sm:pb-0">
       <div className="flex items-center justify-between mb-4 md:mb-0">
@@ -184,6 +200,11 @@ function EmployeeAssetsView({
                       onCardClick={navigateToAsset}
                       onComponentsClick={navigateToAssetComponents}
                       isPending={isPending}
+                      editComponents={editComponents}
+                      onEditComponentAdd={onEditComponentAdd}
+                      onEditComponentRemove={onEditComponentRemove}
+                      onEditComponentChange={onEditComponentChange}
+                      onGenerateEditComponentSerial={onGenerateEditComponentSerial}
                     />
                   )}
 
@@ -204,6 +225,7 @@ function EmployeeAssetsView({
                       onRemarksView={onRemarksView}
                       onCardClick={navigateToAsset}
                       onAddClick={onAddClick}
+                      onViewDetails={handleViewDetails}
                       isPending={isPending}
                     />
                   )}
@@ -235,6 +257,25 @@ function EmployeeAssetsView({
           )}
         </div>
       </div>
+
+
+      <AssetDetailModal
+        isOpen={!!detailAsset}
+        onClose={handleCloseDetails}
+        asset={detailAsset}
+        onEdit={(asset) => {
+          handleCloseDetails()
+          onEditClick(asset)
+        }}
+        onDelete={(asset) => {
+          handleCloseDetails()
+          onDeleteClick(asset.id, asset.asset_name)
+        }}
+        onViewHistory={(asset) => {
+          handleCloseDetails()
+          navigateToAsset(asset.id)
+        }}
+      />
     </div>
   )
 }
