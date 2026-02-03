@@ -20,6 +20,8 @@ use App\Http\Controllers\AssetMovementController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\SoftwareLicenseController;
 use App\Http\Controllers\OfficeToolController;
+use App\Http\Controllers\ReportSignatoryController;
+use App\Http\Controllers\ReplenishmentController;
 
 // Health check endpoint
 Route::get('/ping', function () {
@@ -77,6 +79,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('vendors', VendorController::class);
 
     // Equipment routes
+    Route::get('equipment/{id}/assignments', [EquipmentController::class, 'getAssignments']);
     Route::apiResource('equipment', EquipmentController::class);
 
     // Asset Category routes
@@ -164,6 +167,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/assets/export', [ReportController::class, 'exportAssets']);
     });
 
+    // Report Signatory routes
+    Route::get('report-signatories', [ReportSignatoryController::class, 'show']);
+    Route::post('report-signatories', [ReportSignatoryController::class, 'save']);
+
     // Dashboard routes
     Route::prefix('dashboard')->group(function () {
         Route::get('/statistics', [DashboardController::class, 'getStatistics']);
@@ -207,4 +214,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Office Tool routes
     Route::post('office-tools/bulk-delete', [OfficeToolController::class, 'bulkDelete']);
     Route::apiResource('office-tools', OfficeToolController::class);
+
+    // Replenishment routes
+    Route::post('replenishments/{id}/assign-employee', [ReplenishmentController::class, 'assignToEmployee']);
+    Route::post('replenishments/{id}/assign-branch', [ReplenishmentController::class, 'assignToBranch']);
+    Route::post('replenishments/{id}/remove-assignment', [ReplenishmentController::class, 'removeAssignment']);
+    Route::apiResource('replenishments', ReplenishmentController::class);
 });

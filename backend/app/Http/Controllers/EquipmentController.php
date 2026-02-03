@@ -152,6 +152,56 @@ class EquipmentController extends Controller
     }
 
     /**
+     * Get equipment assignments (employees and branches using this equipment)
+     */
+    public function getAssignments($id)
+    {
+        try {
+            $equipment = Equipment::with(['category', 'subcategory'])->findOrFail($id);
+
+            // Get all assets using this equipment with their assigned employees and branches
+            $assets = \App\Models\Asset::with([
+                'assigned_employee.branch',
+                'assigned_employee.position',
+                'status'
+            ])
+                ->where('equipment_id', $id)
+                ->whereNotNull('assigned_to_employee_id')
+                ->get();
+
+            // Format the response
+            $assignments = $assets->map(function ($asset) {
+                return [
+                    'asset_id' => $asset->id,
+                    'asset_name' => $asset->asset_name,
+                    'serial_number' => $asset->serial_number,
+                    'employee_id' => $asset->assigned_employee->id ?? null,
+                    'employee_name' => $asset->assigned_employee->fullname ?? null,
+                    'branch_id' => $asset->assigned_employee->branch->id ?? null,
+                    'branch_name' => $asset->assigned_employee->branch->branch_name ?? null,
+                    'position' => $asset->assigned_employee->position->title ?? null,
+                    'status_id' => $asset->status->id ?? null,
+                    'status_name' => $asset->status->name ?? null,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'equipment' => $equipment,
+                    'assignments' => $assignments,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch equipment assignments',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Delete equipment
      */
     public function destroy($id)

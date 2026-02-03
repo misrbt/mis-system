@@ -890,7 +890,12 @@ const AssetCard = ({
           <div className="bg-gradient-to-br from-slate-50 to-blue-50 p-4 border-b border-slate-200">
             <div className="flex items-start justify-between mb-2">
               <div className={`flex-1 min-w-0 pr-2 ${onSelect ? 'pl-8' : ''}`}>
-                <h3 className="text-lg font-bold text-slate-900 mb-2 truncate" title={cardTitle}>
+                <h3
+                  className={`font-bold text-slate-900 mb-2 leading-tight line-clamp-2 break-words ${
+                    cardTitle.length > 25 ? 'text-sm' : 'text-base'
+                  }`}
+                  title={cardTitle}
+                >
                   {cardTitle}
                 </h3>
                 {(displayBrand || displayModel) && (
@@ -905,9 +910,14 @@ const AssetCard = ({
                       {asset.category.name}
                     </span>
                   )}
-                  {asset.subcategory && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-50 border border-slate-200 text-slate-600">
-                      {asset.subcategory.name}
+                  {/* Always show subcategory badge - display N/A if no subcategory */}
+                  {asset.category && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                      asset.subcategory 
+                        ? 'bg-slate-50 border border-slate-200 text-slate-600' 
+                        : 'bg-slate-100 border border-slate-300 text-slate-500 italic'
+                    }`}>
+                      {asset.subcategory ? asset.subcategory.name : 'N/A'}
                     </span>
                   )}
                 </div>
@@ -1075,121 +1085,101 @@ const AssetCard = ({
                    )}
                 </div>
 
-                {/* Specifications */}
-                {asset.specifications && Object.keys(asset.specifications).length > 0 && (
-                  <div className="space-y-2 pt-2 border-t border-slate-200">
-                    <div className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      Specifications
+                {/* Specifications - Dynamic Renderer */}
+                {asset.specifications && Object.keys(asset.specifications).length > 0 && (() => {
+                  // Define specification metadata for proper display
+                  const specConfig = {
+                    // Storage specs
+                    capacity: { label: 'Capacity', color: 'blue', format: (v, s) => `${v} ${s.capacity_unit || 'GB'}` },
+                    interface: { label: 'Interface', color: 'slate' },
+                    form_factor: { label: 'Form Factor', color: 'slate' },
+                    
+                    // Memory specs
+                    memory_type: { label: 'Type', color: 'purple' },
+                    
+                    // Speed (used by multiple categories)
+                    speed: { label: 'Speed', color: 'slate', format: (v, s) => {
+                      // If it's a number without units, assume MHz for memory
+                      if (s.memory_type && !isNaN(v)) return `${v} MHz`
+                      return v
+                    }},
+                    
+                    // Monitor specs
+                    screen_size: { label: 'Screen Size', color: 'indigo', format: (v) => `${v}"` },
+                    resolution: { label: 'Resolution', color: 'slate' },
+                    panel_type: { label: 'Panel Type', color: 'slate' },
+                    refresh_rate: { label: 'Refresh Rate', color: 'slate', format: (v) => `${v} Hz` },
+                    
+                    // Printer specs
+                    printer_type: { label: 'Printer Type', color: 'green' },
+                    color_support: { label: 'Color', color: 'slate' },
+                    print_speed: { label: 'Print Speed', color: 'slate', format: (v) => `${v} ppm` },
+                    connectivity: { label: 'Connectivity', color: 'slate' },
+                    
+                    // Network specs
+                    device_type: { label: 'Device Type', color: 'cyan' },
+                    ports: { label: 'Ports', color: 'slate' },
+                    poe_support: { label: 'PoE Support', color: 'slate' },
+                    
+                    // CCTV specs
+                    camera_type: { label: 'Camera Type', color: 'red' },
+                    night_vision_range: { label: 'Night Vision', color: 'slate', format: (v) => `${v}m` },
+                    storage_support: { label: 'Storage Support', color: 'slate' },
+                    
+                    // Laptop specs
+                    processor: { label: 'Processor', color: 'amber' },
+                    ram: { label: 'RAM', color: 'amber', format: (v, s) => `${v} ${s.ram_unit || 'GB'}` },
+                    storage_capacity: { label: 'Storage', color: 'amber', format: (v, s) => {
+                      let result = `${v} ${s.storage_unit || 'GB'}`
+                      if (s.storage_type) result += ` ${s.storage_type}`
+                      return result
+                    }},
+                    gpu: { label: 'Graphics', color: 'slate' },
+                    os: { label: 'Operating System', color: 'slate' },
+                  }
+                  
+                  // Fields to skip (already displayed elsewhere or composite)
+                  const skipFields = ['capacity_unit', 'ram_unit', 'storage_unit', 'storage_type']
+                  
+                  // Get all spec entries that have values
+                  const specEntries = Object.entries(asset.specifications)
+                    .filter(([key, value]) => {
+                      // Skip if in skip list
+                      if (skipFields.includes(key)) return false
+                      // Skip if empty
+                      if (value === null || value === undefined || value === '') return false
+                      return true
+                    })
+                  
+                  if (specEntries.length === 0) return null
+                  
+                  return (
+                    <div className="space-y-2 pt-2 border-t border-slate-200">
+                      <div className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1">
+                        <Shield className="w-3 h-3" />
+                        Specifications
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {specEntries.map(([key, value]) => {
+                          const config = specConfig[key] || { label: key.replace(/_/g, ' '), color: 'slate' }
+                          const displayValue = config.format 
+                            ? config.format(value, asset.specifications)
+                            : value
+                          const color = config.color
+                          
+                          return (
+                            <div key={key} className={`bg-${color}-50 p-2 rounded border border-${color}-100`}>
+                              <div className={`text-[10px] text-${color === 'slate' ? 'slate-500' : `${color}-600`} uppercase tracking-wide mb-0.5`}>
+                                {config.label}
+                              </div>
+                              <div className="text-sm font-semibold text-slate-900">{displayValue}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {asset.specifications.capacity && (
-                        <div className="bg-blue-50 p-2 rounded border border-blue-100">
-                          <div className="text-[10px] text-blue-600 uppercase tracking-wide mb-0.5">Capacity</div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            {asset.specifications.capacity} {asset.specifications.capacity_unit || 'GB'}
-                          </div>
-                        </div>
-                      )}
-                      {asset.specifications.interface && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Interface</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.interface}</div>
-                        </div>
-                      )}
-                      {asset.specifications.form_factor && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Form Factor</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.form_factor}</div>
-                        </div>
-                      )}
-                      {asset.specifications.speed && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Speed</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.speed}</div>
-                        </div>
-                      )}
-                      {asset.specifications.memory_type && (
-                        <div className="bg-purple-50 p-2 rounded border border-purple-100">
-                          <div className="text-[10px] text-purple-600 uppercase tracking-wide mb-0.5">Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.memory_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.screen_size && (
-                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
-                          <div className="text-[10px] text-indigo-600 uppercase tracking-wide mb-0.5">Screen Size</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.screen_size}"</div>
-                        </div>
-                      )}
-                      {asset.specifications.resolution && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Resolution</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.resolution}</div>
-                        </div>
-                      )}
-                      {asset.specifications.panel_type && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Panel Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.panel_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.refresh_rate && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Refresh Rate</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.refresh_rate} Hz</div>
-                        </div>
-                      )}
-                      {asset.specifications.printer_type && (
-                        <div className="bg-green-50 p-2 rounded border border-green-100">
-                          <div className="text-[10px] text-green-600 uppercase tracking-wide mb-0.5">Printer Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.printer_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.color_support && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Color</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.color_support}</div>
-                        </div>
-                      )}
-                      {asset.specifications.print_speed && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Print Speed</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.print_speed} ppm</div>
-                        </div>
-                      )}
-                      {asset.specifications.device_type && (
-                        <div className="bg-cyan-50 p-2 rounded border border-cyan-100">
-                          <div className="text-[10px] text-cyan-600 uppercase tracking-wide mb-0.5">Device Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.device_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.ports && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Ports</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.ports}</div>
-                        </div>
-                      )}
-                      {asset.specifications.poe_support && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">PoE Support</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.poe_support}</div>
-                        </div>
-                      )}
-                      {asset.specifications.camera_type && (
-                        <div className="bg-red-50 p-2 rounded border border-red-100">
-                          <div className="text-[10px] text-red-600 uppercase tracking-wide mb-0.5">Camera Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.camera_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.night_vision_range && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Night Vision</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.night_vision_range}m</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {/* Remarks */}
                 {asset.remarks && (

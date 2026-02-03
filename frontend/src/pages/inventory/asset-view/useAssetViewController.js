@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useRef, useState, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 import apiClient from "../../../services/apiClient";
@@ -11,7 +11,14 @@ import { fetchEmployeeAssetHistory } from "../../../services/employeeAssetHistor
 export default function useAssetViewController({ id, employeeId }) {
   const isAssetView = !!id;
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+
+  // Preserve the assets page filter params so we can restore them on navigate back
+  const assetsReturnPath = useCallback(() => {
+    const saved = sessionStorage.getItem('assets_filter_params')
+    return saved ? `/inventory/assets?${saved}` : '/inventory/assets'
+  }, []);
   const { invalidateAssetRelatedQueries } = useAssetQueryInvalidation();
 
   const [editingAssetId, setEditingAssetId] = useState(null);
@@ -333,7 +340,7 @@ export default function useAssetViewController({ id, employeeId }) {
       ]);
 
       if (id) {
-        navigate("/inventory/assets");
+        navigate(assetsReturnPath());
       }
 
       setSelectedAssets((prev) =>
@@ -1146,7 +1153,7 @@ export default function useAssetViewController({ id, employeeId }) {
   };
 
   const navigateBack = () => navigate(-1);
-  const navigateToAssets = () => navigate("/inventory/assets");
+  const navigateToAssets = () => navigate(assetsReturnPath());
   const navigateToEmployeeList = () => navigate("/inventory/employee-list");
   const navigateToAsset = (assetId) => navigate(`/inventory/assets/${assetId}`);
   const navigateToEmployeeAssets = (empId) =>

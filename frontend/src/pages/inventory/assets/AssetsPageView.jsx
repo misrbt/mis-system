@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   RefreshCw,
   Search,
@@ -31,6 +31,7 @@ import { formatCurrency, formatDate } from '../../../utils/assetFormatters'
 import AssetsHeaderBar from './AssetsHeaderBar'
 import AssetsFiltersPanel from './AssetsFiltersPanel'
 import AssetsBulkActions from './AssetsBulkActions'
+import EquipmentAssignmentsTab from './EquipmentAssignmentsTab'
 const AssetsPivotView = lazy(() => import('./AssetsPivotView'))
 
 const normalizeArrayResponse = (data) => {
@@ -126,6 +127,7 @@ const notifyError = (fallback, error) => {
 function AssetsPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // State management
   const [selectedRows, setSelectedRows] = useState({})
@@ -140,7 +142,13 @@ function AssetsPage() {
     }
     return 'table'
   }) // 'table' | 'pivot' | 'cards'
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(() => {
+    // Auto-open filters panel if URL has active filter params
+    for (const key of Object.keys(INITIAL_FILTERS)) {
+      if (searchParams.get(key)) return true
+    }
+    return false
+  })
   const [tableGlobalFilter, setTableGlobalFilter] = useState('')
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
@@ -154,6 +162,9 @@ function AssetsPage() {
 
   // Pivot configuration state
   const [pivotConfig, setPivotConfig] = useState(INITIAL_PIVOT_CONFIG)
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState('inventory')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -178,8 +189,64 @@ function AssetsPage() {
     }
   }, [viewMode])
 
-  // Filter state
-  const [filters, setFilters] = useState(() => ({ ...INITIAL_FILTERS }))
+  // Filter state - initialize from URL search params or sessionStorage so filters persist across navigation
+  const isInitialMount = useRef(true)
+  const [filters, setFilters] = useState(() => {
+    const restored = { ...INITIAL_FILTERS }
+    // First try URL search params
+    let hasUrlParams = false
+    Object.keys(INITIAL_FILTERS).forEach((key) => {
+      const val = searchParams.get(key)
+      if (val) {
+        restored[key] = val
+        hasUrlParams = true
+      }
+    })
+    // Fallback to sessionStorage if no URL params
+    if (!hasUrlParams) {
+      const saved = sessionStorage.getItem('assets_filter_params')
+      if (saved) {
+        const savedParams = new URLSearchParams(saved)
+        Object.keys(INITIAL_FILTERS).forEach((key) => {
+          const val = savedParams.get(key)
+          if (val) restored[key] = val
+        })
+      }
+    }
+    return restored
+  })
+  // Sync filters to URL search params and sessionStorage — skip first mount to avoid replacing history
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      // On mount, still sync initial filters to URL (push the restored filters into the URL)
+      const params = new URLSearchParams()
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.set(key, value)
+      })
+      const paramStr = params.toString()
+      // Only update URL if filters exist and URL doesn't already match
+      if (paramStr && searchParams.toString() !== paramStr) {
+        setSearchParams(params, { replace: true })
+      }
+      if (paramStr) {
+        sessionStorage.setItem('assets_filter_params', paramStr)
+      }
+      return
+    }
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value)
+    })
+    setSearchParams(params, { replace: true })
+    const paramStr = params.toString()
+    if (paramStr) {
+      sessionStorage.setItem('assets_filter_params', paramStr)
+    } else {
+      sessionStorage.removeItem('assets_filter_params')
+    }
+  }, [filters, setSearchParams])
+
   const deferredFilters = useDeferredValue(filters)
   const isFiltering = deferredFilters !== filters
   const deferredMobileGlobalFilter = useDeferredValue(mobileGlobalFilter)
@@ -353,10 +420,13 @@ function AssetsPage() {
   const createMutation = useMutation({
     mutationFn: (data) => apiClient.post('/assets', data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['assets'])
+      // Clear filters so the newly added asset is visible
+      setFilters({ ...INITIAL_FILTERS })
+      sessionStorage.removeItem('assets_filter_params')
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
       if (formData.assigned_to_employee_id) {
-        queryClient.invalidateQueries(['employeeAssets', formData.assigned_to_employee_id])
-        queryClient.invalidateQueries(['employee', formData.assigned_to_employee_id])
+        queryClient.invalidateQueries({ queryKey: ['employeeAssets', formData.assigned_to_employee_id] })
+        queryClient.invalidateQueries({ queryKey: ['employee', formData.assigned_to_employee_id] })
       }
       notifySuccess('Success', 'Asset created successfully')
       setIsAddModalOpen(false)
@@ -370,7 +440,7 @@ function AssetsPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => apiClient.put(`/assets/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['assets'])
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
       notifySuccess('Success', 'Asset updated successfully')
       setIsEditModalOpen(false)
     },
@@ -383,7 +453,7 @@ function AssetsPage() {
     mutationFn: ({ id, field, value }) =>
       apiClient.patch(`/assets/${id}/update-field`, { field, value }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['assets'])
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
       setEditingCell(null)
     },
     onError: (error) => {
@@ -394,7 +464,7 @@ function AssetsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => apiClient.delete(`/assets/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries(['assets'])
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
       Swal.fire({
         icon: 'success',
         title: 'Deleted!',
@@ -411,7 +481,7 @@ function AssetsPage() {
   const bulkDeleteMutation = useMutation({
     mutationFn: (ids) => apiClient.post('/assets/bulk-delete', { ids }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['assets'])
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
       setSelectedRows({})
       notifySuccess('Deleted!', 'Selected assets deleted successfully')
     },
@@ -423,7 +493,7 @@ function AssetsPage() {
   const createVendorMutation = useMutation({
     mutationFn: (data) => apiClient.post('/vendors', data),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['vendors'])
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
       setIsVendorModalOpen(false)
       setVendorFormData({
         company_name: '',
@@ -544,6 +614,7 @@ function AssetsPage() {
 
   const clearFilters = useCallback(() => {
     setFilters({ ...INITIAL_FILTERS })
+    sessionStorage.removeItem('assets_filter_params')
   }, [])
 
   const openAddModal = useCallback(() => {
@@ -1161,9 +1232,10 @@ function AssetsPage() {
       <AssetsHeaderBar
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        onRefresh={refetch}
         onAddAsset={openAddModal}
         onViewEmployees={() => navigate('/inventory/employee-list')}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
 
       <AssetsFiltersPanel
@@ -1189,7 +1261,10 @@ function AssetsPage() {
         onClearSelection={() => setSelectedRows({})}
       />
 
-      {/* Table View */}
+      {/* Content Area */}
+      {activeTab === 'inventory' && (
+        <>
+          {/* Table View */}
       {viewMode === 'table' && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
           {/* Table Search */}
@@ -1610,6 +1685,13 @@ function AssetsPage() {
           />
         </Suspense>
       )}
+        </>
+      )}
+
+      {/* Equipment Assignments Tab */}
+      {activeTab === 'assignments' && (
+        <EquipmentAssignmentsTab />
+      )}
 
       {/* Add Modal - Part 1 */}
       <AssetFormModal
@@ -1656,6 +1738,7 @@ function AssetsPage() {
         onVendorChange={handleVendorChange}
         onEmployeeChange={handleEmployeeChange}
         onAddVendor={openVendorModal}
+        onGenerateSerial={generateSerialNumber}
         categories={categories}
         subcategories={subcategories || []}
         vendorOptions={vendorOptions}
@@ -1664,7 +1747,6 @@ function AssetsPage() {
         showStatus
         showBookValue
         assignmentTitle="Assignment & Status"
-
         assignmentSubtitle="Employee assignment and asset status"
         equipmentOptions={equipmentOptions}
         components={components}

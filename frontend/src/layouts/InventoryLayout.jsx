@@ -13,13 +13,13 @@ function InventoryLayout() {
   const isCenteredLayout = centeredPages.includes(location.pathname)
 
   // Pages that use medium layout
-  const mediumPages = ['/inventory/audit-logs', '/inventory/repairs', '/inventory/reports']
+  const mediumPages = ['/inventory/audit-logs', '/inventory/repairs']
   const isMediumLayout = mediumPages.includes(location.pathname)
 
   const isReportWideLayout = location.pathname === '/inventory/reports' && searchParams.get('layout') === 'wide'
 
   // Pages that use wide layout
-  const widePages = ['/inventory/home', '/inventory/assets']
+  const widePages = ['/inventory/home', '/inventory/assets', '/inventory/reports', '/inventory/replenishment']
   const isWideLayout = widePages.includes(location.pathname) ||
     location.pathname.startsWith('/inventory/assets/') ||
     location.pathname.match(/\/inventory\/employees\/\d+\/assets/)

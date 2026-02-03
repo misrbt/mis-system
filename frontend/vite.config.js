@@ -10,34 +10,52 @@ export default defineConfig({
         manualChunks: (id) => {
           // Split React core libraries
           if (id.includes('node_modules')) {
+            // React Core
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'react-vendor'
+              return 'vendor-react'
             }
 
-            // Large UI libraries
-            if (id.includes('@material-tailwind') || id.includes('framer-motion') || id.includes('lucide-react')) {
-              return 'ui-vendor'
+            // Material Tailwind (UI)
+            if (id.includes('@material-tailwind')) {
+              return 'vendor-material'
             }
 
-            // Data/State management libraries
-            if (id.includes('@tanstack/react-query') || id.includes('@tanstack/react-table') ||
-                id.includes('react-hook-form') || id.includes('zod')) {
-              return 'data-vendor'
+            // Framer Motion (Animation)
+            if (id.includes('framer-motion')) {
+              return 'vendor-framer'
+            }
+
+            // Icons
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons'
+            }
+
+            // Data Management
+            if (id.includes('@tanstack')) {
+              return 'vendor-tanstack'
+            }
+            if (id.includes('react-hook-form') || id.includes('zod')) {
+              return 'vendor-forms'
             }
 
             // Charts
             if (id.includes('recharts')) {
-              return 'charts-vendor'
+              return 'vendor-charts'
             }
 
-            // File generation libraries
-            if (id.includes('jspdf') || id.includes('xlsx')) {
-              return 'file-vendor'
+            // Excel Generation
+            if (id.includes('xlsx')) {
+              return 'vendor-excel'
             }
 
-            // HTTP and utilities
+            // PDF Generation
+            if (id.includes('jspdf')) {
+              return 'vendor-pdf'
+            }
+
+            // HTTP & Utils
             if (id.includes('axios') || id.includes('sweetalert2')) {
-              return 'utils-vendor'
+              return 'vendor-utils'
             }
 
             // All other node_modules
