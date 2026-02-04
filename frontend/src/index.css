@@ -15,18 +15,24 @@ body {
 
 /* Custom animations */
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-20px);
   }
 }
 
 @keyframes glow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.2;
   }
+
   50% {
     opacity: 0.4;
   }
@@ -75,6 +81,7 @@ body {
 
 /* Print Styles */
 @media print {
+
   /* Hide non-printable elements */
   .no-print,
   nav,
@@ -129,7 +136,7 @@ body {
   }
 
   /* Compact spacing between sections */
-  .space-y-6 > * + * {
+  .space-y-6>*+* {
     margin-top: 2px !important;
   }
 
@@ -254,13 +261,17 @@ body {
   }
 
   /* Prevent widows and orphans */
-  p, h1, h2, h3 {
+  p,
+  h1,
+  h2,
+  h3 {
     orphans: 3;
     widows: 3;
   }
 
   /* Headers */
-  h1, h2 {
+  h1,
+  h2 {
     page-break-after: avoid;
   }
 

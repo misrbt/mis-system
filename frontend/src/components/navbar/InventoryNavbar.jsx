@@ -98,7 +98,7 @@ function InventoryNavBarContent({ user, onLogout, location }) {
       type: 'dropdown',
       items: [
         { name: 'Assets', icon: Package, path: '/inventory/assets' },
-        // { name: 'Replenishment', icon: Package2, path: '/inventory/replenishment' }, // Temporarily disabled
+        { name: 'Replenishment', icon: Package2, path: '/inventory/replenishment' },
         { name: 'Equipment', icon: Monitor, path: '/inventory/equipment' },
         { name: 'Categories', icon: Package, path: '/inventory/asset-category' },
         { name: 'Subcategories', icon: Package, path: '/inventory/asset-subcategories' },

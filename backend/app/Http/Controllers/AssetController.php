@@ -1017,6 +1017,202 @@ class AssetController extends Controller
     }
 
     /**
+     * Advanced asset tracking with comprehensive filters.
+     * Returns all assets matching the filter criteria for deep tracking.
+     */
+    public function track(Request $request)
+    {
+        try {
+            $query = Asset::with([
+                'category',
+                'subcategory',
+                'vendor',
+                'status',
+                'assignedEmployee.branch',
+                'assignedEmployee.position',
+                'assignedEmployee.department',
+                'equipment'
+            ]);
+
+            // Location & Assignment filters
+            if ($request->has('branch_id') && $request->branch_id) {
+                $query->whereHas('assignedEmployee', function ($q) use ($request) {
+                    $q->where('branch_id', $request->branch_id);
+                });
+            }
+
+            if ($request->has('employee_id') && $request->employee_id) {
+                $query->where('assigned_to_employee_id', $request->employee_id);
+            }
+
+            // Assignment status filter
+            if ($request->has('assignment_status') && $request->assignment_status) {
+                if ($request->assignment_status === 'assigned') {
+                    $query->whereNotNull('assigned_to_employee_id');
+                } elseif ($request->assignment_status === 'unassigned') {
+                    $query->whereNull('assigned_to_employee_id');
+                }
+                // 'all' means no filter
+            }
+
+            // Asset Identification filters
+            if ($request->has('category_id') && $request->category_id) {
+                $query->where('asset_category_id', $request->category_id);
+            }
+
+            if ($request->has('subcategory_id') && $request->subcategory_id) {
+                $query->where('subcategory_id', $request->subcategory_id);
+            }
+
+            if ($request->has('asset_name') && $request->asset_name) {
+                $query->where('asset_name', 'like', "%{$request->asset_name}%");
+            }
+
+            if ($request->has('serial_number') && $request->serial_number) {
+                $query->where('serial_number', 'like', "%{$request->serial_number}%");
+            }
+
+            // Financial Data filters
+            if ($request->has('cost_min') && is_numeric($request->cost_min)) {
+                $query->where('acq_cost', '>=', $request->cost_min);
+            }
+
+            if ($request->has('cost_max') && is_numeric($request->cost_max)) {
+                $query->where('acq_cost', '<=', $request->cost_max);
+            }
+
+            if ($request->has('book_value_min') && is_numeric($request->book_value_min)) {
+                $query->where('book_value', '>=', $request->book_value_min);
+            }
+
+            if ($request->has('book_value_max') && is_numeric($request->book_value_max)) {
+                $query->where('book_value', '<=', $request->book_value_max);
+            }
+
+            // Status & Warranty filters
+            if ($request->has('status_id') && $request->status_id) {
+                $query->where('status_id', $request->status_id);
+            }
+
+            if ($request->has('vendor_id') && $request->vendor_id) {
+                $query->where('vendor_id', $request->vendor_id);
+            }
+
+            // Warranty status filter
+            if ($request->has('warranty_status') && $request->warranty_status) {
+                $today = Carbon::today();
+                $thirtyDaysFromNow = $today->copy()->addDays(30);
+
+                switch ($request->warranty_status) {
+                    case 'active':
+                        $query->whereNotNull('waranty_expiration_date')
+                            ->where('waranty_expiration_date', '>', $today);
+                        break;
+                    case 'expired':
+                        $query->whereNotNull('waranty_expiration_date')
+                            ->where('waranty_expiration_date', '<', $today);
+                        break;
+                    case 'expiring_soon':
+                        $query->whereNotNull('waranty_expiration_date')
+                            ->where('waranty_expiration_date', '>=', $today)
+                            ->where('waranty_expiration_date', '<=', $thirtyDaysFromNow);
+                        break;
+                    case 'none':
+                        $query->whereNull('waranty_expiration_date');
+                        break;
+                }
+            }
+
+            // Purchase Date filters
+            if ($request->has('purchase_date_from') && $request->purchase_date_from) {
+                $query->where('purchase_date', '>=', $request->purchase_date_from);
+            }
+
+            if ($request->has('purchase_date_to') && $request->purchase_date_to) {
+                $query->where('purchase_date', '<=', $request->purchase_date_to);
+            }
+
+            // Asset Age filters (in years)
+            if ($request->has('age_min') && is_numeric($request->age_min)) {
+                $maxDate = Carbon::today()->subYears((int) $request->age_min);
+                $query->where('purchase_date', '<=', $maxDate);
+            }
+
+            if ($request->has('age_max') && is_numeric($request->age_max)) {
+                $minDate = Carbon::today()->subYears((int) $request->age_max);
+                $query->where('purchase_date', '>=', $minDate);
+            }
+
+            // Sorting
+            $sortBy = $request->get('sort_by', 'created_at');
+            $sortOrder = $request->get('sort_order', 'desc');
+
+            // Validate sort field to prevent SQL injection
+            $allowedSortFields = [
+                'id', 'asset_name', 'serial_number', 'purchase_date',
+                'acq_cost', 'book_value', 'created_at', 'updated_at',
+                'waranty_expiration_date', 'estimate_life'
+            ];
+
+            if (!in_array($sortBy, $allowedSortFields)) {
+                $sortBy = 'created_at';
+            }
+
+            $query->orderBy($sortBy, $sortOrder === 'asc' ? 'asc' : 'desc');
+
+            // Pagination
+            $perPage = min((int) $request->get('per_page', 20), 100); // Max 100 per page
+            $page = max((int) $request->get('page', 1), 1);
+
+            $total = $query->count();
+            $assets = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
+
+            // Calculate summary statistics for the filtered results
+            $summaryQuery = Asset::query();
+
+            // Apply same filters for summary
+            if ($request->has('branch_id') && $request->branch_id) {
+                $summaryQuery->whereHas('assignedEmployee', function ($q) use ($request) {
+                    $q->where('branch_id', $request->branch_id);
+                });
+            }
+            if ($request->has('employee_id') && $request->employee_id) {
+                $summaryQuery->where('assigned_to_employee_id', $request->employee_id);
+            }
+            if ($request->has('category_id') && $request->category_id) {
+                $summaryQuery->where('asset_category_id', $request->category_id);
+            }
+            if ($request->has('status_id') && $request->status_id) {
+                $summaryQuery->where('status_id', $request->status_id);
+            }
+
+            $summary = [
+                'total_count' => $total,
+                'total_acq_cost' => Asset::whereIn('id', $assets->pluck('id'))->sum('acq_cost'),
+                'total_book_value' => Asset::whereIn('id', $assets->pluck('id'))->sum('book_value'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $assets,
+                'meta' => [
+                    'current_page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                    'last_page' => ceil($total / $perPage),
+                ],
+                'summary' => $summary,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to track assets',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Calculate warranty expiration date based on purchase date and duration.
      */
     private function calculateWarrantyExpiration($purchaseDate, $durationValue, $durationUnit, $explicitDate = null)

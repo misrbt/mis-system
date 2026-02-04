@@ -160,7 +160,7 @@ export const getReplenishmentColumns = ({
         </div>
       )
     },
-    size: 120,
+    size: 100,
   },
   {
     id: 'actions',
@@ -169,31 +169,28 @@ export const getReplenishmentColumns = ({
       <div className="flex items-center gap-2">
         <button
           onClick={() => openAssignModal(row.original)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-all duration-200"
+          className="p-2 text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-all duration-200"
           title="Assign to employee or branch"
         >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">Assign</span>
+          <UserPlus className="w-4 h-4" />
         </button>
         <button
           onClick={() => openEditModal(row.original)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all duration-200"
+          className="p-2 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all duration-200"
           title="Edit replenishment"
         >
-          <Edit className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">Edit</span>
+          <Edit className="w-4 h-4" />
         </button>
         <button
           onClick={() => handleDelete(row.original)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-all duration-200"
+          className="p-2 text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-all duration-200"
           title="Delete replenishment"
         >
-          <Trash2 className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">Delete</span>
+          <Trash2 className="w-4 h-4" />
         </button>
       </div>
     ),
     enableSorting: false,
-    size: 220,
+    size: 140,
   },
 ]

@@ -536,7 +536,7 @@ export default function useAssetViewController({ id, employeeId }) {
     // Fetch components if this is a Desktop PC
     const category = categories?.find(c => c.id === empAsset.asset_category_id);
     const isDesktopPC = category?.name?.toLowerCase().includes('desktop') ||
-                        category?.name?.toLowerCase().includes('pc');
+      category?.name?.toLowerCase().includes('pc');
 
     let fetchedComponents = [];
     if (isDesktopPC) {
@@ -972,24 +972,12 @@ export default function useAssetViewController({ id, employeeId }) {
       return;
     }
 
-    serialGenRef.current = null;
-    setAddFormData({
-      asset_name: "",
-      asset_category_id: "",
-      subcategory_id: "",
-      brand: "",
-      model: "",
-      serial_number: "",
-      purchase_date: "",
-      acq_cost: "",
-      waranty_expiration_date: "",
-      estimate_life: "",
-      vendor_id: "",
-      remarks: "",
-      specifications: {},
-      assigned_to_employee_id: actualEmployeeId,
-    });
-    setComponents([]);
+    // Do not reset form data to allow persistence if accidentally closed
+    // Just ensure the employee ID is correct
+    setAddFormData(prev => ({
+      ...prev,
+      assigned_to_employee_id: actualEmployeeId
+    }));
     setShowAddModal(true);
   };
 

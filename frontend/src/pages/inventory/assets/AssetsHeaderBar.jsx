@@ -1,11 +1,12 @@
 import React from 'react'
 import {
   BarChart3,
-  LayoutGrid,
   Plus,
   Table2,
   Package,
   Users,
+  Search,
+  LayoutGrid,
 } from 'lucide-react'
 
 const AssetsHeaderBar = ({
@@ -41,18 +42,18 @@ const AssetsHeaderBar = ({
             <span>Assets</span>
           </button>
 
-          {/* Tab: Equipment */}
+          {/* Tab: Asset Tracker */}
           <button
-            onClick={() => onTabChange('assignments')}
+            onClick={() => onTabChange('tracker')}
             className={`inline-flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${
-              activeTab === 'assignments'
-                ? 'bg-blue-600 text-white shadow-sm'
+              activeTab === 'tracker'
+                ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
-            title="Equipment assignments"
+            title="Advanced asset tracker"
           >
-            <LayoutGrid className="w-4 h-4" />
-            <span>Equipment</span>
+            <Search className="w-4 h-4" />
+            <span>Tracker</span>
           </button>
 
           {/* Divider */}
@@ -105,23 +106,27 @@ const AssetsHeaderBar = ({
           )}
         </div>
 
-        {/* Add Asset button */}
-        <button
-          onClick={onAddAsset}
-          className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Asset</span>
-        </button>
+        {/* Add Asset button - only show on inventory tab */}
+        {activeTab === 'inventory' && (
+          <button
+            onClick={onAddAsset}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Asset</span>
+          </button>
+        )}
 
-        {/* View Employees button */}
-        <button
-          onClick={onViewEmployees}
-          className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
-        >
-          <Users className="w-4 h-4" />
-          <span>View Employees</span>
-        </button>
+        {/* View Employees button - only show on inventory tab */}
+        {activeTab === 'inventory' && (
+          <button
+            onClick={onViewEmployees}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
+          >
+            <Users className="w-4 h-4" />
+            <span>View Employees</span>
+          </button>
+        )}
       </div>
     </div>
   )

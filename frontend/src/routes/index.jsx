@@ -2,6 +2,7 @@ import { lazy } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import ProtectedRoute from '../components/ProtectedRoute'
 import inventoryRoutes from './inventoryRoutes'
+import adminRoutes from './adminRoutes'
 import ErrorPage from '../components/ErrorPage'
 
 // Lazy load auth and portal pages
@@ -53,6 +54,12 @@ const router = createBrowserRouter([
   // Inventory routes (protected)
   {
     ...inventoryRoutes,
+    errorElement: <ErrorPage />,
+  },
+
+  // Admin routes (protected)
+  {
+    ...adminRoutes,
     errorElement: <ErrorPage />,
   },
 

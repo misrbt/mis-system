@@ -5,14 +5,7 @@ import {
   Search,
   Plus,
   Filter,
-  X,
   Package2,
-  ChevronLeft,
-  ChevronRight,
-  Edit,
-  Trash2,
-  UserPlus,
-  Building2,
 } from 'lucide-react'
 import {
   flexRender,
@@ -26,7 +19,9 @@ import apiClient from '../../services/apiClient'
 import { getReplenishmentColumns } from './replenishment/replenishmentColumns'
 import ReplenishmentFormModal from './replenishment/ReplenishmentFormModal'
 import AssignModal from './replenishment/AssignModal'
+import Modal from '../../components/Modal'
 import Swal from 'sweetalert2'
+import { buildSerialNumber } from '../../utils/assetSerial'
 
 const normalizeArrayResponse = (data) => {
   if (Array.isArray(data?.data)) return data.data
@@ -53,7 +48,10 @@ const INITIAL_FORM_DATA = {
   brand: '',
   model: '',
   acq_cost: '',
+  book_value: '',
   purchase_date: '',
+  warranty_expiration_date: '',
+  estimate_life: '',
   vendor_id: '',
   status_id: '',
   remarks: '',
@@ -82,7 +80,10 @@ const buildFormData = (replenishment = {}) => ({
   brand: replenishment.brand || '',
   model: replenishment.model || '',
   acq_cost: replenishment.acq_cost || '',
+  book_value: replenishment.book_value || '',
   purchase_date: formatDateForInput(replenishment.purchase_date),
+  warranty_expiration_date: formatDateForInput(replenishment.warranty_expiration_date),
+  estimate_life: replenishment.estimate_life || '',
   vendor_id: replenishment.vendor_id || '',
   status_id: replenishment.status_id || '',
   remarks: replenishment.remarks || '',
@@ -119,6 +120,7 @@ function ReplenishmentPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState(INITIAL_FILTERS)
   const [formData, setFormData] = useState(INITIAL_FORM_DATA)
+  const [components, setComponents] = useState([])
 
   // Fetch replenishments - disabled by default to prevent freeze if DB not ready
   const { data: replenishmentsData, isLoading, refetch, isError, error } = useQuery({
@@ -207,6 +209,25 @@ function ReplenishmentPage() {
     staleTime: 5 * 60 * 1000,
   })
 
+  const { data: equipmentList } = useQuery({
+    queryKey: ['equipment'],
+    queryFn: async () => {
+      const response = await apiClient.get('/equipment')
+      return normalizeArrayResponse(response.data)
+    },
+    retry: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Vendor modal state
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
+  const [vendorFormData, setVendorFormData] = useState({
+    company_name: '',
+    contact_no: '',
+    address: '',
+  })
+
   // Memoized options
   const statusOptions = useMemo(() => normalizeArrayResponse(statuses), [statuses])
   const statusColorMap = useMemo(() => {
@@ -239,6 +260,21 @@ function ReplenishmentPage() {
   const branchOptions = useMemo(
     () => (Array.isArray(branches) ? branches : []),
     [branches]
+  )
+
+  const equipmentOptions = useMemo(
+    () =>
+      (Array.isArray(equipmentList) ? equipmentList : []).map((eq) => ({
+        id: eq.id,
+        name: `${eq.brand} ${eq.model}`,
+        brand: eq.brand,
+        model: eq.model,
+        asset_category_id: eq.asset_category_id,
+        subcategory_id: eq.subcategory_id,
+        category_name: eq.category?.name,
+        subcategory_name: eq.subcategory?.name,
+      })),
+    [equipmentList]
   )
 
   // Mutations
@@ -322,6 +358,29 @@ function ReplenishmentPage() {
     },
   })
 
+  const createVendorMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/vendors', data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      setIsVendorModalOpen(false)
+      setVendorFormData({
+        company_name: '',
+        contact_no: '',
+        address: '',
+      })
+
+      // Auto-select the newly created vendor
+      if (response.data?.data?.id) {
+        setFormData((prev) => ({ ...prev, vendor_id: response.data.data.id }))
+      }
+
+      notifySuccess('Success!', 'Vendor created successfully')
+    },
+    onError: (error) => {
+      notifyError('Failed to create vendor', error)
+    },
+  })
+
   // Handlers
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target
@@ -338,6 +397,116 @@ function ReplenishmentPage() {
     setFormData((prev) => ({ ...prev, vendor_id: value }))
   }, [])
 
+  const generateSerialNumber = useCallback(() => {
+    // Get selected category
+    const selectedCategory = categories?.find(cat => cat.id == formData.asset_category_id)
+
+    if (!selectedCategory) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Select Category First',
+        text: 'Please select an asset category before generating a serial number',
+      })
+      return
+    }
+
+    // Generate unique serial number
+    const categoryCode = selectedCategory?.code || selectedCategory?.name?.substring(0, 3).toUpperCase() || 'RPL'
+    const serialNumber = buildSerialNumber(categoryCode)
+
+    setFormData(prev => ({ ...prev, serial_number: serialNumber }))
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Serial Number Generated',
+      text: serialNumber,
+      timer: 2000,
+    })
+  }, [formData.asset_category_id, categories])
+
+  const openVendorModal = useCallback(() => {
+    setVendorFormData({
+      company_name: '',
+      contact_no: '',
+      address: '',
+    })
+    setIsVendorModalOpen(true)
+  }, [])
+
+  const handleVendorInputChange = useCallback((e) => {
+    const { name, value } = e.target
+    setVendorFormData((prev) => ({ ...prev, [name]: value }))
+  }, [])
+
+  const handleCreateVendor = useCallback((e) => {
+    e.preventDefault()
+    createVendorMutation.mutate(vendorFormData)
+  }, [createVendorMutation, vendorFormData])
+
+  // Component handlers for Desktop PC
+  const handleComponentAdd = useCallback(() => {
+    const newComponent = {
+      id: `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      category_id: '',
+      subcategory_id: '',
+      component_name: '',
+      brand: '',
+      model: '',
+      serial_number: '',
+      specifications: {},
+      status_id: '',
+      remarks: '',
+    }
+    setComponents((prev) => [...prev, newComponent])
+  }, [])
+
+  const handleComponentRemove = useCallback((componentId) => {
+    setComponents((prev) => prev.filter((c) => c.id !== componentId))
+  }, [])
+
+  const handleComponentChange = useCallback((componentId, field, value) => {
+    setComponents((prev) =>
+      prev.map((c) => (c.id === componentId ? { ...c, [field]: value } : c))
+    )
+  }, [])
+
+  const generateComponentSerial = useCallback((componentId) => {
+    const component = components.find((c) => c.id === componentId)
+    if (!component) return
+
+    const selectedCategory = categories?.find(
+      (cat) => cat.id == component.category_id
+    )
+
+    if (!selectedCategory) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Select Category First',
+        text: 'Please select a category for this component before generating a serial number',
+      })
+      return
+    }
+
+    const categoryCode =
+      selectedCategory?.code ||
+      selectedCategory?.name?.substring(0, 3).toUpperCase() ||
+      'CMP'
+    const serialNumber = buildSerialNumber(categoryCode)
+
+    setComponents((prev) =>
+      prev.map((c) =>
+        c.id === componentId ? { ...c, serial_number: serialNumber } : c
+      )
+    )
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Serial Number Generated',
+      text: serialNumber,
+      timer: 2000,
+    })
+  }, [categories, components])
+
   const handleFilterChange = useCallback((e) => {
     const { name, value } = e.target
     setFilters((prev) => ({ ...prev, [name]: value }))
@@ -349,6 +518,7 @@ function ReplenishmentPage() {
 
   const openAddModal = useCallback(() => {
     setFormData(INITIAL_FORM_DATA)
+    setComponents([])
     setIsAddModalOpen(true)
   }, [])
 
@@ -372,6 +542,7 @@ function ReplenishmentPage() {
         subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
         vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
         status_id: formData.status_id ? Number(formData.status_id) : null,
+        estimate_life: formData.estimate_life ? Number(formData.estimate_life) : null,
       }
       createMutation.mutate(payload)
     },
@@ -389,6 +560,7 @@ function ReplenishmentPage() {
           subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
           vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
           status_id: formData.status_id ? Number(formData.status_id) : null,
+          estimate_life: formData.estimate_life ? Number(formData.estimate_life) : null,
         },
       })
     },
@@ -782,10 +954,18 @@ function ReplenishmentPage() {
         formData={formData}
         onInputChange={handleInputChange}
         onVendorChange={handleVendorChange}
+        onGenerateSerial={generateSerialNumber}
+        onGenerateComponentSerial={generateComponentSerial}
+        onAddVendor={openVendorModal}
         categories={categories}
         subcategories={subcategories || []}
         vendorOptions={vendorOptions}
         statusOptions={statusOptions}
+        equipmentOptions={equipmentOptions}
+        components={components}
+        onComponentAdd={handleComponentAdd}
+        onComponentRemove={handleComponentRemove}
+        onComponentChange={handleComponentChange}
         isEditMode={false}
       />
 
@@ -800,11 +980,20 @@ function ReplenishmentPage() {
         formData={formData}
         onInputChange={handleInputChange}
         onVendorChange={handleVendorChange}
+        onGenerateSerial={generateSerialNumber}
+        onGenerateComponentSerial={generateComponentSerial}
+        onAddVendor={openVendorModal}
         categories={categories}
         subcategories={subcategories || []}
         vendorOptions={vendorOptions}
         statusOptions={statusOptions}
+        equipmentOptions={equipmentOptions}
+        components={components}
+        onComponentAdd={handleComponentAdd}
+        onComponentRemove={handleComponentRemove}
+        onComponentChange={handleComponentChange}
         isEditMode={true}
+        showBookValue={true}
       />
 
       {/* Assign Modal */}
@@ -813,16 +1002,82 @@ function ReplenishmentPage() {
         onClose={() => setIsAssignModalOpen(false)}
         replenishment={selectedReplenishment}
         employeeOptions={employeeOptions}
-        branchOptions={branchOptions}
         onAssignEmployee={handleAssignEmployee}
-        onAssignBranch={handleAssignBranch}
         onRemoveAssignment={handleRemoveAssignment}
         isAssigning={
           assignEmployeeMutation.isPending ||
-          assignBranchMutation.isPending ||
           removeAssignmentMutation.isPending
         }
       />
+
+      {/* Add Vendor Modal */}
+      <Modal
+        isOpen={isVendorModalOpen}
+        onClose={() => setIsVendorModalOpen(false)}
+        title="Add New Vendor"
+      >
+        <form onSubmit={handleCreateVendor} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Company Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="company_name"
+              value={vendorFormData.company_name}
+              onChange={handleVendorInputChange}
+              required
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter company name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Contact Number
+            </label>
+            <input
+              type="text"
+              name="contact_no"
+              value={vendorFormData.contact_no}
+              onChange={handleVendorInputChange}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter contact number"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Address
+            </label>
+            <textarea
+              name="address"
+              value={vendorFormData.address}
+              onChange={handleVendorInputChange}
+              rows="3"
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter address"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsVendorModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createVendorMutation.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {createVendorMutation.isPending ? 'Creating...' : 'Create Vendor'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

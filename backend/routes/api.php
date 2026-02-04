@@ -101,6 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
     Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
     Route::get('assets/totals', [AssetController::class, 'totals']);
+    Route::get('assets/track', [AssetController::class, 'track']);
 
     // QR Code test endpoint - generates a test QR code to verify API configuration
     Route::post('qr-code/test', function (\Illuminate\Http\Request $request) {

@@ -31,7 +31,7 @@ import { formatCurrency, formatDate } from '../../../utils/assetFormatters'
 import AssetsHeaderBar from './AssetsHeaderBar'
 import AssetsFiltersPanel from './AssetsFiltersPanel'
 import AssetsBulkActions from './AssetsBulkActions'
-import EquipmentAssignmentsTab from './EquipmentAssignmentsTab'
+import AdvancedAssetTracker from './AdvancedAssetTracker'
 const AssetsPivotView = lazy(() => import('./AssetsPivotView'))
 
 const normalizeArrayResponse = (data) => {
@@ -202,17 +202,8 @@ function AssetsPage() {
         hasUrlParams = true
       }
     })
-    // Fallback to sessionStorage if no URL params
-    if (!hasUrlParams) {
-      const saved = sessionStorage.getItem('assets_filter_params')
-      if (saved) {
-        const savedParams = new URLSearchParams(saved)
-        Object.keys(INITIAL_FILTERS).forEach((key) => {
-          const val = savedParams.get(key)
-          if (val) restored[key] = val
-        })
-      }
-    }
+    // Fallback to sessionStorage removed to prevent auto-loading filters on clean navigation
+    // if (!hasUrlParams) { ... }
     return restored
   })
   // Sync filters to URL search params and sessionStorage — skip first mount to avoid replacing history
@@ -430,6 +421,7 @@ function AssetsPage() {
       }
       notifySuccess('Success', 'Asset created successfully')
       setIsAddModalOpen(false)
+      setFormData(buildFormData()) // Reset form data after successful creation
       setComponents([]) // Reset components after successful creation
     },
     onError: (error) => {
@@ -618,8 +610,7 @@ function AssetsPage() {
   }, [])
 
   const openAddModal = useCallback(() => {
-    setFormData(buildFormData())
-    setComponents([]) // Reset components for new asset
+    // Do not reset form data here to allow persistence if accidentally closed
     setIsAddModalOpen(true)
   }, [])
 
@@ -1688,9 +1679,15 @@ function AssetsPage() {
         </>
       )}
 
-      {/* Equipment Assignments Tab */}
-      {activeTab === 'assignments' && (
-        <EquipmentAssignmentsTab />
+      {/* Advanced Asset Tracker Tab */}
+      {activeTab === 'tracker' && (
+        <AdvancedAssetTracker
+          branches={branches}
+          categories={categories}
+          statuses={statuses}
+          vendors={vendors}
+          employees={employees}
+        />
       )}
 
       {/* Add Modal - Part 1 */}

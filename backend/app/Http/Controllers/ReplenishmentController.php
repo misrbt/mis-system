@@ -60,11 +60,11 @@ class ReplenishmentController extends Controller
                 if ($request->assignment_status === 'assigned') {
                     $query->where(function ($q) {
                         $q->whereNotNull('assigned_to_employee_id')
-                          ->orWhereNotNull('assigned_to_branch_id');
+                            ->orWhereNotNull('assigned_to_branch_id');
                     });
                 } elseif ($request->assignment_status === 'unassigned') {
                     $query->whereNull('assigned_to_employee_id')
-                          ->whereNull('assigned_to_branch_id');
+                        ->whereNull('assigned_to_branch_id');
                 }
             }
 
@@ -96,10 +96,13 @@ class ReplenishmentController extends Controller
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'acq_cost' => 'nullable|numeric|min:0',
+            'book_value' => 'nullable|numeric|min:0',
             'purchase_date' => 'nullable|date',
+            'warranty_expiration_date' => 'nullable|date',
+            'estimate_life' => 'nullable|integer|min:0',
             'vendor_id' => 'nullable|exists:vendors,id',
-            'status_id' => 'nullable|exists:statuses,id',
-            'assigned_to_employee_id' => 'nullable|exists:employees,id',
+            'status_id' => 'nullable|exists:status,id',
+            'assigned_to_employee_id' => 'nullable|exists:employee,id',
             'assigned_to_branch_id' => 'nullable|exists:branches,id',
             'remarks' => 'nullable|string',
             'specifications' => 'nullable|array',
@@ -122,7 +125,10 @@ class ReplenishmentController extends Controller
                 'brand' => $request->brand,
                 'model' => $request->model,
                 'acq_cost' => $request->acq_cost,
+                // 'book_value' => $request->book_value, // We verify/calc this below
                 'purchase_date' => $request->purchase_date,
+                'warranty_expiration_date' => $request->warranty_expiration_date,
+                'estimate_life' => $request->estimate_life,
                 'vendor_id' => $request->vendor_id,
                 'status_id' => $request->status_id,
                 'assigned_to_employee_id' => $request->assigned_to_employee_id,
@@ -130,6 +136,11 @@ class ReplenishmentController extends Controller
                 'remarks' => $request->remarks,
                 'specifications' => $request->specifications,
             ]);
+
+            // Calculate and set initial book value
+            $bookValueCalc = $replenishment->calculateBookValue();
+            $replenishment->book_value = $bookValueCalc['book_value'];
+            $replenishment->save();
 
             $replenishment->load([
                 'category',
@@ -197,10 +208,13 @@ class ReplenishmentController extends Controller
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'acq_cost' => 'nullable|numeric|min:0',
+            'book_value' => 'nullable|numeric|min:0',
             'purchase_date' => 'nullable|date',
+            'warranty_expiration_date' => 'nullable|date',
+            'estimate_life' => 'nullable|integer|min:0',
             'vendor_id' => 'nullable|exists:vendors,id',
-            'status_id' => 'nullable|exists:statuses,id',
-            'assigned_to_employee_id' => 'nullable|exists:employees,id',
+            'status_id' => 'nullable|exists:status,id',
+            'assigned_to_employee_id' => 'nullable|exists:employee,id',
             'assigned_to_branch_id' => 'nullable|exists:branches,id',
             'remarks' => 'nullable|string',
             'specifications' => 'nullable|array',
@@ -217,6 +231,11 @@ class ReplenishmentController extends Controller
         try {
             $replenishment = Replenishment::findOrFail($id);
 
+            // Check if depreciation-related fields are being updated
+            $needsRecalculation = $request->has('purchase_date')
+                || $request->has('acq_cost')
+                || $request->has('estimate_life');
+
             $replenishment->update([
                 'asset_name' => $request->asset_name,
                 'serial_number' => $request->serial_number,
@@ -225,7 +244,10 @@ class ReplenishmentController extends Controller
                 'brand' => $request->brand,
                 'model' => $request->model,
                 'acq_cost' => $request->acq_cost,
+                // 'book_value' => $request->book_value, // Calculated below if needed
                 'purchase_date' => $request->purchase_date,
+                'warranty_expiration_date' => $request->warranty_expiration_date,
+                'estimate_life' => $request->estimate_life,
                 'vendor_id' => $request->vendor_id,
                 'status_id' => $request->status_id,
                 'assigned_to_employee_id' => $request->assigned_to_employee_id,
@@ -233,6 +255,13 @@ class ReplenishmentController extends Controller
                 'remarks' => $request->remarks,
                 'specifications' => $request->specifications,
             ]);
+
+            // Recalculate book value if needed
+            if ($needsRecalculation) {
+                $bookValueCalc = $replenishment->calculateBookValue();
+                $replenishment->book_value = $bookValueCalc['book_value'];
+                $replenishment->save();
+            }
 
             $replenishment->load([
                 'category',
@@ -282,11 +311,12 @@ class ReplenishmentController extends Controller
 
     /**
      * Assign replenishment to an employee
+     * This moves the replenishment to the assets table and assigns it to the employee
      */
     public function assignToEmployee(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'employee_id' => 'required|exists:employees,id',
+            'employee_id' => 'required|exists:employee,id',
         ]);
 
         if ($validator->fails()) {
@@ -300,25 +330,53 @@ class ReplenishmentController extends Controller
         try {
             $replenishment = Replenishment::findOrFail($id);
 
-            $replenishment->update([
+            // Get employee to retrieve their branch
+            $employee = \App\Models\Employee::findOrFail($request->employee_id);
+
+            // Create new asset from replenishment data
+            $asset = \App\Models\Asset::create([
+                'asset_name' => $replenishment->asset_name,
+                'asset_category_id' => $replenishment->asset_category_id,
+                'subcategory_id' => $replenishment->subcategory_id,
+                'serial_number' => $replenishment->serial_number,
+                'purchase_date' => $replenishment->purchase_date,
+                'acq_cost' => $replenishment->acq_cost,
+                'book_value' => $replenishment->book_value ?? $replenishment->acq_cost,
+                'waranty_expiration_date' => $replenishment->warranty_expiration_date,
+                'estimate_life' => $replenishment->estimate_life,
+                'vendor_id' => $replenishment->vendor_id,
+                'status_id' => $replenishment->status_id,
+                'remarks' => $replenishment->remarks,
+                'specifications' => $replenishment->specifications,
                 'assigned_to_employee_id' => $request->employee_id,
-                'assigned_to_branch_id' => null, // Clear branch assignment when assigning to employee
             ]);
 
-            $replenishment->load([
+            // Generate QR code and barcode for the new asset
+            try {
+                $asset->generateAndSaveQRCode('simple', true);
+                $asset->generateAndSaveBarcode();
+            } catch (\Exception $e) {
+                \Log::warning('Failed to generate QR/Barcode for asset ' . $asset->id . ': ' . $e->getMessage());
+            }
+
+            // Load relationships for the asset
+            $asset->load([
                 'category',
                 'subcategory',
                 'vendor',
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedBranch'
             ]);
+
+            // Delete the replenishment since it's now an asset
+            $replenishment->delete();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Replenishment assigned to employee successfully',
-                'data' => $replenishment,
+                'message' => 'Reserve asset has been deployed and assigned to ' . $employee->fullname,
+                'data' => $asset,
+                'deployed' => true,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([

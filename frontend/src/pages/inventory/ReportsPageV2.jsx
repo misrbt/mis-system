@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import apiClient from '../../services/apiClient'
@@ -10,6 +10,7 @@ import {
   FileText,
   Calendar,
   Package,
+  Package2,
   X,
   Loader2,
   Download,
@@ -150,7 +151,47 @@ function ReportsPage() {
   const groupedByEmployee = reportData?.data?.grouped_by_employee || []
   const summary = reportData?.data?.summary || null
 
+  // Check if Head Office is selected
+  const selectedBranch = useMemo(() => {
+    if (!activeFilters?.branch_id || !branches) return null
+    return branches.find(b => b.id == activeFilters.branch_id)
+  }, [activeFilters?.branch_id, branches])
 
+  const isHeadOfficeSelected = useMemo(() => {
+    if (!selectedBranch) return false
+    const branchName = (selectedBranch.branch_name || '').toLowerCase().trim()
+    // Stricter check: ONLY 'head office' as requested
+    return branchName === 'head office' || branchName.includes('head office')
+  }, [selectedBranch])
+
+  // Fetch replenishments when Head Office is selected
+  const {
+    data: replenishmentsData,
+    isLoading: isLoadingReplenishments
+  } = useQuery({
+    queryKey: ['replenishments-report', activeFilters, isHeadOfficeSelected],
+    queryFn: async () => {
+      const response = await apiClient.get('/replenishments')
+      return response.data
+    },
+    enabled: !!activeFilters && isHeadOfficeSelected,
+    staleTime: 0,
+  })
+
+  const replenishmentsList = useMemo(() => {
+    if (!replenishmentsData?.data) return []
+    return Array.isArray(replenishmentsData.data) ? replenishmentsData.data : []
+  }, [replenishmentsData])
+
+  // Calculate replenishment summary
+  const replenishmentSummary = useMemo(() => {
+    if (!replenishmentsList.length) return null
+    return {
+      total_count: replenishmentsList.length,
+      total_acquisition_cost: replenishmentsList.reduce((sum, r) => sum + (parseFloat(r.acq_cost) || 0), 0),
+      // total_book_value removed as requested
+    }
+  }, [replenishmentsList])
 
   // We use a state to hold the resolved user so we can pass it to children
   // and use it in callbacks without complex dependency chains.
@@ -178,7 +219,7 @@ function ReportsPage() {
         setResolvedUser({
           ...user,
           fullname: user.name || user.fullname || 'Admin User',
-          position: user.position || { title: 'System Administrator' }
+          position: user.position || { title: '' }
         })
       }
     }
@@ -505,7 +546,7 @@ function ReportsPage() {
         }
         const totalValueStyle = {
           ...totalStyle,
-          font: { bold: true, sz: 14, color: { rgb: '047857' } },
+          font: { bold: true, sz: 13, color: { rgb: '0F172A' } },
           numFmt: '₱#,##0.00',
         }
 
@@ -528,6 +569,149 @@ function ReportsPage() {
         setCell(row, 10, '', totalStyle)
 
         row++
+      }
+
+
+
+      // ── Spare / Reserve Assets Section (Head Office Only) ──
+      if (isHeadOfficeSelected && replenishmentsList && replenishmentsList.length > 0) {
+        row += 2 // spacing
+
+        // Section Title: "Spare / Reserve Assets"
+        // Style matching the blue component: bg-gradient-to-r from-indigo-600 to-blue-600
+        // Excel doesn't support gradients easily, so we use a solid indigo color matching the others
+        const spareTitleStyle = {
+          fill: { fgColor: { rgb: '4F46E5' } }, // indigo-600
+          font: { bold: true, sz: 14, color: { rgb: 'FFFFFF' } },
+          alignment: { horizontal: 'left', vertical: 'center' },
+          border: groupBorder
+        }
+        
+        setCell(row, 0, 'Spare / Reserve Assets', spareTitleStyle)
+        // Merge across all columns for the title
+        for (let c = 1; c < COL_COUNT; c++) {
+          setCell(row, c, '', spareTitleStyle)
+        }
+        merges.push({ s: { r: row, c: 0 }, e: { r: row, c: COL_COUNT - 1 } })
+        row++
+
+        // Subtitle: "Head Office Inventory"
+        setMergedRow(row, 'Head Office Inventory', {
+          font: { sz: 10, italic: true, color: { rgb: '4338CA' } }, // indigo-700
+          alignment: { horizontal: 'left', vertical: 'center' },
+        })
+        row++
+        
+        // Spare Assets Table Header
+        // Using indigo/blue header similar to main table
+        const spareHeaders = [
+          'Asset Name', 'Serial No.', 'Category', 'Brand / Model',
+          'Vendor', 'Date Acquired', 'Acq Cost', 'Book Value', 'Remarks', 'Status', ''
+        ]
+        
+        // Note: Spare table has slightly different columns on screen, mapping to Excel 11 cols structure:
+        // Screen: Name, Serial, Category, Brand/Model, Vendor, Date, Acq, Book, Remarks, Status
+        // We'll align them to the COL_COUNT=11 grid. 
+        // 0: Name, 1: Serial, 2: Category, 3: Brand/Model, 4: Vendor, 5: Date, 6: Acq, 7: Book, 8: Remarks, 9: Status, 10: (empty/spacer)
+        
+        // Let's reuse the header styles
+        const spareHeaderAligns = [
+          'left', 'left', 'left', 'left', 'left',
+          'left', 'right', 'right', 'left', 'left', 'left'
+        ]
+
+        spareHeaders.forEach((h, c) => {
+          if (c < COL_COUNT) {
+            setCell(row, c, h, {
+              fill: headerFill,
+              font: headerFont,
+              border: headerBorder,
+              alignment: { horizontal: spareHeaderAligns[c], vertical: 'center', wrapText: true },
+            })
+          }
+        })
+        row++
+
+        // Spare Assets Data Rows
+        replenishmentsList.forEach((item) => {
+          const rowStyle = {
+             top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+             bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+             left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+             right: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          }
+
+          // 0: Asset Name
+          setCell(row, 0, item.asset_name || '—', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 1: Serial
+          setCell(row, 1, item.serial_number || '—', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 2: Category
+          setCell(row, 2, item.category?.name || '—', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 3: Brand / Model
+          const brandModel = [item.brand, item.model].filter(Boolean).join(' ') || '—'
+          setCell(row, 3, brandModel, { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 4: Vendor
+          setCell(row, 4, item.vendor?.company_name || '—', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 5: Date Acquired
+          setCell(row, 5, item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '—', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 6: Acq Cost
+          setCell(row, 6, Number(item.acq_cost || 0), { 
+            font: { sz: 10, bold: true }, 
+            border: rowStyle, 
+            alignment: { horizontal: 'right', vertical: 'center' },
+            numFmt: currencyFmt 
+          })
+          // 7: Book Value
+          setCell(row, 7, Number(item.book_value || 0), { 
+            font: { sz: 10 }, 
+            border: rowStyle, 
+            alignment: { horizontal: 'right', vertical: 'center' },
+            numFmt: currencyFmt 
+          })
+           // 8: Remarks
+          setCell(row, 8, item.remarks || '—', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center', wrapText: true } })
+          // 9: Status
+          setCell(row, 9, item.status?.name || 'N/A', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 10: Empty
+          setCell(row, 10, '', { border: rowStyle })
+
+          row++
+        })
+
+        // Spare Assets Footer (Summary)
+        if (replenishmentSummary) {
+          const footerStyleBase = {
+             fill: { fgColor: { rgb: 'F8FAFC' } }, // slate-50
+             font: { bold: true, sz: 10, color: { rgb: '334155' } },
+             border: { top: { style: 'medium', color: { rgb: '94A3B8' } } },
+             alignment: { horizontal: 'right', vertical: 'center' }
+          }
+          const footerValueStyle = {
+             ...footerStyleBase,
+             color: { rgb: '047857' }, // emerald-700
+             numFmt: '₱#,##0.00'
+          }
+
+          // Label: Spare Assets Grand Total (...)
+          const label = `Spare Assets Grand Total (${replenishmentSummary.total_count} items)`
+          setCell(row, 0, label, footerStyleBase)
+          for(let c=1; c<=5; c++) setCell(row, c, '', footerStyleBase)
+          merges.push({ s: { r: row, c: 0 }, e: { r: row, c: 5 } })
+
+          // Acq Cost Total
+          setCell(row, 6, Number(replenishmentSummary.total_acquisition_cost || 0), footerValueStyle)
+
+          // Book Value Total - Empty if zero check
+          // Book Value Total - Removed as requested
+          setCell(row, 7, '', footerValueStyle)
+
+          // Empty for rest
+          setCell(row, 8, '', footerStyleBase)
+          setCell(row, 9, '', footerStyleBase)
+          setCell(row, 10, '', footerStyleBase)
+
+          row++
+        }
       }
 
       // ── Signatories Section ──
@@ -570,7 +754,7 @@ function ReportsPage() {
       row++
 
       // Positions row
-      setCell(row, 0, resolvedUser?.position?.title || 'System Administrator', sigPosStyle)
+      setCell(row, 0, resolvedUser?.position?.title || '', sigPosStyle)
       merges.push({ s: { r: row, c: 0 }, e: { r: row, c: 2 } })
       setCell(row, 4, checkedByEmployee?.position?.title || 'Position', sigPosStyle)
       merges.push({ s: { r: row, c: 4 }, e: { r: row, c: 6 } })
@@ -714,8 +898,8 @@ function ReportsPage() {
       // Grand Total Row (only Acq Cost)
       if (summary) {
           tableRows.push([
-              { content: 'Grand Total', colSpan: 6, styles: { fontStyle: 'bold', halign: 'right', fontSize: 10, fillColor: [241, 245, 249], textColor: [15, 23, 42] } },
-              { content: '₱' + (summary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [241, 245, 249], textColor: [4, 120, 87] } },
+              { content: 'Grand Total', colSpan: 6, styles: { fontStyle: 'bold', halign: 'right', fontSize: 11, fillColor: [241, 245, 249], textColor: [15, 23, 42] } },
+              { content: 'P ' + (summary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [241, 245, 249], textColor: [4, 120, 87] } },
               { content: '', styles: { fillColor: [241, 245, 249] } },
               { content: '', styles: { fillColor: [241, 245, 249] } },
               { content: '', styles: { fillColor: [241, 245, 249] } },
@@ -773,7 +957,7 @@ function ReportsPage() {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
       doc.setTextColor(71, 85, 105)
-      doc.text(resolvedUser?.position?.title || 'System Administrator', 14, sigY + 18)
+      doc.text(resolvedUser?.position?.title || '', 14, sigY + 18)
 
       // Checked By
       doc.setFontSize(10)
@@ -1021,12 +1205,12 @@ function ReportsPage() {
       )}
 
       {/* Results Section */}
-      {isFetching ? (
+      {isFetching || isLoadingReplenishments ? (
          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-12 text-center">
           <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-slate-600">Generating report...</p>
         </div>
-      ) : activeFilters && groupedByEmployee.length > 0 ? (
+      ) : activeFilters && (groupedByEmployee.length > 0 || replenishmentsList.length > 0) ? (
           <div className="space-y-6">
                {/* Export Actions */}
               <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 no-print">
@@ -1068,7 +1252,8 @@ function ReportsPage() {
                 </div>
               </div>
 
-              {/* Table Table */}
+              {/* Deployed Assets Table - Only show if there are deployed assets */}
+              {groupedByEmployee.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-300">
@@ -1134,8 +1319,106 @@ function ReportsPage() {
                     </table>
                 </div>
               </div>
+              )}
 
-               {/* Add Signatories to On-Screen/Print View */}
+               {/* Spare/Reserve Assets Section - Only shown when Head Office is selected */}
+              {isHeadOfficeSelected && (
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mt-6">
+                  {/* Spare Assets Header */}
+                  <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4 no-print">
+                    <div className="flex items-center gap-3">
+                      <Package2 className="w-6 h-6 text-white" />
+                      <div>
+                        <h2 className="text-lg font-bold text-white">Spare / Reserve Assets</h2>
+                        <p className="text-indigo-100 text-sm">Head Office inventory of spare and reserve IT assets</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Print Header for Spare Assets */}
+                  <div className="hidden print:block px-6 py-4 border-b border-slate-200">
+                    <h2 className="text-lg font-bold text-slate-900">Spare / Reserve Assets</h2>
+                    <p className="text-sm text-slate-600">Head Office Inventory</p>
+                  </div>
+
+                  {isLoadingReplenishments ? (
+                    <div className="p-8 text-center">
+                      <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-2" />
+                      <p className="text-slate-600">Loading spare assets...</p>
+                    </div>
+                  ) : replenishmentsList.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <Package2 className="w-12 h-12 text-indigo-300 mx-auto mb-2" />
+                      <p className="text-slate-600">No spare/reserve assets found in inventory.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-300">
+                        <thead className="bg-gradient-to-r from-indigo-600 to-blue-600">
+                          <tr>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Asset Name</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Serial No.</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Category</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Brand / Model</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Vendor</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Date Acquired</th>
+                            <th className="px-3 py-3 text-right text-xs font-bold text-white uppercase border-r border-indigo-500">Acq Cost</th>
+                            <th className="px-3 py-3 text-right text-xs font-bold text-white uppercase border-r border-indigo-500">Book Value</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Remarks</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-slate-200">
+                          {replenishmentsList.map((item, index) => (
+                            <tr key={item.id || index} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 text-sm text-slate-900 border-r border-slate-200">{item.asset_name || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 font-mono border-r border-slate-200">{item.serial_number || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">{item.category?.name || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">
+                                {[item.brand, item.model].filter(Boolean).join(' ') || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">{item.vendor?.company_name || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">
+                                {item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-right text-slate-900 font-medium border-r border-slate-200">
+                                {(item.acq_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-right text-slate-900 border-r border-slate-200">
+                                {(item.book_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">{item.remarks || '—'}</td>
+                              <td className="px-3 py-2 text-sm">
+                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium border" style={statusStyle(item.status)}>
+                                  {item.status?.name || 'N/A'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {replenishmentSummary && (
+                          <tfoot className="bg-slate-50">
+                            <tr>
+                              <td colSpan={6} className="px-3 py-3 text-right text-sm font-semibold text-slate-700">
+                                Spare Assets Grand Total ({replenishmentSummary.total_count} items)
+                              </td>
+                              <td className="px-3 py-3 text-right text-sm font-bold text-emerald-700">
+                                ₱{(replenishmentSummary.total_acquisition_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-3 py-3 text-right text-sm font-bold text-emerald-700">
+                                {/* Book Value total removed */}
+                              </td>
+                              <td colSpan={2}></td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Add Signatories to On-Screen/Print View */}
               <div className="mt-12 print:mt-4 grid grid-cols-1 sm:grid-cols-3 gap-8 print:gap-4 px-8 pb-8 print:px-4 print:pb-2 print:grid">
                   {(() => {
                     const checkedByEmployee = employees?.find(e => e.id === signatories.checked_by_id)
@@ -1145,7 +1428,7 @@ function ReportsPage() {
                         <div>
                           <p className="text-sm print:text-xs font-medium text-slate-600 mb-6 print:mb-3">Prepared by:</p>
                           <p className="text-base print:text-sm font-bold text-slate-900 border-b border-slate-800 inline-block">{resolvedUser?.fullname || 'Admin User'}</p>
-                          <p className="text-sm print:text-xs text-slate-600">{resolvedUser?.position?.title || 'System Administrator'}</p>
+                          <p className="text-sm print:text-xs text-slate-600">{resolvedUser?.position?.title || ''}</p>
                         </div>
                         <div>
                           <p className="text-sm print:text-xs font-medium text-slate-600 mb-6 print:mb-3">Checked by:</p>

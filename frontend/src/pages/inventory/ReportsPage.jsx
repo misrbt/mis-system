@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import apiClient from '../../services/apiClient'
@@ -10,13 +10,14 @@ import {
   FileText,
   Calendar,
   Package,
+  Package2,
   X,
   Loader2,
   Download,
   Printer,
   FileSpreadsheet,
   FileType,
-  User 
+  User
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import * as XLSX from 'xlsx-js-style' 
@@ -98,6 +99,45 @@ function ReportsPage() {
     },
   })
 
+  const { data: employees } = useQuery({
+    queryKey: ['employees'],
+    queryFn: async () => {
+      const response = await apiClient.get('/employees')
+      return normalizeArrayResponse(response.data)
+    },
+  })
+
+  // Resolve user position from employee database
+  const [resolvedUser, setResolvedUser] = useState(user)
+
+  useEffect(() => {
+    if (user && employees) {
+      // Try to find matching employee by name (case insensitive)
+      const searchTerm = (user.name || user.fullname || '').toLowerCase()
+      
+      const matched = employees.find(e => 
+        (e.fullname || '').toLowerCase() === searchTerm
+      )
+
+      if (matched) {
+        setResolvedUser({
+          ...user,
+          fullname: matched.fullname,
+          position: matched.position || { title: '' },
+          branch: matched.branch
+        })
+      } else {
+        // Fallback with what we have
+        setResolvedUser({
+          ...user,
+          fullname: user.name || user.fullname || 'Admin User',
+          position: user.position || { title: '' }
+        })
+      }
+    }
+  }, [user, employees])
+
+
   // Main Report Data Query
   const { 
     data: reportData, 
@@ -127,6 +167,62 @@ function ReportsPage() {
 
   const groupedByEmployee = reportData?.data?.grouped_by_employee || []
   const summary = reportData?.data?.summary || null
+
+  // Check if Head Office is selected
+  const selectedBranch = useMemo(() => {
+    if (!activeFilters?.branch_id || !branches) return null
+    return branches.find(b => b.id == activeFilters.branch_id)
+  }, [activeFilters?.branch_id, branches])
+
+  const isHeadOfficeSelected = useMemo(() => {
+    if (!selectedBranch) {
+      console.log('DEBUG: No branch selected')
+      return false
+    }
+    const branchName = (selectedBranch.branch_name || '').toLowerCase().trim()
+    console.log('DEBUG: Selected branch name:', branchName)
+    // Check for various Head Office naming patterns
+    const isHO = branchName.includes('head') ||
+           branchName.includes('main office') ||
+           branchName === 'ho' ||
+           branchName === 'hq' ||
+           branchName.includes('headquarters') ||
+           branchName.includes('central')
+    console.log('DEBUG: Is Head Office:', isHO)
+    return isHO
+  }, [selectedBranch])
+
+  // Fetch replenishments when Head Office is selected
+  const {
+    data: replenishmentsData,
+    isLoading: isLoadingReplenishments
+  } = useQuery({
+    queryKey: ['replenishments-report', activeFilters, isHeadOfficeSelected],
+    queryFn: async () => {
+      const response = await apiClient.get('/replenishments')
+      return response.data
+    },
+    enabled: !!activeFilters && isHeadOfficeSelected,
+    staleTime: 0, // Always refetch when enabled
+  })
+
+  const replenishmentsList = useMemo(() => {
+    console.log('DEBUG: replenishmentsData:', replenishmentsData)
+    if (!replenishmentsData?.data) return []
+    const list = Array.isArray(replenishmentsData.data) ? replenishmentsData.data : []
+    console.log('DEBUG: replenishmentsList count:', list.length)
+    return list
+  }, [replenishmentsData])
+
+  // Calculate replenishment summary
+  const replenishmentSummary = useMemo(() => {
+    if (!replenishmentsList.length) return null
+    return {
+      total_count: replenishmentsList.length,
+      total_acquisition_cost: replenishmentsList.reduce((sum, r) => sum + (parseFloat(r.acq_cost) || 0), 0),
+      total_book_value: replenishmentsList.reduce((sum, r) => sum + (parseFloat(r.book_value) || 0), 0),
+    }
+  }, [replenishmentsList])
 
   // Handlers
   const handleSignatoryChange = (field, value) => {
@@ -203,14 +299,59 @@ function ReportsPage() {
          })
       })
 
-      // Add Grand Total Row
+      // Add Grand Total Row for Deployed Assets
       if (summary) {
           excelData.push({}) // spacing
           excelData.push({
-              'Employee': 'GRAND TOTAL',
+              'Employee': 'DEPLOYED ASSETS GRAND TOTAL',
               'Acq Cost': Number(summary.total_acquisition_cost || 0),
               'Book Value': Number(summary.total_book_value || 0)
           })
+      }
+
+      // Add Spare/Reserve Assets section if Head Office is selected
+      if (isHeadOfficeSelected && replenishmentsList.length > 0) {
+          excelData.push({}) // spacing
+          excelData.push({}) // spacing
+          excelData.push({
+              'Employee': '=== SPARE / RESERVE ASSETS (Head Office) ==='
+          })
+          excelData.push({
+              'Employee': 'Asset Name',
+              'Branch': 'Serial No.',
+              'Asset Name': 'Category',
+              'Description': 'Brand/Model',
+              'Serial No.': 'Vendor',
+              'Date Acquired': 'Date Acquired',
+              'Type': 'Acq Cost',
+              'Vendor': 'Book Value',
+              'Acq Cost': 'Remarks',
+              'Est. Life': 'Status'
+          })
+
+          replenishmentsList.forEach(item => {
+              excelData.push({
+                  'Employee': item.asset_name || '',
+                  'Branch': item.serial_number || '',
+                  'Asset Name': item.category?.name || '',
+                  'Description': [item.brand, item.model].filter(Boolean).join(' ') || '',
+                  'Serial No.': item.vendor?.company_name || '',
+                  'Date Acquired': item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '',
+                  'Type': Number(item.acq_cost || 0),
+                  'Vendor': Number(item.book_value || 0),
+                  'Acq Cost': item.remarks || '',
+                  'Est. Life': item.status?.name || ''
+              })
+          })
+
+          if (replenishmentSummary) {
+              excelData.push({}) // spacing
+              excelData.push({
+                  'Employee': `SPARE ASSETS GRAND TOTAL (${replenishmentSummary.total_count} items)`,
+                  'Type': Number(replenishmentSummary.total_acquisition_cost || 0),
+                  'Vendor': Number(replenishmentSummary.total_book_value || 0)
+              })
+          }
       }
 
       // --- Add Signatories Section to Excel ---
@@ -226,14 +367,14 @@ function ReportsPage() {
 
       // Names
       excelData.push({
-        'Employee': user?.fullname || 'Admin User',
+        'Employee': resolvedUser?.fullname || 'Admin User',
         'Type': signatories.checked_by || '__________________',
         'Book Value': signatories.noted_by || '__________________'
       })
 
       // Positions
       excelData.push({
-        'Employee': user?.position?.title || 'System Administrator',
+        'Employee': resolvedUser?.position?.title || '',
         'Type': signatories.checked_by_pos || 'Position',
         'Book Value': signatories.noted_by_pos || 'Position'
       })
@@ -324,12 +465,12 @@ function ReportsPage() {
          })
       })
       
-      // Summary Row
+      // Summary Row for Deployed Assets
       if (summary) {
           tableRows.push([
-              { content: 'GRAND TOTAL', colSpan: 5, styles: { fontStyle: 'bold', halign: 'right' } },
+              { content: 'DEPLOYED ASSETS GRAND TOTAL', colSpan: 5, styles: { fontStyle: 'bold', halign: 'right' } },
               { content: (summary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold' } },
-              '', 
+              '',
               { content: (summary.total_book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold' } },
               ''
           ])
@@ -343,6 +484,52 @@ function ReportsPage() {
         styles: { fontSize: 8 },
         headStyles: { fillColor: [63, 81, 181] }
       })
+
+      // Add Spare/Reserve Assets section if Head Office is selected
+      if (isHeadOfficeSelected && replenishmentsList.length > 0) {
+          const spareStartY = doc.lastAutoTable.finalY + 15
+
+          // Spare Assets Title
+          doc.setFontSize(14)
+          doc.setFont('helvetica', 'bold')
+          doc.text('Spare / Reserve Assets (Head Office)', 14, spareStartY)
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(10)
+
+          const spareTableRows = []
+          replenishmentsList.forEach(item => {
+              spareTableRows.push([
+                  item.asset_name || '-',
+                  item.serial_number || '-',
+                  item.category?.name || '-',
+                  [item.brand, item.model].filter(Boolean).join(' ') || '-',
+                  item.vendor?.company_name || '-',
+                  item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '-',
+                  (item.acq_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+                  (item.book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+                  item.status?.name || '-',
+              ])
+          })
+
+          // Spare Assets Summary Row
+          if (replenishmentSummary) {
+              spareTableRows.push([
+                  { content: `SPARE ASSETS GRAND TOTAL (${replenishmentSummary.total_count} items)`, colSpan: 6, styles: { fontStyle: 'bold', halign: 'right' } },
+                  { content: (replenishmentSummary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold' } },
+                  { content: (replenishmentSummary.total_book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold' } },
+                  ''
+              ])
+          }
+
+          autoTable(doc, {
+              head: [['Asset Name', 'Serial No', 'Category', 'Brand/Model', 'Vendor', 'Date Acq', 'Acq Cost', 'Book Value', 'Status']],
+              body: spareTableRows,
+              startY: spareStartY + 5,
+              theme: 'grid',
+              styles: { fontSize: 8 },
+              headStyles: { fillColor: [245, 158, 11] } // Amber color for spare assets
+          })
+      }
 
       // ---- Signatories Section ----
       const sigY = doc.lastAutoTable.finalY + 20
@@ -362,10 +549,10 @@ function ReportsPage() {
       // Prepared By
       doc.text('Prepared by:', 14, sigY)
       doc.setFont('helvetica', 'bold')
-      doc.text(user?.fullname || 'Admin User', 14, sigY + 8)
+      doc.text(resolvedUser?.fullname || 'Admin User', 14, sigY + 8)
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
-      doc.text(user?.position?.title || 'System Administrator', 14, sigY + 13)
+      doc.text(resolvedUser?.position?.title || '', 14, sigY + 13)
 
       // Checked By
       doc.setFontSize(10)
@@ -632,13 +819,28 @@ function ReportsPage() {
         </div>
       )}
 
+      {/* DEBUG BOX - Remove after testing */}
+      {activeFilters && (
+        <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-4 mb-4">
+          <h3 className="font-bold text-yellow-800 mb-2">DEBUG INFO (Remove after testing)</h3>
+          <ul className="text-sm text-yellow-700 space-y-1">
+            <li><strong>Selected Branch ID:</strong> {activeFilters.branch_id || 'None'}</li>
+            <li><strong>Selected Branch Name:</strong> {selectedBranch?.branch_name || 'Not found'}</li>
+            <li><strong>Is Head Office:</strong> {isHeadOfficeSelected ? 'YES' : 'NO'}</li>
+            <li><strong>Replenishments Loading:</strong> {isLoadingReplenishments ? 'YES' : 'NO'}</li>
+            <li><strong>Replenishments Count:</strong> {replenishmentsList.length}</li>
+            <li><strong>Deployed Assets Count:</strong> {groupedByEmployee.length} groups</li>
+          </ul>
+        </div>
+      )}
+
       {/* Results Section */}
-      {isFetching ? (
+      {isFetching || isLoadingReplenishments ? (
          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-12 text-center">
           <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-slate-600">Generating report...</p>
         </div>
-      ) : activeFilters && groupedByEmployee.length > 0 ? (
+      ) : activeFilters && (groupedByEmployee.length > 0 || replenishmentsList.length > 0) ? (
           <div className="space-y-6">
                {/* Export Actions */}
               <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 no-print">
@@ -730,7 +932,7 @@ function ReportsPage() {
                       {summary && (
                           <tfoot className="bg-slate-50">
                               <tr>
-                                  <td colSpan={6} className="px-3 py-3 text-right text-sm font-semibold text-slate-700">Grand Total</td>
+                                  <td colSpan={6} className="px-3 py-3 text-right text-sm font-semibold text-slate-700">Deployed Assets Grand Total</td>
                                   <td className="px-3 py-3 text-right text-sm font-bold text-emerald-700">₱{(summary.total_acquisition_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                   <td></td>
                                   <td className="px-3 py-3 text-right text-sm font-bold text-emerald-700">₱{(summary.total_book_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -742,12 +944,110 @@ function ReportsPage() {
                 </div>
               </div>
 
-               {/* Add Signatories to On-Screen/Print View */}
+               {/* Spare/Reserve Assets Section - Only shown when Head Office is selected */}
+              {isHeadOfficeSelected && (
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mt-6">
+                  {/* Spare Assets Header */}
+                  <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 no-print">
+                    <div className="flex items-center gap-3">
+                      <Package2 className="w-6 h-6 text-white" />
+                      <div>
+                        <h2 className="text-lg font-bold text-white">Spare / Reserve Assets</h2>
+                        <p className="text-amber-100 text-sm">Head Office inventory of spare and reserve IT assets</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Print Header for Spare Assets */}
+                  <div className="hidden print:block px-6 py-4 border-b border-slate-200">
+                    <h2 className="text-lg font-bold text-slate-900">Spare / Reserve Assets</h2>
+                    <p className="text-sm text-slate-600">Head Office Inventory</p>
+                  </div>
+
+                  {isLoadingReplenishments ? (
+                    <div className="p-8 text-center">
+                      <Loader2 className="w-8 h-8 text-amber-600 animate-spin mx-auto mb-2" />
+                      <p className="text-slate-600">Loading spare assets...</p>
+                    </div>
+                  ) : replenishmentsList.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <Package2 className="w-12 h-12 text-amber-300 mx-auto mb-2" />
+                      <p className="text-slate-600">No spare/reserve assets found in inventory.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-300">
+                        <thead className="bg-gradient-to-r from-amber-600 to-orange-600">
+                          <tr>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-amber-500">Asset Name</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-amber-500">Serial No.</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-amber-500">Category</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-amber-500">Brand / Model</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-amber-500">Vendor</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-amber-500">Date Acquired</th>
+                            <th className="px-3 py-3 text-right text-xs font-bold text-white uppercase border-r border-amber-500">Acq Cost</th>
+                            <th className="px-3 py-3 text-right text-xs font-bold text-white uppercase border-r border-amber-500">Book Value</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-amber-500">Remarks</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-slate-200">
+                          {replenishmentsList.map((item, index) => (
+                            <tr key={item.id || index} className="hover:bg-amber-50">
+                              <td className="px-3 py-2 text-sm text-slate-900 border-r border-slate-200">{item.asset_name || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 font-mono border-r border-slate-200">{item.serial_number || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">{item.category?.name || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">
+                                {[item.brand, item.model].filter(Boolean).join(' ') || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">{item.vendor?.company_name || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">
+                                {item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-right text-slate-900 font-medium border-r border-slate-200">
+                                {(item.acq_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-right text-slate-900 border-r border-slate-200">
+                                {(item.book_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-slate-600 border-r border-slate-200">{item.remarks || '—'}</td>
+                              <td className="px-3 py-2 text-sm">
+                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium border" style={statusStyle(item.status)}>
+                                  {item.status?.name || 'N/A'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {replenishmentSummary && (
+                          <tfoot className="bg-amber-50">
+                            <tr>
+                              <td colSpan={6} className="px-3 py-3 text-right text-sm font-semibold text-slate-700">
+                                Spare Assets Grand Total ({replenishmentSummary.total_count} items)
+                              </td>
+                              <td className="px-3 py-3 text-right text-sm font-bold text-amber-700">
+                                ₱{(replenishmentSummary.total_acquisition_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-3 py-3 text-right text-sm font-bold text-amber-700">
+                                ₱{(replenishmentSummary.total_book_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                              <td colSpan={2}></td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              
+              {/* Add Signatories to On-Screen/Print View */}
               <div className="mt-12 grid grid-cols-3 gap-8 px-8 pb-8 no-screen print:grid hidden">
                   <div>
                     <p className="text-sm font-medium text-slate-600 mb-6">Prepared by:</p>
-                    <p className="text-base font-bold text-slate-900">{user?.fullname || 'Admin User'}</p>
-                    <p className="text-sm text-slate-600">{user?.position?.title || 'System Administrator'}</p>
+                    <p className="text-base font-bold text-slate-900">{resolvedUser?.fullname || 'Admin User'}</p>
+                    <p className="text-sm text-slate-600">{resolvedUser?.position?.title || ''}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-600 mb-6">Checked by:</p>
