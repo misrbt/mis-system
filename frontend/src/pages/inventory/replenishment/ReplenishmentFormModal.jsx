@@ -28,7 +28,6 @@ const ReplenishmentFormModal = ({
   onComponentAdd,
   onComponentRemove,
   onComponentChange,
-  onComponentChange,
   showBookValue = false,
   isEditMode = false,
 }) => {
