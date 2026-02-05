@@ -1322,7 +1322,7 @@ function ReportsPage() {
               )}
 
                {/* Spare/Reserve Assets Section - Only shown when Head Office is selected */}
-              {isHeadOfficeSelected && (
+              {isHeadOfficeSelected && replenishmentsList.length > 0 && (
                 <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mt-6">
                   {/* Spare Assets Header */}
                   <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4 no-print">
@@ -1341,17 +1341,6 @@ function ReportsPage() {
                     <p className="text-sm text-slate-600">Head Office Inventory</p>
                   </div>
 
-                  {isLoadingReplenishments ? (
-                    <div className="p-8 text-center">
-                      <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-2" />
-                      <p className="text-slate-600">Loading spare assets...</p>
-                    </div>
-                  ) : replenishmentsList.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <Package2 className="w-12 h-12 text-indigo-300 mx-auto mb-2" />
-                      <p className="text-slate-600">No spare/reserve assets found in inventory.</p>
-                    </div>
-                  ) : (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-300">
                         <thead className="bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -1414,7 +1403,6 @@ function ReportsPage() {
                         )}
                       </table>
                     </div>
-                  )}
                 </div>
               )}
 
