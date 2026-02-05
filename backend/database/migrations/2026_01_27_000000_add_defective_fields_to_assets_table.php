@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -12,10 +13,23 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('assets', function (Blueprint $table) {
-            $table->timestamp('defective_at')->nullable()->after('status_id');
-            $table->timestamp('delete_after_at')->nullable()->after('defective_at');
-            $table->index('delete_after_at');
+            if (!Schema::hasColumn('assets', 'defective_at')) {
+                $table->timestamp('defective_at')->nullable()->after('status_id');
+            }
+            if (!Schema::hasColumn('assets', 'delete_after_at')) {
+                $table->timestamp('delete_after_at')->nullable()->after('defective_at');
+            }
         });
+
+        $indexExists = DB::selectOne(
+            "SELECT 1 FROM pg_indexes WHERE tablename = 'assets' AND indexname = 'assets_delete_after_at_index'"
+        );
+
+        if (!$indexExists) {
+            Schema::table('assets', function (Blueprint $table) {
+                $table->index('delete_after_at');
+            });
+        }
     }
 
     /**
