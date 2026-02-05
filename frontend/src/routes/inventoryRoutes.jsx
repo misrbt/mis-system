@@ -21,6 +21,7 @@ const AssetComponentsPage = lazy(() => import('../pages/inventory/AssetComponent
 
 const RepairsPage = lazy(() => import('../pages/inventory/RepairsPage'))
 const ReportsPage = lazy(() => import('../pages/inventory/ReportsPageV2'))
+const SoftwareLicenseReportPage = lazy(() => import('../pages/inventory/SoftwareLicenseReportPage'))
 const AuditLogsPage = lazy(() => import('../pages/inventory/AuditLogsPage'))
 const MonthlyExpensesPage = lazy(() => import('../pages/inventory/MonthlyExpensesPage'))
 const SoftwareLicensePage = lazy(() => import('../pages/inventory/SoftwareLicensePage'))
@@ -106,6 +107,10 @@ const inventoryRoutes = {
     {
       path: 'reports',
       element: <ReportsPage />,
+    },
+    {
+      path: 'software-license-reports',
+      element: <SoftwareLicenseReportPage />,
     },
     {
       path: 'audit-logs',

@@ -120,8 +120,11 @@ function InventoryNavBarContent({ user, onLogout, location }) {
     },
     {
       label: 'Reports',
-      type: 'link',
-      item: { name: 'Reports', icon: BarChart3, path: '/inventory/reports' },
+      type: 'dropdown',
+      items: [
+        { name: 'Asset', icon: BarChart3, path: '/inventory/reports' },
+        { name: 'Software License ', icon: Key, path: '/inventory/software-license-reports' },
+      ],
     },
     {
       label: 'Analytics & Tracking',

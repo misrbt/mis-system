@@ -84,6 +84,7 @@ const AdvancedAssetTracker = ({
   const [appliedFilters, setAppliedFilters] = useState(INITIAL_FILTERS)
   const [sorting, setSorting] = useState([])
   const [showResults, setShowResults] = useState(false)
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [expandedSections, setExpandedSections] = useState({
     location: true,
     identification: true,
@@ -359,13 +360,33 @@ const AdvancedAssetTracker = ({
             <Filter className="w-5 h-5 text-slate-600" />
             <h3 className="text-lg font-semibold text-slate-900">Filter Criteria</h3>
           </div>
-          {activeFilterCount > 0 && (
-            <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
-              {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {activeFilterCount > 0 && (
+              <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
+                {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active
+              </span>
+            )}
+            <button
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              {showFilterPanel ? (
+                <>
+                  <ChevronUp className="w-4 h-4" />
+                  Hide Filters
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4" />
+                  Show Filters
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
+        {showFilterPanel && (
+        <>
         <div className="space-y-4">
           {/* Location & Assignment */}
           <FilterSection title="Location & Assignment" icon={Building2} section="location">
@@ -638,6 +659,8 @@ const AdvancedAssetTracker = ({
             Track Assets
           </button>
         </div>
+        </>
+        )}
       </div>
 
       {/* Results Table */}

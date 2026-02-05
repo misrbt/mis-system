@@ -921,6 +921,60 @@ function ReportsPage() {
         },
       })
 
+      // ── Spare / Reserve Assets Section (Head Office Only) ──
+      if (isHeadOfficeSelected && replenishmentsList && replenishmentsList.length > 0) {
+        const spareStartY = doc.lastAutoTable.finalY + 15
+
+        // Section Title
+        doc.setFontSize(14)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(79, 70, 229) // indigo-600
+        doc.text('Spare / Reserve Assets', 14, spareStartY)
+
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'italic')
+        doc.setTextColor(67, 56, 202) // indigo-700
+        doc.text('Head Office Inventory', 14, spareStartY + 6)
+
+        // Spare Assets Table
+        const spareTableRows = replenishmentsList.map(item => [
+          item.asset_name || '—',
+          item.serial_number || '—',
+          item.category?.name || '—',
+          [item.brand, item.model].filter(Boolean).join(' ') || '—',
+          item.vendor?.company_name || '—',
+          item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '—',
+          (item.acq_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          (item.book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          item.remarks || '—',
+          item.status?.name || 'N/A',
+        ])
+
+        // Add footer row
+        if (replenishmentSummary) {
+          spareTableRows.push([
+            { content: `Spare Assets Grand Total (${replenishmentSummary.total_count} items)`, colSpan: 6, styles: { fontStyle: 'bold', halign: 'right', fontSize: 9, fillColor: [248, 250, 252], textColor: [51, 65, 85] } },
+            { content: 'P ' + (replenishmentSummary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold', fontSize: 9, fillColor: [248, 250, 252], textColor: [4, 120, 87] } },
+            { content: '', styles: { fillColor: [248, 250, 252] } },
+            { content: '', styles: { fillColor: [248, 250, 252] } },
+            { content: '', styles: { fillColor: [248, 250, 252] } },
+          ])
+        }
+
+        autoTable(doc, {
+          head: [['Asset Name', 'Serial No.', 'Category', 'Brand / Model', 'Vendor', 'Date Acquired', 'Acq Cost', 'Book Value', 'Remarks', 'Status']],
+          body: spareTableRows,
+          startY: spareStartY + 10,
+          theme: 'grid',
+          styles: { fontSize: 7, cellPadding: 2 },
+          headStyles: { fillColor: [63, 81, 181], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+          columnStyles: {
+            6: { halign: 'right' },
+            7: { halign: 'right' },
+          },
+        })
+      }
+
       // ---- Signatories Section ----
       const pageHeight = doc.internal.pageSize.height
       const colWidth = pageWidth / 3

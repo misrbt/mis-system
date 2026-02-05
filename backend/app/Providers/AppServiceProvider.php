@@ -15,6 +15,7 @@ use App\Models\Status;
 use App\Models\Vendor;
 use App\Models\SoftwareLicense;
 use App\Models\OfficeTool;
+use App\Models\Replenishment;
 use App\Observers\AssetCategoryObserver;
 use App\Observers\AssetComponentObserver;
 use App\Observers\AssetObserver;
@@ -28,6 +29,7 @@ use App\Observers\StatusObserver;
 use App\Observers\VendorObserver;
 use App\Observers\SoftwareLicenseObserver;
 use App\Observers\OfficeToolObserver;
+use App\Observers\ReplenishmentObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -49,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
         AssetComponent::observe(AssetComponentObserver::class);
         Repair::observe(RepairObserver::class);
         RepairRemark::observe(RepairRemarkObserver::class);
+        Replenishment::observe(ReplenishmentObserver::class);
 
         // Register observers for inventory master data audit logging
         AssetCategory::observe(AssetCategoryObserver::class);

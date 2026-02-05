@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use App\Services\InventoryAuditLogService;
 
 class AssetComponentController extends Controller
 {
@@ -333,6 +334,18 @@ class AssetComponentController extends Controller
         try {
             $component = AssetComponent::findOrFail($id);
             $qrCode = $component->generateAndSaveQRCode();
+
+            // Log QR code generation for component
+            InventoryAuditLogService::logCodeGeneration(
+                $component->parent_asset_id,
+                'component_qr_code',
+                $component->component_name,
+                [
+                    'component_id' => $component->id,
+                    'component_name' => $component->component_name,
+                    'serial_number' => $component->serial_number,
+                ]
+            );
 
             return response()->json([
                 'success' => true,
