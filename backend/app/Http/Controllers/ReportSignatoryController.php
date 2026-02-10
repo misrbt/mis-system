@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ReportSignatory\SaveSignatoryRequest;
 use App\Models\ReportSignatory;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class ReportSignatoryController extends Controller
 {
@@ -23,32 +23,15 @@ class ReportSignatoryController extends Controller
                 'data' => $signatory,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch signatories',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch signatories');
         }
     }
 
     /**
      * Save (create or update) the current user's report signatories.
      */
-    public function save(Request $request)
+    public function save(SaveSignatoryRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'checked_by_id' => 'nullable|exists:employee,id',
-            'noted_by_id' => 'nullable|exists:employee,id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $signatory = ReportSignatory::updateOrCreate(
                 ['user_id' => $request->user()->id],
@@ -66,11 +49,7 @@ class ReportSignatoryController extends Controller
                 'data' => $signatory,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to save signatories',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to save signatories');
         }
     }
 }

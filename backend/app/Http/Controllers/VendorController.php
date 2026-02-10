@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Vendor\StoreVendorRequest;
+use App\Http\Requests\Vendor\UpdateVendorRequest;
 use App\Models\Vendor;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class VendorController extends Controller
 {
@@ -14,44 +14,29 @@ class VendorController extends Controller
     public function index()
     {
         try {
-            $vendors = Vendor::withCount('assets')
-                ->orderBy('company_name', 'asc')
-                ->get();
+            // Cache vendors for 24 hours (86400 seconds)
+            $vendors = \Illuminate\Support\Facades\Cache::remember('vendors_all', 86400, function () {
+                return Vendor::withCount('assets')
+                    ->orderBy('company_name', 'asc')
+                    ->get();
+            });
 
             return response()->json([
                 'success' => true,
                 'data' => $vendors,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch vendors',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch vendors');
         }
     }
 
     /**
      * Store a newly created vendor.
      */
-    public function store(Request $request)
+    public function store(StoreVendorRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'company_name' => 'required|string|max:255|unique:vendors,company_name',
-            'contact_no' => 'nullable|string|max:255',
-            'address' => 'nullable|string|max:500',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
-            $vendor = Vendor::create($request->all());
+            $vendor = Vendor::create($request->validated());
 
             return response()->json([
                 'success' => true,
@@ -59,11 +44,7 @@ class VendorController extends Controller
                 'data' => $vendor,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create vendor',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create vendor');
         }
     }
 
@@ -80,36 +61,18 @@ class VendorController extends Controller
                 'data' => $vendor,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Vendor not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Vendor not found', 404);
         }
     }
 
     /**
      * Update the specified vendor.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateVendorRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'company_name' => 'required|string|max:255|unique:vendors,company_name,' . $id,
-            'contact_no' => 'nullable|string|max:255',
-            'address' => 'nullable|string|max:500',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $vendor = Vendor::findOrFail($id);
-            $vendor->update($request->all());
+            $vendor->update($request->validated());
 
             return response()->json([
                 'success' => true,
@@ -117,11 +80,7 @@ class VendorController extends Controller
                 'data' => $vendor,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update vendor',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update vendor');
         }
     }
 
@@ -147,11 +106,7 @@ class VendorController extends Controller
                 'message' => 'Vendor deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete vendor',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete vendor');
         }
     }
 }

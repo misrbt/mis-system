@@ -7,14 +7,17 @@ use App\Models\AssetComponent;
 use App\Models\Employee;
 use App\Models\Status;
 use App\Services\InventoryAuditLogService;
+use App\Traits\ValidatesSort;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
-use Carbon\Carbon;
 
 class AssetController extends Controller
 {
+    use ValidatesSort;
+
     /**
      * Display a listing of assets with advanced filtering.
      */
@@ -29,86 +32,67 @@ class AssetController extends Controller
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'assignedEmployee.department',
-                'equipment'
+                'equipment',
             ]);
 
-            // Advanced filtering
-            if ($request->has('branch_id') && $request->branch_id) {
-                $query->whereHas('assignedEmployee', function ($q) use ($request) {
-                    $q->where('branch_id', $request->branch_id);
-                });
-            }
+            // Apply all filters using centralized method
+            $this->applyAssetFilters($query, $request);
 
-            if ($request->has('category_id') && $request->category_id) {
-                $query->where('asset_category_id', $request->category_id);
-            }
+            // Sorting with SQL injection protection
+            $allowedSortFields = [
+                'id',
+                'asset_name',
+                'serial_number',
+                'purchase_date',
+                'acq_cost',
+                'book_value',
+                'status_id',
+                'vendor_id',
+                'asset_category_id',
+                'created_at',
+                'updated_at',
+            ];
 
-            if ($request->has('subcategory_id') && $request->subcategory_id) {
-                $query->where('subcategory_id', $request->subcategory_id);
-            }
+            [$sortBy, $sortOrder] = $this->validateSort(
+                $request->get('sort_by', 'created_at'),
+                $request->get('sort_order', 'desc'),
+                $allowedSortFields
+            );
 
-            if ($request->has('status_id') && $request->status_id) {
-                $query->where('status_id', $request->status_id);
-            }
-
-            if ($request->has('vendor_id') && $request->vendor_id) {
-                $query->where('vendor_id', $request->vendor_id);
-            }
-
-            // Filter by assigned employee
-            if ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id) {
-                $query->where('assigned_to_employee_id', $request->assigned_to_employee_id);
-            }
-
-            // Purchase date range filter
-            if ($request->has('purchase_date_from') && $request->purchase_date_from) {
-                $query->where('purchase_date', '>=', $request->purchase_date_from);
-            }
-
-            if ($request->has('purchase_date_to') && $request->purchase_date_to) {
-                $query->where('purchase_date', '<=', $request->purchase_date_to);
-            }
-
-            // Search filter
-            if ($request->has('search') && $request->search) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('asset_name', 'like', "%{$search}%")
-                        ->orWhere('serial_number', 'like', "%{$search}%")
-                        ->orWhereHas('equipment', function ($eq) use ($search) {
-                            $eq->where('brand', 'like', "%{$search}%")
-                                ->orWhere('model', 'like', "%{$search}%");
-                        });
-                });
-            }
-
-            // Sorting
-            $sortBy = $request->get('sort_by', 'created_at');
-            $sortOrder = $request->get('sort_order', 'desc');
             $query->orderBy($sortBy, $sortOrder);
 
-            $assets = $query->get();
+            // Pagination - limit results per page (max 100)
+            $perPage = min($request->get('per_page', 50), 100);
+            $paginated = $query->paginate($perPage);
 
             // Return a single row per employee for the main list; when filtering by a specific
             // employee, return all of their assets. If ?all=1 is provided, return everything.
             $hasEmployeeFilter = $request->has('assigned_to_employee_id') && $request->assigned_to_employee_id;
             $returnAll = $request->boolean('all', false);
-            if (!$hasEmployeeFilter && !$returnAll) {
+
+            $assets = $paginated->getCollection();
+            if (! $hasEmployeeFilter && ! $returnAll) {
                 $assets = $assets
-                    ->unique(fn($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
+                    ->unique(fn ($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
                     ->values();
+                // Update the collection in the paginator
+                $paginated->setCollection($assets);
             }
 
             return response()->json([
                 'success' => true,
-                'data' => $assets,
+                'data' => $paginated->items(),
+                'meta' => [
+                    'current_page' => $paginated->currentPage(),
+                    'total' => $paginated->total(),
+                    'per_page' => $paginated->perPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'from' => $paginated->firstItem(),
+                    'to' => $paginated->lastItem(),
+                ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch assets',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch assets');
         }
     }
 
@@ -120,57 +104,14 @@ class AssetController extends Controller
         try {
             $query = Asset::query();
 
-            if ($request->has('branch_id') && $request->branch_id) {
-                $query->whereHas('assignedEmployee', function ($q) use ($request) {
-                    $q->where('branch_id', $request->branch_id);
-                });
-            }
-
-            if ($request->has('category_id') && $request->category_id) {
-                $query->where('asset_category_id', $request->category_id);
-            }
-
-            if ($request->has('subcategory_id') && $request->subcategory_id) {
-                $query->where('subcategory_id', $request->subcategory_id);
-            }
-
-            if ($request->has('status_id') && $request->status_id) {
-                $query->where('status_id', $request->status_id);
-            }
-
-            if ($request->has('vendor_id') && $request->vendor_id) {
-                $query->where('vendor_id', $request->vendor_id);
-            }
-
-            if ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id) {
-                $query->where('assigned_to_employee_id', $request->assigned_to_employee_id);
-            }
-
-            if ($request->has('purchase_date_from') && $request->purchase_date_from) {
-                $query->where('purchase_date', '>=', $request->purchase_date_from);
-            }
-
-            if ($request->has('purchase_date_to') && $request->purchase_date_to) {
-                $query->where('purchase_date', '<=', $request->purchase_date_to);
-            }
-
-            if ($request->has('search') && $request->search) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('asset_name', 'like', "%{$search}%")
-                        ->orWhere('serial_number', 'like', "%{$search}%")
-                        ->orWhereHas('equipment', function ($eq) use ($search) {
-                            $eq->where('brand', 'like', "%{$search}%")
-                                ->orWhere('model', 'like', "%{$search}%");
-                        });
-                });
-            }
+            // Apply all filters using centralized method
+            $this->applyAssetFilters($query, $request);
 
             $totals = $query
                 ->selectRaw('assigned_to_employee_id, COALESCE(SUM(acq_cost), 0) as total_acq_cost')
                 ->groupBy('assigned_to_employee_id')
                 ->get()
-                ->map(fn($row) => [
+                ->map(fn ($row) => [
                     'employee_id' => $row->assigned_to_employee_id,
                     'total_acq_cost' => (float) $row->total_acq_cost,
                 ]);
@@ -180,11 +121,7 @@ class AssetController extends Controller
                 'data' => $totals,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch asset totals',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch asset totals');
         }
     }
 
@@ -244,7 +181,7 @@ class AssetController extends Controller
                     'nullable',
                     'exists:asset_subcategories,id',
                     function ($attribute, $value, $fail) use ($request) {
-                        if (!$value) {
+                        if (! $value) {
                             return;
                         }
                         if (preg_match('/components\\.(\\d+)\\.subcategory_id/', $attribute, $matches)) {
@@ -320,7 +257,7 @@ class AssetController extends Controller
             }
 
             $status = Status::where('name', $statusName)->first();
-            if (!$status) {
+            if (! $status) {
                 // If status doesn't exist, create it
                 $status = Status::firstOrCreate(
                     ['name' => $statusName],
@@ -342,7 +279,7 @@ class AssetController extends Controller
             $qrCodeWarning = null;
             try {
                 $qrCodeResult = $asset->generateAndSaveQRCode('full', true);
-                if (!$qrCodeResult['success']) {
+                if (! $qrCodeResult['success']) {
                     $qrCodeWarning = $qrCodeResult['error'] ?? 'Failed to generate QR code';
                     Log::warning("QR code generation failed for asset {$asset->id}", $qrCodeResult);
                 } elseif (isset($qrCodeResult['warning'])) {
@@ -350,8 +287,8 @@ class AssetController extends Controller
                 }
             } catch (\Exception $e) {
                 // Log error but don't fail asset creation
-                $qrCodeWarning = 'Failed to generate QR code: ' . $e->getMessage();
-                Log::warning("Failed to generate QR code for asset {$asset->id}: " . $e->getMessage());
+                $qrCodeWarning = 'Failed to generate QR code: '.$e->getMessage();
+                Log::warning("Failed to generate QR code for asset {$asset->id}: ".$e->getMessage());
             }
 
             // Generate barcode for the asset (non-blocking - won't fail asset creation)
@@ -359,7 +296,7 @@ class AssetController extends Controller
                 $asset->generateAndSaveBarcode();
             } catch (\Exception $e) {
                 // Log error but don't fail asset creation
-                Log::warning("Failed to generate barcode for asset {$asset->id}: " . $e->getMessage());
+                Log::warning("Failed to generate barcode for asset {$asset->id}: ".$e->getMessage());
             }
 
             // Refresh the asset to get the generated QR code and barcode
@@ -389,7 +326,7 @@ class AssetController extends Controller
                         $component->generateAndSaveQRCode();
                         $component->generateAndSaveBarcode();
                     } catch (\Exception $e) {
-                        Log::warning("Failed to generate codes for component {$component->id}: " . $e->getMessage());
+                        Log::warning("Failed to generate codes for component {$component->id}: ".$e->getMessage());
                     }
 
                     $createdComponents[] = $component;
@@ -408,7 +345,7 @@ class AssetController extends Controller
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'assignedEmployee.department',
-                'equipment'
+                'equipment',
             ]);
 
             $response = [
@@ -431,11 +368,7 @@ class AssetController extends Controller
 
             return response()->json($response, 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create asset',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create asset');
         }
     }
 
@@ -453,7 +386,7 @@ class AssetController extends Controller
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'assignedEmployee.department',
-                'equipment'
+                'equipment',
             ])->findOrFail($id);
 
             // Calculate depreciation information
@@ -465,11 +398,7 @@ class AssetController extends Controller
                 'depreciation_info' => $depreciationInfo,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Asset not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Asset not found', 404);
         }
     }
 
@@ -582,7 +511,7 @@ class AssetController extends Controller
                 $request->warranty_duration_unit,
                 $request->waranty_expiration_date
             );
-            if (!is_null($computedWarranty)) {
+            if (! is_null($computedWarranty)) {
                 $data['waranty_expiration_date'] = $computedWarranty;
             }
 
@@ -605,7 +534,7 @@ class AssetController extends Controller
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'assignedEmployee.department',
-                'equipment'
+                'equipment',
             ]);
 
             $response = [
@@ -621,11 +550,7 @@ class AssetController extends Controller
 
             return response()->json($response, 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update asset',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update asset');
         }
     }
 
@@ -643,11 +568,7 @@ class AssetController extends Controller
                 'message' => 'Asset deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete asset',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete asset');
         }
     }
 
@@ -658,32 +579,35 @@ class AssetController extends Controller
     {
         try {
             $employee = Employee::find($employeeId);
-            if (!$employee) {
+            if (! $employee) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Employee not found',
                 ], 404);
             }
 
-            $assets = Asset::where('assigned_to_employee_id', $employeeId)->get();
-            if ($assets->isEmpty()) {
+            $assetIds = Asset::where('assigned_to_employee_id', $employeeId)->pluck('id');
+            if ($assetIds->isEmpty()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No assets found for this employee',
                 ], 404);
             }
 
-            $deletedCount = 0;
-            $deletedAssets = [];
+            // Fetch all assets at once to avoid N+1 queries
+            $assets = Asset::whereIn('id', $assetIds)->get(['id', 'asset_name', 'serial_number']);
+            $deletedAssets = $assets->map(fn ($asset) => [
+                'id' => $asset->id,
+                'name' => $asset->asset_name,
+                'serial_number' => $asset->serial_number,
+            ])->toArray();
+
+            // Delete assets - this triggers AssetObserver for each asset
             foreach ($assets as $asset) {
-                $deletedAssets[] = [
-                    'id' => $asset->id,
-                    'name' => $asset->asset_name,
-                    'serial_number' => $asset->serial_number,
-                ];
-                $asset->delete(); // This triggers AssetObserver for individual asset logs
-                $deletedCount++;
+                $asset->delete();
             }
+
+            $deletedCount = $assets->count();
 
             // Log the bulk operation summary
             InventoryAuditLogService::logBulkDelete(
@@ -694,16 +618,12 @@ class AssetController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $deletedCount . ' asset(s) deleted for employee ' . $employee->fullname,
+                'message' => $deletedCount.' asset(s) deleted for employee '.$employee->fullname,
                 'deleted_count' => $deletedCount,
                 'deleted_asset_ids' => $assets->pluck('id'),
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete assets for employee',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete assets for employee');
         }
     }
 
@@ -726,7 +646,7 @@ class AssetController extends Controller
         }
 
         try {
-            $assets = Asset::whereIn('id', $request->ids)->get();
+            $assets = Asset::find($request->ids);
             $deletedAssets = [];
 
             foreach ($assets as $asset) {
@@ -747,14 +667,10 @@ class AssetController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => count($request->ids) . ' asset(s) deleted successfully',
+                'message' => count($request->ids).' asset(s) deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete assets',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete assets');
         }
     }
 
@@ -773,7 +689,7 @@ class AssetController extends Controller
             $rules['value'] = [
                 'required',
                 'integer',
-                Rule::exists((new Status())->getTable(), 'id'),
+                Rule::exists((new Status)->getTable(), 'id'),
             ];
         }
 
@@ -806,7 +722,7 @@ class AssetController extends Controller
                 'assigned_to_employee_id',
             ];
 
-            if (!in_array($request->field, $allowedFields)) {
+            if (! in_array($request->field, $allowedFields)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Field not allowed for inline editing',
@@ -836,7 +752,7 @@ class AssetController extends Controller
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'assignedEmployee.department',
-                'equipment'
+                'equipment',
             ]);
 
             $response = [
@@ -852,11 +768,7 @@ class AssetController extends Controller
 
             return response()->json($response, 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update field',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update field');
         }
     }
 
@@ -869,7 +781,7 @@ class AssetController extends Controller
             'status_id' => [
                 'required',
                 'integer',
-                Rule::exists((new Status())->getTable(), 'id'),
+                Rule::exists((new Status)->getTable(), 'id'),
             ],
         ]);
 
@@ -893,7 +805,7 @@ class AssetController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedEmployee.department'
+                'assignedEmployee.department',
             ]);
 
             return response()->json([
@@ -902,11 +814,7 @@ class AssetController extends Controller
                 'data' => $asset,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update status',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update status');
         }
     }
 
@@ -919,7 +827,7 @@ class AssetController extends Controller
             $asset = Asset::findOrFail($id);
             $result = $asset->generateAndSaveQRCode('full', true);
 
-            if (!$result['success']) {
+            if (! $result['success']) {
                 return response()->json([
                     'success' => false,
                     'message' => $result['error'] ?? 'Failed to generate QR code',
@@ -952,12 +860,11 @@ class AssetController extends Controller
             }
 
             return response()->json($response, 200);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Asset not found',
-                'error' => 'Asset with ID ' . $id . ' does not exist',
+                'error' => 'Asset with ID '.$id.' does not exist',
             ], 404);
         } catch (\Exception $e) {
             Log::error("Failed to generate QR code for asset {$id}", [
@@ -965,12 +872,7 @@ class AssetController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to generate QR code',
-                'error' => $e->getMessage(),
-                'error_code' => 'UNEXPECTED_ERROR',
-            ], 500);
+            return $this->handleException($e, 'Failed to generate QR code');
         }
     }
 
@@ -980,22 +882,27 @@ class AssetController extends Controller
     public function generateAllQRCodes()
     {
         try {
-            $assetsWithoutQR = Asset::whereNull('qr_code')->orWhere('qr_code', '')->get();
-            $generated = 0;
-            $assetIds = [];
+            $assetIds = Asset::where(function ($query) {
+                $query->whereNull('qr_code')->orWhere('qr_code', '');
+            })->pluck('id');
 
-            foreach ($assetsWithoutQR as $asset) {
+            // Fetch all assets at once to avoid N+1 queries
+            $assets = Asset::whereIn('id', $assetIds)->get();
+            $generatedIds = [];
+
+            foreach ($assets as $asset) {
                 $asset->generateAndSaveQRCode();
-                $assetIds[] = $asset->id;
-                $generated++;
+                $generatedIds[] = $asset->id;
             }
+
+            $generated = $assets->count();
 
             // Log bulk QR code generation
             if ($generated > 0) {
                 InventoryAuditLogService::logBulkCodeGeneration(
                     'qr_code',
                     $generated,
-                    $assetIds
+                    $generatedIds
                 );
             }
 
@@ -1008,11 +915,7 @@ class AssetController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to generate QR codes',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to generate QR codes');
         }
     }
 
@@ -1031,106 +934,11 @@ class AssetController extends Controller
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'assignedEmployee.department',
-                'equipment'
+                'equipment',
             ]);
 
-            // Location & Assignment filters
-            if ($request->has('branch_id') && $request->branch_id) {
-                $query->whereHas('assignedEmployee', function ($q) use ($request) {
-                    $q->where('branch_id', $request->branch_id);
-                });
-            }
-
-            if ($request->has('employee_id') && $request->employee_id) {
-                $query->where('assigned_to_employee_id', $request->employee_id);
-            }
-
-            // Assignment status filter
-            if ($request->has('assignment_status') && $request->assignment_status) {
-                if ($request->assignment_status === 'assigned') {
-                    $query->whereNotNull('assigned_to_employee_id');
-                } elseif ($request->assignment_status === 'unassigned') {
-                    $query->whereNull('assigned_to_employee_id');
-                }
-                // 'all' means no filter
-            }
-
-            // Asset Identification filters
-            if ($request->has('category_id') && $request->category_id) {
-                $query->where('asset_category_id', $request->category_id);
-            }
-
-            if ($request->has('subcategory_id') && $request->subcategory_id) {
-                $query->where('subcategory_id', $request->subcategory_id);
-            }
-
-            if ($request->has('asset_name') && $request->asset_name) {
-                $query->where('asset_name', 'like', "%{$request->asset_name}%");
-            }
-
-            if ($request->has('serial_number') && $request->serial_number) {
-                $query->where('serial_number', 'like', "%{$request->serial_number}%");
-            }
-
-            // Financial Data filters
-            if ($request->has('cost_min') && is_numeric($request->cost_min)) {
-                $query->where('acq_cost', '>=', $request->cost_min);
-            }
-
-            if ($request->has('cost_max') && is_numeric($request->cost_max)) {
-                $query->where('acq_cost', '<=', $request->cost_max);
-            }
-
-            if ($request->has('book_value_min') && is_numeric($request->book_value_min)) {
-                $query->where('book_value', '>=', $request->book_value_min);
-            }
-
-            if ($request->has('book_value_max') && is_numeric($request->book_value_max)) {
-                $query->where('book_value', '<=', $request->book_value_max);
-            }
-
-            // Status & Warranty filters
-            if ($request->has('status_id') && $request->status_id) {
-                $query->where('status_id', $request->status_id);
-            }
-
-            if ($request->has('vendor_id') && $request->vendor_id) {
-                $query->where('vendor_id', $request->vendor_id);
-            }
-
-            // Warranty status filter
-            if ($request->has('warranty_status') && $request->warranty_status) {
-                $today = Carbon::today();
-                $thirtyDaysFromNow = $today->copy()->addDays(30);
-
-                switch ($request->warranty_status) {
-                    case 'active':
-                        $query->whereNotNull('waranty_expiration_date')
-                            ->where('waranty_expiration_date', '>', $today);
-                        break;
-                    case 'expired':
-                        $query->whereNotNull('waranty_expiration_date')
-                            ->where('waranty_expiration_date', '<', $today);
-                        break;
-                    case 'expiring_soon':
-                        $query->whereNotNull('waranty_expiration_date')
-                            ->where('waranty_expiration_date', '>=', $today)
-                            ->where('waranty_expiration_date', '<=', $thirtyDaysFromNow);
-                        break;
-                    case 'none':
-                        $query->whereNull('waranty_expiration_date');
-                        break;
-                }
-            }
-
-            // Purchase Date filters
-            if ($request->has('purchase_date_from') && $request->purchase_date_from) {
-                $query->where('purchase_date', '>=', $request->purchase_date_from);
-            }
-
-            if ($request->has('purchase_date_to') && $request->purchase_date_to) {
-                $query->where('purchase_date', '<=', $request->purchase_date_to);
-            }
+            // Apply all filters using centralized method
+            $this->applyAssetFilters($query, $request);
 
             // Asset Age filters (in years)
             if ($request->has('age_min') && is_numeric($request->age_min)) {
@@ -1149,12 +957,19 @@ class AssetController extends Controller
 
             // Validate sort field to prevent SQL injection
             $allowedSortFields = [
-                'id', 'asset_name', 'serial_number', 'purchase_date',
-                'acq_cost', 'book_value', 'created_at', 'updated_at',
-                'waranty_expiration_date', 'estimate_life'
+                'id',
+                'asset_name',
+                'serial_number',
+                'purchase_date',
+                'acq_cost',
+                'book_value',
+                'created_at',
+                'updated_at',
+                'waranty_expiration_date',
+                'estimate_life',
             ];
 
-            if (!in_array($sortBy, $allowedSortFields)) {
+            if (! in_array($sortBy, $allowedSortFields)) {
                 $sortBy = 'created_at';
             }
 
@@ -1167,29 +982,21 @@ class AssetController extends Controller
             $total = $query->count();
             $assets = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
-            // Calculate summary statistics for the filtered results
+            // Calculate summary statistics using centralized filters and single aggregate query
             $summaryQuery = Asset::query();
+            $this->applyAssetFilters($summaryQuery, $request);
 
-            // Apply same filters for summary
-            if ($request->has('branch_id') && $request->branch_id) {
-                $summaryQuery->whereHas('assignedEmployee', function ($q) use ($request) {
-                    $q->where('branch_id', $request->branch_id);
-                });
-            }
-            if ($request->has('employee_id') && $request->employee_id) {
-                $summaryQuery->where('assigned_to_employee_id', $request->employee_id);
-            }
-            if ($request->has('category_id') && $request->category_id) {
-                $summaryQuery->where('asset_category_id', $request->category_id);
-            }
-            if ($request->has('status_id') && $request->status_id) {
-                $summaryQuery->where('status_id', $request->status_id);
-            }
+            // Single aggregate query instead of multiple sum() queries for better performance
+            $summaryResult = $summaryQuery->selectRaw('
+                COUNT(*) as total_count,
+                COALESCE(SUM(acq_cost), 0) as total_acq_cost,
+                COALESCE(SUM(book_value), 0) as total_book_value
+            ')->first();
 
             $summary = [
-                'total_count' => $total,
-                'total_acq_cost' => Asset::whereIn('id', $assets->pluck('id'))->sum('acq_cost'),
-                'total_book_value' => Asset::whereIn('id', $assets->pluck('id'))->sum('book_value'),
+                'total_count' => (int) $summaryResult->total_count,
+                'total_acq_cost' => (float) $summaryResult->total_acq_cost,
+                'total_book_value' => (float) $summaryResult->total_book_value,
             ];
 
             return response()->json([
@@ -1204,11 +1011,7 @@ class AssetController extends Controller
                 'summary' => $summary,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to track assets',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to track assets');
         }
     }
 
@@ -1221,7 +1024,7 @@ class AssetController extends Controller
         $value = is_null($durationValue) ? null : (float) $durationValue;
         $unit = $durationUnit ?: 'months';
 
-        if (!is_null($value) && $value > 0) {
+        if (! is_null($value) && $value > 0) {
             $baseDate = $purchaseDate ? Carbon::parse($purchaseDate) : Carbon::now();
             switch ($unit) {
                 case 'weeks':
@@ -1235,9 +1038,133 @@ class AssetController extends Controller
                     $baseDate->addMonths($value);
                     break;
             }
+
             return $baseDate->toDateString();
         }
 
         return $explicitDate ?: null;
+    }
+
+    /**
+     * Apply asset filters to a query based on request parameters.
+     * Centralized filter logic used by index(), totals(), and track() methods.
+     */
+    private function applyAssetFilters($query, Request $request): void
+    {
+        // Branch filter
+        if ($request->has('branch_id') && $request->branch_id) {
+            $query->whereHas('assignedEmployee', function ($q) use ($request) {
+                $q->where('branch_id', $request->branch_id);
+            });
+        }
+
+        // Category filters
+        if ($request->has('category_id') && $request->category_id) {
+            $query->where('asset_category_id', $request->category_id);
+        }
+
+        if ($request->has('subcategory_id') && $request->subcategory_id) {
+            $query->where('subcategory_id', $request->subcategory_id);
+        }
+
+        // Status and vendor
+        if ($request->has('status_id') && $request->status_id) {
+            $query->where('status_id', $request->status_id);
+        }
+
+        if ($request->has('vendor_id') && $request->vendor_id) {
+            $query->where('vendor_id', $request->vendor_id);
+        }
+
+        // Employee assignment
+        if ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id) {
+            $query->where('assigned_to_employee_id', $request->assigned_to_employee_id);
+        }
+
+        if ($request->has('employee_id') && $request->employee_id) {
+            $query->where('assigned_to_employee_id', $request->employee_id);
+        }
+
+        // Assignment status
+        if ($request->has('assignment_status') && $request->assignment_status) {
+            if ($request->assignment_status === 'assigned') {
+                $query->whereNotNull('assigned_to_employee_id');
+            } elseif ($request->assignment_status === 'unassigned') {
+                $query->whereNull('assigned_to_employee_id');
+            }
+        }
+
+        // Asset identification
+        if ($request->has('asset_name') && $request->asset_name) {
+            $query->where('asset_name', 'like', "%{$request->asset_name}%");
+        }
+
+        if ($request->has('serial_number') && $request->serial_number) {
+            $query->where('serial_number', 'like', "%{$request->serial_number}%");
+        }
+
+        // Purchase date range
+        if ($request->has('purchase_date_from') && $request->purchase_date_from) {
+            $query->where('purchase_date', '>=', $request->purchase_date_from);
+        }
+
+        if ($request->has('purchase_date_to') && $request->purchase_date_to) {
+            $query->where('purchase_date', '<=', $request->purchase_date_to);
+        }
+
+        // Financial filters
+        if ($request->has('cost_min') && is_numeric($request->cost_min)) {
+            $query->where('acq_cost', '>=', $request->cost_min);
+        }
+
+        if ($request->has('cost_max') && is_numeric($request->cost_max)) {
+            $query->where('acq_cost', '<=', $request->cost_max);
+        }
+
+        if ($request->has('book_value_min') && is_numeric($request->book_value_min)) {
+            $query->where('book_value', '>=', $request->book_value_min);
+        }
+
+        if ($request->has('book_value_max') && is_numeric($request->book_value_max)) {
+            $query->where('book_value', '<=', $request->book_value_max);
+        }
+
+        // Warranty status
+        if ($request->has('warranty_status') && $request->warranty_status) {
+            $today = \Carbon\Carbon::today();
+            $thirtyDaysFromNow = $today->copy()->addDays(30);
+
+            switch ($request->warranty_status) {
+                case 'active':
+                    $query->whereNotNull('waranty_expiration_date')
+                        ->where('waranty_expiration_date', '>', $today);
+                    break;
+                case 'expired':
+                    $query->whereNotNull('waranty_expiration_date')
+                        ->where('waranty_expiration_date', '<', $today);
+                    break;
+                case 'expiring_soon':
+                    $query->whereNotNull('waranty_expiration_date')
+                        ->where('waranty_expiration_date', '>=', $today)
+                        ->where('waranty_expiration_date', '<=', $thirtyDaysFromNow);
+                    break;
+                case 'none':
+                    $query->whereNull('waranty_expiration_date');
+                    break;
+            }
+        }
+
+        // Search filter
+        if ($request->has('search') && $request->search) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('asset_name', 'like', "%{$search}%")
+                    ->orWhere('serial_number', 'like', "%{$search}%")
+                    ->orWhereHas('equipment', function ($eq) use ($search) {
+                        $eq->where('brand', 'like', "%{$search}%")
+                            ->orWhere('model', 'like', "%{$search}%");
+                    });
+            });
+        }
     }
 }

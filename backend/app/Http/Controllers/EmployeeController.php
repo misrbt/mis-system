@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Employee;
+use App\Http\Requests\Employee\StoreEmployeeRequest;
+use App\Http\Requests\Employee\UpdateEmployeeRequest;
 use App\Models\AssetMovement;
+use App\Models\Employee;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class EmployeeController extends Controller
 {
@@ -26,48 +26,17 @@ class EmployeeController extends Controller
                 'data' => $employees,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch employees',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch employees');
         }
     }
 
     /**
      * Store a newly created employee.
      */
-    public function store(Request $request)
+    public function store(StoreEmployeeRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'fullname' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('employee', 'fullname')->where(function ($query) use ($request) {
-                    return $query
-                        ->where('branch_id', $request->branch_id)
-                        ->where('department_id', $request->department_id)
-                        ->where('position_id', $request->position_id);
-                }),
-            ],
-            'branch_id' => 'required|exists:branch,id',
-            'department_id' => 'nullable|exists:section,id',
-            'position_id' => 'required|exists:position,id',
-        ], [
-            'fullname.unique' => 'An employee with the same name, branch, department, and position already exists.',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
-            $employee = Employee::create($request->all());
+            $employee = Employee::create($request->validated());
             $employee->load(['branch', 'position', 'department']);
 
             return response()->json([
@@ -76,11 +45,7 @@ class EmployeeController extends Controller
                 'data' => $employee,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create employee',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create employee');
         }
     }
 
@@ -98,49 +63,18 @@ class EmployeeController extends Controller
                 'data' => $employee,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Employee not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Employee not found', 404);
         }
     }
 
     /**
      * Update the specified employee.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateEmployeeRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'fullname' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('employee', 'fullname')->where(function ($query) use ($request) {
-                    return $query
-                        ->where('branch_id', $request->branch_id)
-                        ->where('department_id', $request->department_id)
-                        ->where('position_id', $request->position_id);
-                })->ignore($id),
-            ],
-            'branch_id' => 'required|exists:branch,id',
-            'department_id' => 'nullable|exists:section,id',
-            'position_id' => 'required|exists:position,id',
-        ], [
-            'fullname.unique' => 'An employee with the same name, branch, department, and position already exists.',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $employee = Employee::findOrFail($id);
-            $employee->update($request->all());
+            $employee->update($request->validated());
             $employee->load(['branch', 'position', 'department']);
 
             return response()->json([
@@ -149,11 +83,7 @@ class EmployeeController extends Controller
                 'data' => $employee,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update employee',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update employee');
         }
     }
 
@@ -180,11 +110,7 @@ class EmployeeController extends Controller
                 'message' => 'Employee deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete employee',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete employee');
         }
     }
 
@@ -217,13 +143,13 @@ class EmployeeController extends Controller
                 'repair.vendor',
                 'performedBy',
             ])
-            ->where(function ($query) use ($id) {
-                $query->where('to_employee_id', $id)
-                      ->orWhere('from_employee_id', $id)
-                      ->orWhereHas('asset', function ($q) use ($id) {
-                          $q->where('assigned_to_employee_id', $id);
-                      });
-            });
+                ->where(function ($query) use ($id) {
+                    $query->where('to_employee_id', $id)
+                        ->orWhere('from_employee_id', $id)
+                        ->orWhereHas('asset', function ($q) use ($id) {
+                            $q->where('assigned_to_employee_id', $id);
+                        });
+                });
 
             // Apply filters
             if ($request->has('movement_type') && $request->movement_type) {
@@ -268,10 +194,10 @@ class EmployeeController extends Controller
             // Get statistics for movements involving this employee
             $statsQuery = AssetMovement::where(function ($q) use ($id) {
                 $q->where('to_employee_id', $id)
-                  ->orWhere('from_employee_id', $id)
-                  ->orWhereHas('asset', function ($query) use ($id) {
-                      $query->where('assigned_to_employee_id', $id);
-                  });
+                    ->orWhere('from_employee_id', $id)
+                    ->orWhereHas('asset', function ($query) use ($id) {
+                        $query->where('assigned_to_employee_id', $id);
+                    });
             });
 
             // Get unique asset IDs from the movements
@@ -310,11 +236,7 @@ class EmployeeController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch employee asset history',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch employee asset history');
         }
     }
 }

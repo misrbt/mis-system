@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Position\StorePositionRequest;
+use App\Http\Requests\Position\UpdatePositionRequest;
 use App\Models\Position;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class PositionController extends Controller
 {
@@ -20,48 +20,28 @@ class PositionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $positions
+                'data' => $positions,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch positions',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch positions');
         }
     }
 
     /**
      * Store a newly created position.
      */
-    public function store(Request $request)
+    public function store(StorePositionRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'title' => 'required|string|max:255|unique:position,title',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
-            $position = Position::create($request->all());
+            $position = Position::create($request->validated());
 
             return response()->json([
                 'success' => true,
                 'message' => 'Position created successfully',
-                'data' => $position
+                'data' => $position,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create position',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to create position');
         }
     }
 
@@ -75,49 +55,29 @@ class PositionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $position
+                'data' => $position,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Position not found',
-                'error' => $e->getMessage()
-            ], 404);
+            return $this->handleException($e, 'Position not found', 404);
         }
     }
 
     /**
      * Update the specified position.
      */
-    public function update(Request $request, $id)
+    public function update(UpdatePositionRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'title' => 'required|string|max:255|unique:position,title,' . $id,
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
             $position = Position::findOrFail($id);
-            $position->update($request->all());
+            $position->update($request->validated());
 
             return response()->json([
                 'success' => true,
                 'message' => 'Position updated successfully',
-                'data' => $position
+                'data' => $position,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update position',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to update position');
         }
     }
 
@@ -133,7 +93,7 @@ class PositionController extends Controller
             if ($position->employees()->count() > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot delete position with assigned employees'
+                    'message' => 'Cannot delete position with assigned employees',
                 ], 409);
             }
 
@@ -141,14 +101,10 @@ class PositionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Position deleted successfully'
+                'message' => 'Position deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete position',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to delete position');
         }
     }
 }

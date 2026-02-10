@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Branch\StoreBranchRequest;
+use App\Http\Requests\Branch\UpdateBranchRequest;
 use App\Models\Branch;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class BranchController extends Controller
 {
@@ -14,56 +14,37 @@ class BranchController extends Controller
     public function index()
     {
         try {
-            $branches = Branch::withCount('employees')
-                ->orderBy('brcode', 'asc')
-                ->get();
+            // Cache branches for 24 hours (86400 seconds)
+            $branches = \Illuminate\Support\Facades\Cache::remember('branches_all', 86400, function () {
+                return Branch::withCount('employees')
+                    ->orderBy('brcode', 'asc')
+                    ->get();
+            });
 
             return response()->json([
                 'success' => true,
-                'data' => $branches
+                'data' => $branches,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch branches',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch branches');
         }
     }
 
     /**
      * Store a newly created branch.
      */
-    public function store(Request $request)
+    public function store(StoreBranchRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'branch_name' => 'required|string|max:255|unique:branch,branch_name',
-            'brak' => 'required|string|max:255',
-            'brcode' => 'required|string|max:255|unique:branch,brcode',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
-            $branch = Branch::create($request->all());
+            $branch = Branch::create($request->validated());
 
             return response()->json([
                 'success' => true,
                 'message' => 'Branch created successfully',
-                'data' => $branch
+                'data' => $branch,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create branch',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to create branch');
         }
     }
 
@@ -77,51 +58,29 @@ class BranchController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $branch
+                'data' => $branch,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Branch not found',
-                'error' => $e->getMessage()
-            ], 404);
+            return $this->handleException($e, 'Branch not found', 404);
         }
     }
 
     /**
      * Update the specified branch.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateBranchRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'branch_name' => 'required|string|max:255|unique:branch,branch_name,' . $id,
-            'brak' => 'required|string|max:255',
-            'brcode' => 'required|string|max:255|unique:branch,brcode,' . $id,
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
             $branch = Branch::findOrFail($id);
-            $branch->update($request->all());
+            $branch->update($request->validated());
 
             return response()->json([
                 'success' => true,
                 'message' => 'Branch updated successfully',
-                'data' => $branch
+                'data' => $branch,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update branch',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to update branch');
         }
     }
 
@@ -137,7 +96,7 @@ class BranchController extends Controller
             if ($branch->employees()->count() > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot delete branch with assigned employees'
+                    'message' => 'Cannot delete branch with assigned employees',
                 ], 409);
             }
 
@@ -145,14 +104,10 @@ class BranchController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Branch deleted successfully'
+                'message' => 'Branch deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete branch',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to delete branch');
         }
     }
 }

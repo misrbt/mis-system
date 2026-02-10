@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AssetSubcategory;
+use App\Http\Requests\AssetSubcategory\StoreAssetSubcategoryRequest;
+use App\Http\Requests\AssetSubcategory\UpdateAssetSubcategoryRequest;
 use App\Models\AssetCategory;
+use App\Models\AssetSubcategory;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 class AssetSubcategoryController extends Controller
 {
@@ -28,7 +28,7 @@ class AssetSubcategoryController extends Controller
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%");
+                        ->orWhere('description', 'like', "%{$search}%");
                 });
             }
 
@@ -39,11 +39,7 @@ class AssetSubcategoryController extends Controller
                 'data' => $subcategories,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch subcategories',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch subcategories');
         }
     }
 
@@ -65,42 +61,15 @@ class AssetSubcategoryController extends Controller
                 'category' => $category,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch subcategories for category',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Failed to fetch subcategories for category', 404);
         }
     }
 
     /**
      * Store a newly created subcategory
      */
-    public function store(Request $request)
+    public function store(StoreAssetSubcategoryRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'category_id' => 'required|exists:asset_category,id',
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('asset_subcategories')->where(function ($query) use ($request) {
-                    return $query->where('category_id', $request->category_id);
-                }),
-            ],
-            'description' => 'nullable|string',
-        ], [
-            'name.unique' => 'A subcategory with this name already exists in this category.',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $subcategory = AssetSubcategory::create([
                 'category_id' => $request->category_id,
@@ -117,11 +86,7 @@ class AssetSubcategoryController extends Controller
                 'data' => $subcategory,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create subcategory',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create subcategory');
         }
     }
 
@@ -139,45 +104,18 @@ class AssetSubcategoryController extends Controller
                 'data' => $subcategory,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Subcategory not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Subcategory not found', 404);
         }
     }
 
     /**
      * Update the specified subcategory
      */
-    public function update(Request $request, $id)
+    public function update(UpdateAssetSubcategoryRequest $request, $id)
     {
-        $subcategory = AssetSubcategory::findOrFail($id);
-
-        $validator = Validator::make($request->all(), [
-            'category_id' => 'required|exists:asset_category,id',
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('asset_subcategories')->where(function ($query) use ($request) {
-                    return $query->where('category_id', $request->category_id);
-                })->ignore($id),
-            ],
-            'description' => 'nullable|string',
-        ], [
-            'name.unique' => 'A subcategory with this name already exists in this category.',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
+            $subcategory = AssetSubcategory::findOrFail($id);
+
             if ($request->category_id != $subcategory->category_id) {
                 $assetsCount = $subcategory->assets()->count();
                 if ($assetsCount > 0) {
@@ -203,11 +141,7 @@ class AssetSubcategoryController extends Controller
                 'data' => $subcategory,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update subcategory',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update subcategory');
         }
     }
 
@@ -235,11 +169,7 @@ class AssetSubcategoryController extends Controller
                 'message' => 'Subcategory deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete subcategory',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete subcategory');
         }
     }
 }

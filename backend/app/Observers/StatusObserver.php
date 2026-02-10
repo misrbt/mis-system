@@ -24,7 +24,7 @@ class StatusObserver
         $initialData = [];
 
         foreach (self::TRACKABLE_FIELDS as $field) {
-            if (!is_null($status->$field)) {
+            if (! is_null($status->$field)) {
                 $initialData[$field] = $status->$field;
             }
         }
@@ -41,6 +41,9 @@ class StatusObserver
                 'created_fields' => array_keys($initialData),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('statuses_all');
     }
 
     /**
@@ -70,6 +73,9 @@ class StatusObserver
                 'updated_fields' => array_keys($changes),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('statuses_all');
     }
 
     /**
@@ -80,7 +86,7 @@ class StatusObserver
         $deletedData = [];
 
         foreach (self::TRACKABLE_FIELDS as $field) {
-            if (!is_null($status->$field)) {
+            if (! is_null($status->$field)) {
                 $deletedData[$field] = $status->$field;
             }
         }
@@ -97,6 +103,9 @@ class StatusObserver
                 'deleted_fields' => array_keys($deletedData),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('statuses_all');
     }
 
     /**

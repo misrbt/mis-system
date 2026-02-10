@@ -24,7 +24,7 @@ class BranchObserver
         $initialData = [];
 
         foreach (self::TRACKABLE_FIELDS as $field) {
-            if (!is_null($branch->$field)) {
+            if (! is_null($branch->$field)) {
                 $initialData[$field] = $branch->$field;
             }
         }
@@ -42,6 +42,9 @@ class BranchObserver
                 'created_fields' => array_keys($initialData),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('branches_all');
     }
 
     /**
@@ -72,6 +75,9 @@ class BranchObserver
                 'updated_fields' => array_keys($changes),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('branches_all');
     }
 
     /**
@@ -82,7 +88,7 @@ class BranchObserver
         $deletedData = [];
 
         foreach (self::TRACKABLE_FIELDS as $field) {
-            if (!is_null($branch->$field)) {
+            if (! is_null($branch->$field)) {
                 $deletedData[$field] = $branch->$field;
             }
         }
@@ -100,6 +106,9 @@ class BranchObserver
                 'deleted_fields' => array_keys($deletedData),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('branches_all');
     }
 
     /**

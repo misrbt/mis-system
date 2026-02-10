@@ -1,0 +1,12 @@
+{
+    "agents": [
+        "claude_code"
+    ],
+    "editors": [
+        "vscode"
+    ],
+    "guidelines": [
+        "backend/CLAUDE.md"
+    ],
+    "laravel_path": "./backend"
+}

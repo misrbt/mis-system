@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AssetCategory\StoreAssetCategoryRequest;
+use App\Http\Requests\AssetCategory\UpdateAssetCategoryRequest;
 use App\Models\AssetCategory;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class AssetCategoryController extends Controller
 {
@@ -21,31 +21,15 @@ class AssetCategoryController extends Controller
                 'data' => $categories,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch asset categories',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch asset categories');
         }
     }
 
     /**
      * Store a newly created asset category.
      */
-    public function store(Request $request)
+    public function store(StoreAssetCategoryRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:asset_category,name',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $code = $this->generateCode($request->name);
             $category = AssetCategory::create([
@@ -59,11 +43,7 @@ class AssetCategoryController extends Controller
                 'data' => $category,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create asset category',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create asset category');
         }
     }
 
@@ -80,31 +60,15 @@ class AssetCategoryController extends Controller
                 'data' => $category,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Asset category not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Asset category not found', 404);
         }
     }
 
     /**
      * Update the specified asset category.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateAssetCategoryRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:asset_category,name,' . $id,
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $category = AssetCategory::findOrFail($id);
             // Preserve existing code; if missing, generate a new one based on the current name.
@@ -119,11 +83,7 @@ class AssetCategoryController extends Controller
                 'data' => $category,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update asset category',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update asset category');
         }
     }
 
@@ -150,11 +110,7 @@ class AssetCategoryController extends Controller
                 'message' => 'Asset category deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete asset category',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete asset category');
         }
     }
 
@@ -176,7 +132,7 @@ class AssetCategoryController extends Controller
         $prefix = strtoupper($initials !== '' ? $initials : 'CAT');
         $prefix = mb_substr($prefix, 0, 4);
 
-        $query = AssetCategory::where('code', 'like', $prefix . '-%');
+        $query = AssetCategory::where('code', 'like', $prefix.'-%');
         if ($ignoreId) {
             $query->where('id', '!=', $ignoreId);
         }

@@ -2,19 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AssetMovement\BulkTransferAssetsRequest;
+use App\Http\Requests\AssetMovement\ReturnAssetRequest;
+use App\Http\Requests\AssetMovement\TransferAssetRequest;
+use App\Http\Requests\AssetMovement\UpdateAssetStatusRequest;
 use App\Models\Asset;
 use App\Models\AssetMovement;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 
 class AssetMovementController extends Controller
 {
     /**
      * Get movement history for a specific asset
      *
-     * @param int $assetId
+     * @param  int  $assetId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getAssetHistory($assetId)
@@ -32,34 +34,30 @@ class AssetMovementController extends Controller
                 'repair.vendor',
                 'performedBy',
             ])
-            ->where('asset_id', $assetId)
-            ->orderBy('movement_date', 'desc')
-            ->get()
-            ->map(function ($movement) {
-                return array_merge($movement->toArray(), [
-                    'description' => $movement->getMovementDescription(),
-                    'icon' => $movement->getIconClass(),
-                    'color' => $movement->getColorClass(),
-                ]);
-            });
+                ->where('asset_id', $assetId)
+                ->orderBy('movement_date', 'desc')
+                ->get()
+                ->map(function ($movement) {
+                    return array_merge($movement->toArray(), [
+                        'description' => $movement->getMovementDescription(),
+                        'icon' => $movement->getIconClass(),
+                        'color' => $movement->getColorClass(),
+                    ]);
+                });
 
             return response()->json([
                 'success' => true,
                 'data' => $movements,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch movement history',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch movement history');
         }
     }
 
     /**
      * Get assignment history for a specific asset
      *
-     * @param int $assetId
+     * @param  int  $assetId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getAssignmentHistory($assetId)
@@ -72,28 +70,24 @@ class AssetMovementController extends Controller
                 'toEmployee.position',
                 'performedBy',
             ])
-            ->where('asset_id', $assetId)
-            ->whereIn('movement_type', ['assigned', 'transferred', 'returned'])
-            ->orderBy('movement_date', 'desc')
-            ->get();
+                ->where('asset_id', $assetId)
+                ->whereIn('movement_type', ['assigned', 'transferred', 'returned'])
+                ->orderBy('movement_date', 'desc')
+                ->get();
 
             return response()->json([
                 'success' => true,
                 'data' => $assignments,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch assignment history',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch assignment history');
         }
     }
 
     /**
      * Get statistics for an asset's movements
      *
-     * @param int $assetId
+     * @param  int  $assetId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getAssetStatistics($assetId)
@@ -118,37 +112,19 @@ class AssetMovementController extends Controller
                 'data' => $stats,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch statistics',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch statistics');
         }
     }
 
     /**
      * Manual transfer with reason (overrides observer)
      *
-     * @param Request $request
-     * @param int $assetId
+     * @param  Request  $request
+     * @param  int  $assetId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function transferAsset(Request $request, $assetId)
+    public function transferAsset(TransferAssetRequest $request, $assetId)
     {
-        $validator = Validator::make($request->all(), [
-            'to_employee_id' => 'required|exists:employee,id',
-            'reason' => 'required|string|min:10',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             DB::beginTransaction();
 
@@ -189,42 +165,25 @@ class AssetMovementController extends Controller
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to transfer asset',
-                'error' => $e->getMessage(),
-            ], 500);
+
+            return $this->handleException($e, 'Failed to transfer asset');
         }
     }
 
     /**
      * Return asset from employee with reason
      *
-     * @param Request $request
-     * @param int $assetId
+     * @param  int  $assetId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function returnAsset(Request $request, $assetId)
+    public function returnAsset(ReturnAssetRequest $request, $assetId)
     {
-        $validator = Validator::make($request->all(), [
-            'reason' => 'required|string|min:10',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             DB::beginTransaction();
 
             $asset = Asset::findOrFail($assetId);
 
-            if (!$asset->assigned_to_employee_id) {
+            if (! $asset->assigned_to_employee_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Asset is not currently assigned',
@@ -258,37 +217,19 @@ class AssetMovementController extends Controller
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to return asset',
-                'error' => $e->getMessage(),
-            ], 500);
+
+            return $this->handleException($e, 'Failed to return asset');
         }
     }
 
     /**
      * Update status with reason
      *
-     * @param Request $request
-     * @param int $assetId
+     * @param  int  $assetId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function updateStatus(Request $request, $assetId)
+    public function updateStatus(UpdateAssetStatusRequest $request, $assetId)
     {
-        $validator = Validator::make($request->all(), [
-            'status_id' => 'required|exists:status,id',
-            'reason' => 'required|string|min:10',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             DB::beginTransaction();
 
@@ -319,38 +260,18 @@ class AssetMovementController extends Controller
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update status',
-                'error' => $e->getMessage(),
-            ], 500);
+
+            return $this->handleException($e, 'Failed to update status');
         }
     }
 
     /**
      * Bulk transfer multiple assets to one employee
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function bulkTransfer(Request $request)
+    public function bulkTransfer(BulkTransferAssetsRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'asset_ids' => 'required|array|min:1',
-            'asset_ids.*' => 'required|exists:assets,id',
-            'to_employee_id' => 'required|exists:employee,id',
-            'reason' => 'required|string|min:10',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             DB::beginTransaction();
 
@@ -401,9 +322,9 @@ class AssetMovementController extends Controller
 
             DB::commit();
 
-            $responseMessage = count($transferredAssets) . ' asset(s) transferred successfully';
+            $responseMessage = count($transferredAssets).' asset(s) transferred successfully';
             if (count($failedAssets) > 0) {
-                $responseMessage .= ', ' . count($failedAssets) . ' failed';
+                $responseMessage .= ', '.count($failedAssets).' failed';
             }
 
             return response()->json([
@@ -418,11 +339,8 @@ class AssetMovementController extends Controller
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to transfer assets',
-                'error' => $e->getMessage(),
-            ], 500);
+
+            return $this->handleException($e, 'Failed to transfer assets');
         }
     }
 }

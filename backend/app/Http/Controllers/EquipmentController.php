@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Equipment\StoreEquipmentRequest;
+use App\Http\Requests\Equipment\UpdateEquipmentRequest;
 use App\Models\Equipment;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class EquipmentController extends Controller
 {
@@ -32,11 +33,7 @@ class EquipmentController extends Controller
                 'data' => $equipment,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch equipment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch equipment');
         }
     }
 
@@ -53,35 +50,15 @@ class EquipmentController extends Controller
                 'data' => $equipment,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Equipment not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Equipment not found', 404);
         }
     }
 
     /**
      * Create new equipment
      */
-    public function store(Request $request)
+    public function store(StoreEquipmentRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'brand' => 'required|string|max:255',
-            'model' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'asset_category_id' => 'nullable|exists:asset_category,id',
-            'subcategory_id' => 'nullable|exists:asset_subcategories,id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $equipment = Equipment::create([
                 'brand' => $request->brand,
@@ -97,35 +74,15 @@ class EquipmentController extends Controller
                 'data' => $equipment,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create equipment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create equipment');
         }
     }
 
     /**
      * Update equipment
      */
-    public function update(Request $request, $id)
+    public function update(UpdateEquipmentRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'brand' => 'required|string|max:255',
-            'model' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'asset_category_id' => 'nullable|exists:asset_category,id',
-            'subcategory_id' => 'nullable|exists:asset_subcategories,id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $equipment = Equipment::findOrFail($id);
 
@@ -143,11 +100,7 @@ class EquipmentController extends Controller
                 'data' => $equipment,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update equipment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update equipment');
         }
     }
 
@@ -163,7 +116,7 @@ class EquipmentController extends Controller
             $assets = \App\Models\Asset::with([
                 'assigned_employee.branch',
                 'assigned_employee.position',
-                'status'
+                'status',
             ])
                 ->where('equipment_id', $id)
                 ->whereNotNull('assigned_to_employee_id')
@@ -193,11 +146,7 @@ class EquipmentController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch equipment assignments',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch equipment assignments');
         }
     }
 
@@ -224,11 +173,7 @@ class EquipmentController extends Controller
                 'message' => 'Equipment deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete equipment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete equipment');
         }
     }
 }

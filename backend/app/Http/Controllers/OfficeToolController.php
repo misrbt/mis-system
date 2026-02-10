@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\OfficeTool\StoreOfficeToolRequest;
+use App\Http\Requests\OfficeTool\UpdateOfficeToolRequest;
 use App\Models\OfficeTool;
+use App\Traits\ValidatesSort;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class OfficeToolController extends Controller
 {
+    use ValidatesSort;
+
     /**
      * Display a listing of office tools.
      */
@@ -26,47 +30,45 @@ class OfficeToolController extends Controller
                 });
             }
 
-            // Sorting
-            $sortBy = $request->get('sort_by', 'name');
-            $sortOrder = $request->get('sort_order', 'asc');
+            // Sorting with SQL injection protection
+            $allowedSortFields = ['id', 'name', 'version', 'description', 'created_at', 'updated_at'];
+
+            [$sortBy, $sortOrder] = $this->validateSort(
+                $request->get('sort_by', 'name'),
+                $request->get('sort_order', 'asc'),
+                $allowedSortFields
+            );
+
             $query->orderBy($sortBy, $sortOrder);
 
-            $officeTools = $query->get();
+            // Pagination - limit results per page (max 100)
+            $perPage = min($request->get('per_page', 50), 100);
+            $paginated = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
-                'data' => $officeTools,
+                'data' => $paginated->items(),
+                'meta' => [
+                    'current_page' => $paginated->currentPage(),
+                    'total' => $paginated->total(),
+                    'per_page' => $paginated->perPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'from' => $paginated->firstItem(),
+                    'to' => $paginated->lastItem(),
+                ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch office tools',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch office tools');
         }
     }
 
     /**
      * Store a newly created office tool.
      */
-    public function store(Request $request)
+    public function store(StoreOfficeToolRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:office_tools,name',
-            'version' => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
-            $officeTool = OfficeTool::create($request->all());
+            $officeTool = OfficeTool::create($request->validated());
 
             return response()->json([
                 'success' => true,
@@ -74,11 +76,7 @@ class OfficeToolController extends Controller
                 'data' => $officeTool,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create office tool',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create office tool');
         }
     }
 
@@ -95,36 +93,18 @@ class OfficeToolController extends Controller
                 'data' => $officeTool,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Office tool not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Office tool not found', 404);
         }
     }
 
     /**
      * Update the specified office tool.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateOfficeToolRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:office_tools,name,' . $id,
-            'version' => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $officeTool = OfficeTool::findOrFail($id);
-            $officeTool->update($request->all());
+            $officeTool->update($request->validated());
 
             return response()->json([
                 'success' => true,
@@ -132,11 +112,7 @@ class OfficeToolController extends Controller
                 'data' => $officeTool,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update office tool',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update office tool');
         }
     }
 
@@ -163,11 +139,7 @@ class OfficeToolController extends Controller
                 'message' => 'Office tool deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete office tool',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete office tool');
         }
     }
 
@@ -206,14 +178,10 @@ class OfficeToolController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => count($request->ids) . ' office tool(s) deleted successfully',
+                'message' => count($request->ids).' office tool(s) deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete office tools',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete office tools');
         }
     }
 }

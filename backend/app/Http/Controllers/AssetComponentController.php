@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AssetComponent;
 use App\Models\Asset;
+use App\Models\AssetComponent;
 use App\Models\Status;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\Rule;
 use App\Services\InventoryAuditLogService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class AssetComponentController extends Controller
 {
@@ -29,7 +29,7 @@ class AssetComponentController extends Controller
                     'vendor',
                     'assignedEmployee.branch',
                     'assignedEmployee.position',
-                    'parentAsset.category'
+                    'parentAsset.category',
                 ])
                 ->get();
 
@@ -39,11 +39,7 @@ class AssetComponentController extends Controller
                 'parent_asset' => $asset,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch components',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch components');
         }
     }
 
@@ -106,7 +102,7 @@ class AssetComponentController extends Controller
                     $component->generateAndSaveQRCode();
                     $component->generateAndSaveBarcode();
                 } catch (\Exception $e) {
-                    Log::warning("Failed to generate codes for component {$component->id}: " . $e->getMessage());
+                    Log::warning("Failed to generate codes for component {$component->id}: ".$e->getMessage());
                 }
 
                 $component->refresh();
@@ -117,7 +113,7 @@ class AssetComponentController extends Controller
                     'vendor',
                     'assignedEmployee.branch',
                     'assignedEmployee.position',
-                    'parentAsset.category'
+                    'parentAsset.category',
                 ]);
 
                 $createdComponents[] = $component;
@@ -129,11 +125,7 @@ class AssetComponentController extends Controller
                 'data' => $createdComponents,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create component',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create component');
         }
     }
 
@@ -162,11 +154,7 @@ class AssetComponentController extends Controller
                 'data' => $component,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Component not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Component not found', 404);
         }
     }
 
@@ -205,21 +193,28 @@ class AssetComponentController extends Controller
         try {
             Log::info('Component Update - Request Data', [
                 'id' => $id,
-                'data' => $request->all()
+                'data' => $request->all(),
             ]);
 
             $component = AssetComponent::findOrFail($id);
 
             Log::info('Component Update - Before', [
                 'id' => $id,
-                'current' => $component->toArray()
+                'current' => $component->toArray(),
             ]);
 
-            $component->update($request->all());
+            // Use only validated/whitelisted fields
+            $data = $request->only([
+                'category_id', 'subcategory_id', 'component_name',
+                'brand', 'model', 'serial_number', 'purchase_date',
+                'specifications', 'acq_cost', 'vendor_id', 'status_id',
+                'assigned_to_employee_id', 'remarks',
+            ]);
+            $component->update($data);
 
             Log::info('Component Update - After', [
                 'id' => $id,
-                'updated' => $component->toArray()
+                'updated' => $component->toArray(),
             ]);
 
             $component->load([
@@ -229,7 +224,7 @@ class AssetComponentController extends Controller
                 'vendor',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'parentAsset.category'
+                'parentAsset.category',
             ]);
 
             Log::info('Component Update - Success');
@@ -245,14 +240,10 @@ class AssetComponentController extends Controller
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update component',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update component');
         }
     }
 
@@ -270,11 +261,7 @@ class AssetComponentController extends Controller
                 'message' => 'Component deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete component',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete component');
         }
     }
 
@@ -309,7 +296,7 @@ class AssetComponentController extends Controller
                 'vendor',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'parentAsset.category'
+                'parentAsset.category',
             ]);
 
             return response()->json([
@@ -318,11 +305,7 @@ class AssetComponentController extends Controller
                 'data' => $component,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to transfer component',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to transfer component');
         }
     }
 
@@ -339,12 +322,7 @@ class AssetComponentController extends Controller
             InventoryAuditLogService::logCodeGeneration(
                 $component->parent_asset_id,
                 'component_qr_code',
-                $component->component_name,
-                [
-                    'component_id' => $component->id,
-                    'component_name' => $component->component_name,
-                    'serial_number' => $component->serial_number,
-                ]
+                $component->component_name
             );
 
             return response()->json([
@@ -356,11 +334,7 @@ class AssetComponentController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to generate QR code',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to generate QR code');
         }
     }
 
@@ -415,11 +389,7 @@ class AssetComponentController extends Controller
                 'total' => $components->count(),
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch components',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch components');
         }
     }
 
@@ -452,11 +422,7 @@ class AssetComponentController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch component movements',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Failed to fetch component movements', 404);
         }
     }
 }

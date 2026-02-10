@@ -4,6 +4,10 @@ export const fetchRepairs = (params) => apiClient.get('/repairs', { params })
 
 export const fetchRepairStats = () => apiClient.get('/repairs/statistics')
 
+export const fetchRepairDashboardSummary = () => apiClient.get('/repairs/dashboard-summary')
+
+export const fetchRepairReminders = (days = 4) => apiClient.get('/repairs/reminders', { params: { days } })
+
 export const fetchRepairAssets = () => apiClient.get('/assets', { params: { all: true } })
 
 export const fetchRepairStatuses = () => apiClient.get('/statuses')
@@ -37,3 +41,4 @@ export const updateRepairStatus = (id, payload) => {
   }
   return apiClient.patch(`/repairs/${id}/status`, payload)
 }
+

@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Status\StoreStatusRequest;
+use App\Http\Requests\Status\UpdateStatusRequest;
 use App\Models\Status;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class StatusController extends Controller
 {
@@ -14,41 +14,27 @@ class StatusController extends Controller
     public function index()
     {
         try {
-            $statuses = Status::orderBy('name', 'asc')->get();
+            // Cache statuses for 24 hours (86400 seconds)
+            $statuses = \Illuminate\Support\Facades\Cache::remember('statuses_all', 86400, function () {
+                return Status::orderBy('name', 'asc')->get();
+            });
 
             return response()->json([
                 'success' => true,
                 'data' => $statuses,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch statuses',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch statuses');
         }
     }
 
     /**
      * Store a newly created status.
      */
-    public function store(Request $request)
+    public function store(StoreStatusRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:status,name',
-            'color' => 'nullable|string|regex:/^#[0-9A-Fa-f]{6}$/',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
-            $status = Status::create($request->all());
+            $status = Status::create($request->validated());
 
             return response()->json([
                 'success' => true,
@@ -56,11 +42,7 @@ class StatusController extends Controller
                 'data' => $status,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create status',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create status');
         }
     }
 
@@ -77,35 +59,18 @@ class StatusController extends Controller
                 'data' => $status,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Status not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Status not found', 404);
         }
     }
 
     /**
      * Update the specified status.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateStatusRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:status,name,' . $id,
-            'color' => 'nullable|string|regex:/^#[0-9A-Fa-f]{6}$/',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $status = Status::findOrFail($id);
-            $status->update($request->all());
+            $status->update($request->validated());
 
             return response()->json([
                 'success' => true,
@@ -113,11 +78,7 @@ class StatusController extends Controller
                 'data' => $status,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update status',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update status');
         }
     }
 
@@ -135,11 +96,7 @@ class StatusController extends Controller
                 'message' => 'Status deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete status',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete status');
         }
     }
 }

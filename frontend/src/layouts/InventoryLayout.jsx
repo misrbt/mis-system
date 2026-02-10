@@ -1,12 +1,42 @@
+import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import InventoryNavBar from '../components/navbar/InventoryNavbar'
 import Footer from '../components/navigation/Footer'
+import RepairReminderModal from '../components/repairs/RepairReminderModal'
 import { useAuth } from '../context/AuthContext'
+import { useRepairReminders } from '../hooks/useRepairReminders'
 
 function InventoryLayout() {
   const { user, logout } = useAuth()
   const location = useLocation()
   const searchParams = new URLSearchParams(location.search)
+  const [showReminderModal, setShowReminderModal] = useState(false)
+
+  // Fetch repair reminders
+  const {
+    shouldShowModal,
+    overdueRepairs,
+    dueSoonRepairs,
+    overdueCount,
+    dueSoonCount,
+    dismissReminders,
+  } = useRepairReminders()
+
+  // Show reminder modal when shouldShowModal becomes true
+  useEffect(() => {
+    if (shouldShowModal) {
+      setShowReminderModal(true)
+    }
+  }, [shouldShowModal])
+
+  const handleCloseReminderModal = () => {
+    setShowReminderModal(false)
+  }
+
+  const handleDismissReminders = () => {
+    dismissReminders()
+    setShowReminderModal(false)
+  }
 
   // Pages that use centered layout (narrower, vertically centered)
   const centeredPages = ['/inventory/branch', '/inventory/section', '/inventory/position', '/inventory/employees', '/inventory/statuses', '/inventory/asset-category', '/inventory/vendors']
@@ -61,8 +91,20 @@ function InventoryLayout() {
         maxWidth={contentMaxWidth}
         horizontalPadding="px-4 sm:px-6 lg:px-8"
       />
+
+      {/* Repair Reminder Modal */}
+      <RepairReminderModal
+        isOpen={showReminderModal}
+        onClose={handleCloseReminderModal}
+        onDismiss={handleDismissReminders}
+        overdueRepairs={overdueRepairs}
+        dueSoonRepairs={dueSoonRepairs}
+        overdueCount={overdueCount}
+        dueSoonCount={dueSoonCount}
+      />
     </div>
   )
 }
 
 export default InventoryLayout
+

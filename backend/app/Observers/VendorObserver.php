@@ -24,7 +24,7 @@ class VendorObserver
         $initialData = [];
 
         foreach (self::TRACKABLE_FIELDS as $field) {
-            if (!is_null($vendor->$field)) {
+            if (! is_null($vendor->$field)) {
                 $initialData[$field] = $vendor->$field;
             }
         }
@@ -42,6 +42,9 @@ class VendorObserver
                 'created_fields' => array_keys($initialData),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('vendors_all');
     }
 
     /**
@@ -72,6 +75,9 @@ class VendorObserver
                 'updated_fields' => array_keys($changes),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('vendors_all');
     }
 
     /**
@@ -82,7 +88,7 @@ class VendorObserver
         $deletedData = [];
 
         foreach (self::TRACKABLE_FIELDS as $field) {
-            if (!is_null($vendor->$field)) {
+            if (! is_null($vendor->$field)) {
                 $deletedData[$field] = $vendor->$field;
             }
         }
@@ -100,6 +106,9 @@ class VendorObserver
                 'deleted_fields' => array_keys($deletedData),
             ]
         );
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('vendors_all');
     }
 
     /**

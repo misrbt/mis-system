@@ -3,11 +3,10 @@
 namespace App\Services;
 
 use App\Models\Asset;
-use App\Models\AssetCategory;
 use App\Models\Repair;
 use App\Models\Status;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class DashboardService
 {
@@ -320,15 +319,15 @@ class DashboardService
                 WHERE EXTRACT(YEAR FROM repair_date) = ?
                 GROUP BY EXTRACT(MONTH FROM repair_date)) as combined
             '))
-            ->select(
-                'month_num',
-                DB::raw('SUM(acquisition_cost) as acquisition_cost'),
-                DB::raw('SUM(repair_cost) as repair_cost')
-            )
-            ->setBindings([$currentYear, $currentYear])
-            ->groupBy('month_num')
-            ->get()
-            ->keyBy('month_num');
+                ->select(
+                    'month_num',
+                    DB::raw('SUM(acquisition_cost) as acquisition_cost'),
+                    DB::raw('SUM(repair_cost) as repair_cost')
+                )
+                ->setBindings([$currentYear, $currentYear])
+                ->groupBy('month_num')
+                ->get()
+                ->keyBy('month_num');
 
             // Generate all 12 months
             $result = [];
@@ -367,7 +366,7 @@ class DashboardService
                     0 as repair_cost,
                     COUNT(*) as asset_count
                 FROM assets
-                WHERE EXTRACT(YEAR FROM purchase_date) IN (' . implode(',', $years) . ')
+                WHERE EXTRACT(YEAR FROM purchase_date) IN ('.implode(',', $years).')
                 GROUP BY EXTRACT(YEAR FROM purchase_date)
 
                 UNION ALL
@@ -378,18 +377,18 @@ class DashboardService
                     SUM(repair_cost) as repair_cost,
                     0 as asset_count
                 FROM repairs
-                WHERE EXTRACT(YEAR FROM repair_date) IN (' . implode(',', $years) . ')
+                WHERE EXTRACT(YEAR FROM repair_date) IN ('.implode(',', $years).')
                 GROUP BY EXTRACT(YEAR FROM repair_date)) as combined
             '))
-            ->select(
-                'year',
-                DB::raw('SUM(acquisition_cost) as acquisition_cost'),
-                DB::raw('SUM(repair_cost) as repair_cost'),
-                DB::raw('SUM(asset_count) as asset_count')
-            )
-            ->groupBy('year')
-            ->get()
-            ->keyBy('year');
+                ->select(
+                    'year',
+                    DB::raw('SUM(acquisition_cost) as acquisition_cost'),
+                    DB::raw('SUM(repair_cost) as repair_cost'),
+                    DB::raw('SUM(asset_count) as asset_count')
+                )
+                ->groupBy('year')
+                ->get()
+                ->keyBy('year');
 
             $result = [];
             foreach ($years as $year) {
@@ -414,47 +413,45 @@ class DashboardService
      * Get comprehensive branch-level statistics
      * Includes assets, book values, acquisitions, and repair costs per branch
      *
-     * @param int $months Number of months to include in trends (default 12)
-     * @return array
+     * @param  int  $months  Number of months to include in trends (default 12)
      */
     public function getBranchStatistics(int $months = 12): array
     {
-        // Clear cache first to ensure fresh data
+        // Cache branch statistics for 5 minutes (300 seconds)
         $cacheKey = "dashboard:branch_statistics:{$months}";
-        Cache::forget($cacheKey);
 
-        try {
-            $summary = $this->getAllBranchStats();
-        } catch (\Exception $e) {
-            \Log::error('Branch stats error: ' . $e->getMessage());
-            $summary = [];
-        }
+        return Cache::remember($cacheKey, 300, function () use ($months) {
+            try {
+                $summary = $this->getAllBranchStats();
+            } catch (\Exception $e) {
+                \Log::error('Branch stats error: '.$e->getMessage());
+                $summary = [];
+            }
 
-        try {
-            $monthlyTrends = $this->getBranchMonthlyTrends($months);
-        } catch (\Exception $e) {
-            \Log::error('Branch monthly trends error: ' . $e->getMessage());
-            $monthlyTrends = [];
-        }
+            try {
+                $monthlyTrends = $this->getBranchMonthlyTrends($months);
+            } catch (\Exception $e) {
+                \Log::error('Branch monthly trends error: '.$e->getMessage());
+                $monthlyTrends = [];
+            }
 
-        try {
-            $statusBreakdown = $this->getBranchStatusBreakdown();
-        } catch (\Exception $e) {
-            \Log::error('Branch status breakdown error: ' . $e->getMessage());
-            $statusBreakdown = [];
-        }
+            try {
+                $statusBreakdown = $this->getBranchStatusBreakdown();
+            } catch (\Exception $e) {
+                \Log::error('Branch status breakdown error: '.$e->getMessage());
+                $statusBreakdown = [];
+            }
 
-        return [
-            'summary' => $summary,
-            'monthly_trends' => $monthlyTrends,
-            'status_breakdown' => $statusBreakdown,
-        ];
+            return [
+                'summary' => $summary,
+                'monthly_trends' => $monthlyTrends,
+                'status_breakdown' => $statusBreakdown,
+            ];
+        });
     }
 
     /**
      * Get current statistics for all branches
-     *
-     * @return array
      */
     private function getAllBranchStats(): array
     {
@@ -489,8 +486,7 @@ class DashboardService
     /**
      * Get monthly trends for branch acquisitions and repairs
      *
-     * @param int $months Number of months to include
-     * @return array
+     * @param  int  $months  Number of months to include
      */
     private function getBranchMonthlyTrends(int $months): array
     {
@@ -536,10 +532,8 @@ class DashboardService
     /**
      * Format branch trends into monthly time series
      *
-     * @param \Illuminate\Support\Collection $acquisitions
-     * @param \Illuminate\Support\Collection $repairs
-     * @param int $months
-     * @return array
+     * @param  \Illuminate\Support\Collection  $acquisitions
+     * @param  \Illuminate\Support\Collection  $repairs
      */
     private function formatBranchTrends($acquisitions, $repairs, int $months): array
     {
@@ -593,8 +587,6 @@ class DashboardService
      * Shows ALL branches with their asset status distribution
      * Includes branches even if they have no assets
      * Optimized for PostgreSQL
-     *
-     * @return array
      */
     private function getBranchStatusBreakdown(): array
     {
@@ -668,8 +660,20 @@ class DashboardService
     public function clearCache(): void
     {
         Cache::forget('dashboard:statistics');
-        Cache::forget('dashboard:monthly_expenses:' . now()->year);
+        Cache::forget('dashboard:monthly_expenses:'.now()->year);
         Cache::forget('dashboard:yearly_expenses');
+
+        // Clear new unified endpoint caches
+        $year = now()->year;
+        for ($month = 1; $month <= 12; $month++) {
+            Cache::forget("dashboard:initial_data:{$year}:{$month}");
+        }
+
+        // Clear activity and attention caches
+        Cache::forget('dashboard:recent_activity:10');
+        Cache::forget('dashboard:recent_activity:20');
+        Cache::forget('dashboard:assets_needing_attention:50');
+        Cache::forget('dashboard:assets_needing_attention:100');
 
         // Clear branch statistics cache for common month values
         for ($months = 1; $months <= 24; $months++) {

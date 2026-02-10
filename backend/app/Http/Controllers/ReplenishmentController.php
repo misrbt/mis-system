@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Replenishment\AssignToBranchRequest;
+use App\Http\Requests\Replenishment\AssignToEmployeeRequest;
+use App\Http\Requests\Replenishment\StoreReplenishmentRequest;
+use App\Http\Requests\Replenishment\UpdateReplenishmentRequest;
 use App\Models\Replenishment;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class ReplenishmentController extends Controller
 {
@@ -21,7 +25,7 @@ class ReplenishmentController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedBranch'
+                'assignedBranch',
             ]);
 
             // Filter by category
@@ -75,47 +79,15 @@ class ReplenishmentController extends Controller
                 'data' => $replenishments,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch replenishments',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch replenishments');
         }
     }
 
     /**
      * Create a new replenishment
      */
-    public function store(Request $request)
+    public function store(StoreReplenishmentRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'asset_name' => 'required|string|max:255',
-            'serial_number' => 'nullable|string|max:255',
-            'asset_category_id' => 'nullable|exists:asset_category,id',
-            'subcategory_id' => 'nullable|exists:asset_subcategories,id',
-            'brand' => 'nullable|string|max:255',
-            'model' => 'nullable|string|max:255',
-            'acq_cost' => 'nullable|numeric|min:0',
-            'book_value' => 'nullable|numeric|min:0',
-            'purchase_date' => 'nullable|date',
-            'warranty_expiration_date' => 'nullable|date',
-            'estimate_life' => 'nullable|integer|min:0',
-            'vendor_id' => 'nullable|exists:vendors,id',
-            'status_id' => 'nullable|exists:status,id',
-            'assigned_to_employee_id' => 'nullable|exists:employee,id',
-            'assigned_to_branch_id' => 'nullable|exists:branches,id',
-            'remarks' => 'nullable|string',
-            'specifications' => 'nullable|array',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $replenishment = Replenishment::create([
                 'asset_name' => $request->asset_name,
@@ -149,7 +121,7 @@ class ReplenishmentController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedBranch'
+                'assignedBranch',
             ]);
 
             return response()->json([
@@ -158,11 +130,7 @@ class ReplenishmentController extends Controller
                 'data' => $replenishment,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create replenishment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create replenishment');
         }
     }
 
@@ -179,7 +147,7 @@ class ReplenishmentController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedBranch'
+                'assignedBranch',
             ])->findOrFail($id);
 
             return response()->json([
@@ -187,47 +155,15 @@ class ReplenishmentController extends Controller
                 'data' => $replenishment,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Replenishment not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Replenishment not found', 404);
         }
     }
 
     /**
      * Update a replenishment
      */
-    public function update(Request $request, $id)
+    public function update(UpdateReplenishmentRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'asset_name' => 'required|string|max:255',
-            'serial_number' => 'nullable|string|max:255',
-            'asset_category_id' => 'nullable|exists:asset_category,id',
-            'subcategory_id' => 'nullable|exists:asset_subcategories,id',
-            'brand' => 'nullable|string|max:255',
-            'model' => 'nullable|string|max:255',
-            'acq_cost' => 'nullable|numeric|min:0',
-            'book_value' => 'nullable|numeric|min:0',
-            'purchase_date' => 'nullable|date',
-            'warranty_expiration_date' => 'nullable|date',
-            'estimate_life' => 'nullable|integer|min:0',
-            'vendor_id' => 'nullable|exists:vendors,id',
-            'status_id' => 'nullable|exists:status,id',
-            'assigned_to_employee_id' => 'nullable|exists:employee,id',
-            'assigned_to_branch_id' => 'nullable|exists:branches,id',
-            'remarks' => 'nullable|string',
-            'specifications' => 'nullable|array',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $replenishment = Replenishment::findOrFail($id);
 
@@ -270,7 +206,7 @@ class ReplenishmentController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedBranch'
+                'assignedBranch',
             ]);
 
             return response()->json([
@@ -279,11 +215,7 @@ class ReplenishmentController extends Controller
                 'data' => $replenishment,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update replenishment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update replenishment');
         }
     }
 
@@ -301,11 +233,7 @@ class ReplenishmentController extends Controller
                 'message' => 'Replenishment deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete replenishment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete replenishment');
         }
     }
 
@@ -313,20 +241,8 @@ class ReplenishmentController extends Controller
      * Assign replenishment to an employee
      * This moves the replenishment to the assets table and assigns it to the employee
      */
-    public function assignToEmployee(Request $request, $id)
+    public function assignToEmployee(AssignToEmployeeRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'employee_id' => 'required|exists:employee,id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $replenishment = Replenishment::findOrFail($id);
 
@@ -356,7 +272,7 @@ class ReplenishmentController extends Controller
                 $asset->generateAndSaveQRCode('simple', true);
                 $asset->generateAndSaveBarcode();
             } catch (\Exception $e) {
-                \Log::warning('Failed to generate QR/Barcode for asset ' . $asset->id . ': ' . $e->getMessage());
+                Log::warning('Failed to generate QR/Barcode for asset '.$asset->id.': '.$e->getMessage());
             }
 
             // Load relationships for the asset
@@ -374,36 +290,20 @@ class ReplenishmentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Reserve asset has been deployed and assigned to ' . $employee->fullname,
+                'message' => 'Reserve asset has been deployed and assigned to '.$employee->fullname,
                 'data' => $asset,
                 'deployed' => true,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to assign replenishment to employee',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to assign replenishment to employee');
         }
     }
 
     /**
      * Assign replenishment to a branch
      */
-    public function assignToBranch(Request $request, $id)
+    public function assignToBranch(AssignToBranchRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'branch_id' => 'required|exists:branches,id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $replenishment = Replenishment::findOrFail($id);
 
@@ -419,7 +319,7 @@ class ReplenishmentController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedBranch'
+                'assignedBranch',
             ]);
 
             return response()->json([
@@ -428,11 +328,7 @@ class ReplenishmentController extends Controller
                 'data' => $replenishment,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to assign replenishment to branch',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to assign replenishment to branch');
         }
     }
 
@@ -456,7 +352,7 @@ class ReplenishmentController extends Controller
                 'status',
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
-                'assignedBranch'
+                'assignedBranch',
             ]);
 
             return response()->json([
@@ -465,11 +361,7 @@ class ReplenishmentController extends Controller
                 'data' => $replenishment,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to remove assignment',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to remove assignment');
         }
     }
 }

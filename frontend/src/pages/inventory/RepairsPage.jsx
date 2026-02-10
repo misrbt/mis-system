@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Wrench, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Wrench, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, AlertTriangle, Clock } from 'lucide-react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -381,14 +381,14 @@ function RepairsPage() {
       </div>
 
       {statsData && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-600">Pending</p>
                 <p className="text-2xl font-bold text-yellow-600">{statsData.pending}</p>
               </div>
-              <Wrench className="w-8 h-8 text-yellow-500" />
+              <Clock className="w-8 h-8 text-yellow-500" />
             </div>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
@@ -416,6 +416,23 @@ function RepairsPage() {
                 <p className="text-2xl font-bold text-slate-600">{statsData.returned}</p>
               </div>
               <Wrench className="w-8 h-8 text-slate-500" />
+            </div>
+          </div>
+          <div className={`rounded-lg shadow-sm p-4 ${
+            statsData.overdue_count > 0 
+              ? 'bg-red-50 border-2 border-red-200' 
+              : 'bg-white border border-slate-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm ${statsData.overdue_count > 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                  Overdue
+                </p>
+                <p className={`text-2xl font-bold ${statsData.overdue_count > 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                  {statsData.overdue_count || 0}
+                </p>
+              </div>
+              <AlertTriangle className={`w-8 h-8 ${statsData.overdue_count > 0 ? 'text-red-500' : 'text-slate-400'}`} />
             </div>
           </div>
         </div>

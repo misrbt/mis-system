@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Section\StoreSectionRequest;
+use App\Http\Requests\Section\UpdateSectionRequest;
 use App\Models\Section;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class SectionController extends Controller
 {
@@ -20,48 +20,28 @@ class SectionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $sections
+                'data' => $sections,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch sections',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch sections');
         }
     }
 
     /**
      * Store a newly created section.
      */
-    public function store(Request $request)
+    public function store(StoreSectionRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:section,name',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
-            $section = Section::create($request->all());
+            $section = Section::create($request->validated());
 
             return response()->json([
                 'success' => true,
                 'message' => 'Section created successfully',
-                'data' => $section
+                'data' => $section,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create section',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to create section');
         }
     }
 
@@ -75,49 +55,29 @@ class SectionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $section
+                'data' => $section,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Section not found',
-                'error' => $e->getMessage()
-            ], 404);
+            return $this->handleException($e, 'Section not found', 404);
         }
     }
 
     /**
      * Update the specified section.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateSectionRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:section,name,' . $id,
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
             $section = Section::findOrFail($id);
-            $section->update($request->all());
+            $section->update($request->validated());
 
             return response()->json([
                 'success' => true,
                 'message' => 'Section updated successfully',
-                'data' => $section
+                'data' => $section,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update section',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to update section');
         }
     }
 
@@ -133,7 +93,7 @@ class SectionController extends Controller
             if ($section->employees()->count() > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot delete section with assigned employees'
+                    'message' => 'Cannot delete section with assigned employees',
                 ], 409);
             }
 
@@ -141,14 +101,10 @@ class SectionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Section deleted successfully'
+                'message' => 'Section deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete section',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->handleException($e, 'Failed to delete section');
         }
     }
 }

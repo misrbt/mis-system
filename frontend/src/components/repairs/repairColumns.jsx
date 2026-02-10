@@ -27,9 +27,53 @@ export const getRepairColumns = (handleStatusChange, openEditModal, handleDelete
   {
     accessorKey: 'expected_return_date',
     header: 'Expected Return',
-    cell: ({ getValue }) => {
+    cell: ({ row, getValue }) => {
       const value = getValue()
-      return <div className="text-sm text-slate-700">{value ? new Date(value).toLocaleDateString() : '—'}</div>
+      const status = row.original.status
+      
+      if (!value) return <div className="text-sm text-slate-400">—</div>
+      
+      const date = new Date(value)
+      const formattedDate = date.toLocaleDateString()
+      
+      // Don't show due status for returned repairs
+      if (status === 'Returned') {
+        return <div className="text-sm text-slate-500">{formattedDate}</div>
+      }
+      
+      // Calculate days until due
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const dueDate = new Date(value)
+      dueDate.setHours(0, 0, 0, 0)
+      const diffTime = dueDate - today
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      
+      // Determine due status
+      let badge = null
+      if (diffDays < 0) {
+        // Overdue
+        badge = (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-full">
+            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+            {Math.abs(diffDays)}d overdue
+          </span>
+        )
+      } else if (diffDays <= 4) {
+        // Due soon
+        badge = (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 rounded-full">
+            {diffDays === 0 ? 'Due today' : `${diffDays}d left`}
+          </span>
+        )
+      }
+      
+      return (
+        <div className="text-sm">
+          <div className="text-slate-700">{formattedDate}</div>
+          {badge}
+        </div>
+      )
     },
   },
   {

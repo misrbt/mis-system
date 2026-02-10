@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SoftwareLicense\StoreSoftwareLicenseRequest;
+use App\Http\Requests\SoftwareLicense\UpdateSoftwareLicenseRequest;
 use App\Models\SoftwareLicense;
+use App\Traits\ValidatesSort;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class SoftwareLicenseController extends Controller
 {
+    use ValidatesSort;
+
     /**
      * Display a listing of software licenses.
      */
@@ -20,7 +24,7 @@ class SoftwareLicenseController extends Controller
                 'section',
                 'branch',
                 'assetCategory',
-                'officeTool'
+                'officeTool',
             ]);
 
             // Filter by employee
@@ -64,54 +68,58 @@ class SoftwareLicenseController extends Controller
                 });
             }
 
-            // Sorting
-            $sortBy = $request->get('sort_by', 'created_at');
-            $sortOrder = $request->get('sort_order', 'desc');
+            // Sorting with SQL injection protection
+            $allowedSortFields = [
+                'id',
+                'employee_id',
+                'position_id',
+                'section_id',
+                'branch_id',
+                'asset_category_id',
+                'operating_system',
+                'licensed',
+                'office_tool_id',
+                'client_access',
+                'created_at',
+                'updated_at',
+            ];
+
+            [$sortBy, $sortOrder] = $this->validateSort(
+                $request->get('sort_by', 'created_at'),
+                $request->get('sort_order', 'desc'),
+                $allowedSortFields
+            );
+
             $query->orderBy($sortBy, $sortOrder);
 
-            $licenses = $query->get();
+            // Pagination - limit results per page (max 100)
+            $perPage = min($request->get('per_page', 50), 100);
+            $paginated = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
-                'data' => $licenses,
+                'data' => $paginated->items(),
+                'meta' => [
+                    'current_page' => $paginated->currentPage(),
+                    'total' => $paginated->total(),
+                    'per_page' => $paginated->perPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'from' => $paginated->firstItem(),
+                    'to' => $paginated->lastItem(),
+                ],
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch software licenses',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch software licenses');
         }
     }
 
     /**
      * Store a newly created software license.
      */
-    public function store(Request $request)
+    public function store(StoreSoftwareLicenseRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'employee_id' => 'nullable|exists:employee,id',
-            'position_id' => 'nullable|exists:position,id',
-            'section_id' => 'nullable|exists:section,id',
-            'branch_id' => 'nullable|exists:branch,id',
-            'asset_category_id' => 'nullable|exists:asset_category,id',
-            'operating_system' => 'nullable|string|max:255',
-            'licensed' => 'nullable|string|max:255',
-            'office_tool_id' => 'nullable|exists:office_tools,id',
-            'client_access' => 'nullable|string|max:255',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
-            $license = SoftwareLicense::create($request->all());
+            $license = SoftwareLicense::create($request->validated());
 
             // Load relationships
             $license->load([
@@ -120,7 +128,7 @@ class SoftwareLicenseController extends Controller
                 'section',
                 'branch',
                 'assetCategory',
-                'officeTool'
+                'officeTool',
             ]);
 
             return response()->json([
@@ -129,11 +137,7 @@ class SoftwareLicenseController extends Controller
                 'data' => $license,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create software license',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create software license');
         }
     }
 
@@ -149,7 +153,7 @@ class SoftwareLicenseController extends Controller
                 'section',
                 'branch',
                 'assetCategory',
-                'officeTool'
+                'officeTool',
             ])->findOrFail($id);
 
             return response()->json([
@@ -157,43 +161,18 @@ class SoftwareLicenseController extends Controller
                 'data' => $license,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Software license not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Software license not found', 404);
         }
     }
 
     /**
      * Update the specified software license.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateSoftwareLicenseRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'employee_id' => 'nullable|exists:employee,id',
-            'position_id' => 'nullable|exists:position,id',
-            'section_id' => 'nullable|exists:section,id',
-            'branch_id' => 'nullable|exists:branch,id',
-            'asset_category_id' => 'nullable|exists:asset_category,id',
-            'operating_system' => 'nullable|string|max:255',
-            'licensed' => 'nullable|string|max:255',
-            'office_tool_id' => 'nullable|exists:office_tools,id',
-            'client_access' => 'nullable|string|max:255',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $license = SoftwareLicense::findOrFail($id);
-            $license->update($request->all());
+            $license->update($request->validated());
 
             // Load relationships
             $license->load([
@@ -202,7 +181,7 @@ class SoftwareLicenseController extends Controller
                 'section',
                 'branch',
                 'assetCategory',
-                'officeTool'
+                'officeTool',
             ]);
 
             return response()->json([
@@ -211,11 +190,7 @@ class SoftwareLicenseController extends Controller
                 'data' => $license,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update software license',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update software license');
         }
     }
 
@@ -233,11 +208,7 @@ class SoftwareLicenseController extends Controller
                 'message' => 'Software license deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete software license',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete software license');
         }
     }
 
@@ -264,14 +235,10 @@ class SoftwareLicenseController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => count($request->ids) . ' software license(s) deleted successfully',
+                'message' => count($request->ids).' software license(s) deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete software licenses',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete software licenses');
         }
     }
 }

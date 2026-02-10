@@ -20,6 +20,7 @@ import {
 
 // UI Components
 import DashboardCard from '../../components/dashboard/DashboardCard'
+import RepairSummaryCard from '../../components/dashboard/RepairSummaryCard'
 import { SkeletonCard, SkeletonChart, SkeletonTable } from '../../components/dashboard/SkeletonLoader'
 
 // Lazy load heavy chart components for better performance
@@ -65,7 +66,28 @@ function InventoryHome() {
     isLoading,
   } = useAllDashboardData()
 
-  // Extract Data
+  // Loading State - Check BEFORE processing data
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6">
+        <div className="max-w-[1600px] mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[...Array(7)].map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SkeletonChart />
+            <SkeletonChart />
+            <SkeletonTable />
+            <SkeletonTable />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Extract Data - AFTER loading check
   const statsData = statistics.data
   const monthlyExpensesData = Array.isArray(monthlyExpenses.data)
     ? monthlyExpenses.data
@@ -129,27 +151,6 @@ function InventoryHome() {
     },
   ]
 
-  // Loading State
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="max-w-[1600px] mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[...Array(7)].map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <SkeletonChart />
-            <SkeletonChart />
-            <SkeletonTable />
-            <SkeletonTable />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-[1600px] mx-auto p-6">
@@ -171,6 +172,11 @@ function InventoryHome() {
               <DashboardCard key={index} {...card} />
             ))}
           </div>
+        </div>
+
+        {/* Repair Summary Section */}
+        <div className="mb-8">
+          <RepairSummaryCard />
         </div>
 
         {/* Financial Charts */}

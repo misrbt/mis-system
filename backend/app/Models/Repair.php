@@ -97,12 +97,87 @@ class Repair extends Model
     // Helper to get status badge color
     public function getStatusColor()
     {
-        return match($this->status) {
+        return match ($this->status) {
             'Pending' => 'yellow',
             'In Repair' => 'blue',
             'Completed' => 'green',
             'Returned' => 'gray',
             default => 'slate',
         };
+    }
+
+    /**
+     * Check if repair is due soon (within specified days)
+     */
+    public function isDueSoon($days = 4)
+    {
+        if ($this->status === 'Returned' || ! $this->expected_return_date) {
+            return false;
+        }
+
+        $daysUntilDue = $this->getDaysUntilDue();
+
+        return $daysUntilDue >= 0 && $daysUntilDue <= $days;
+    }
+
+    /**
+     * Get number of days until due (negative if overdue)
+     */
+    public function getDaysUntilDue()
+    {
+        if (! $this->expected_return_date) {
+            return null;
+        }
+
+        return now()->startOfDay()->diffInDays($this->expected_return_date, false);
+    }
+
+    /**
+     * Get due status: 'overdue', 'due_soon', 'on_track', or null
+     */
+    public function getDueStatus($dueSoonDays = 4)
+    {
+        if ($this->status === 'Returned' || ! $this->expected_return_date) {
+            return null;
+        }
+
+        $daysUntilDue = $this->getDaysUntilDue();
+
+        if ($daysUntilDue < 0) {
+            return 'overdue';
+        } elseif ($daysUntilDue <= $dueSoonDays) {
+            return 'due_soon';
+        }
+
+        return 'on_track';
+    }
+
+    /**
+     * Scope for repairs due within specified days
+     */
+    public function scopeDueSoon($query, $days = 4)
+    {
+        return $query->whereNotIn('status', ['Returned'])
+            ->whereNotNull('expected_return_date')
+            ->where('expected_return_date', '>=', now()->startOfDay())
+            ->where('expected_return_date', '<=', now()->addDays($days)->endOfDay());
+    }
+
+    /**
+     * Scope for overdue repairs (not returned, past due date)
+     */
+    public function scopeOverdue($query)
+    {
+        return $query->whereNotIn('status', ['Returned'])
+            ->whereNotNull('expected_return_date')
+            ->where('expected_return_date', '<', now()->startOfDay());
+    }
+
+    /**
+     * Scope for active repairs (not returned)
+     */
+    public function scopeActive($query)
+    {
+        return $query->whereNotIn('status', ['Returned']);
     }
 }

@@ -1,27 +1,27 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AssetCategoryController;
+use App\Http\Controllers\AssetComponentController;
+use App\Http\Controllers\AssetController;
+use App\Http\Controllers\AssetMovementController;
+use App\Http\Controllers\AssetSubcategoryController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
-use App\Http\Controllers\SectionController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\EquipmentController;
+use App\Http\Controllers\OfficeToolController;
 use App\Http\Controllers\PositionController;
+use App\Http\Controllers\RepairController;
+use App\Http\Controllers\ReplenishmentController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ReportSignatoryController;
+use App\Http\Controllers\SectionController;
+use App\Http\Controllers\SoftwareLicenseController;
 use App\Http\Controllers\StatusController;
 use App\Http\Controllers\VendorController;
-use App\Http\Controllers\EquipmentController;
-use App\Http\Controllers\AssetController;
-use App\Http\Controllers\AssetCategoryController;
-use App\Http\Controllers\AssetSubcategoryController;
-use App\Http\Controllers\AssetComponentController;
-use App\Http\Controllers\EmployeeController;
-use App\Http\Controllers\ReportController;
-use App\Http\Controllers\RepairController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\AssetMovementController;
-use App\Http\Controllers\AuditLogController;
-use App\Http\Controllers\SoftwareLicenseController;
-use App\Http\Controllers\OfficeToolController;
-use App\Http\Controllers\ReportSignatoryController;
-use App\Http\Controllers\ReplenishmentController;
+use Illuminate\Support\Facades\Route;
 
 // Health check endpoint
 Route::get('/ping', function () {
@@ -37,8 +37,55 @@ Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
 });
 
-// Protected routes (require authentication)
-Route::middleware('auth:sanctum')->group(function () {
+// Heavy operations with stricter rate limiting (10 requests per minute)
+Route::middleware(['auth:sanctum', 'throttle:10,1'])->group(function () {
+    // QR Code generation - heavy operations
+    Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
+    Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
+    Route::post('asset-components/{id}/generate-qr-code', [AssetComponentController::class, 'generateQRCode']);
+
+    // Report exports - heavy operations
+    Route::post('reports/assets/export', [ReportController::class, 'exportAssets']);
+    Route::get('audit-logs/export', [AuditLogController::class, 'export']);
+
+    // QR Code test endpoint - generates a test QR code to verify API configuration
+    Route::post('qr-code/test', function (\Illuminate\Http\Request $request) {
+        $data = $request->input('data', 'TEST-QR-CODE-123');
+
+        $qrCode = \App\Services\QRCodeMonkeyService::generate($data, [
+            'size' => $request->input('size', 300),
+        ]);
+
+        if ($qrCode) {
+            return response()->json([
+                'success' => true,
+                'message' => 'QR code generated successfully',
+                'data' => [
+                    'qr_code' => $qrCode,
+                    'encoded_data' => $data,
+                    'config' => [
+                        'body' => 'square',
+                        'eye' => 'frame0',
+                        'eyeBall' => 'ball0',
+                        'bodyColor' => '#000000',
+                        'bgColor' => '#FFFFFF',
+                    ],
+                ],
+            ]);
+        }
+
+        $error = \App\Services\QRCodeMonkeyService::getLastError();
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to generate QR code',
+            'error' => $error,
+        ], 500);
+    });
+});
+
+// Protected routes (require authentication + rate limiting: 60 requests per minute)
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     // Auth routes
     Route::prefix('auth')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
@@ -50,6 +97,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // User endpoint
     Route::get('/user', function () {
         $user = request()->user();
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -58,8 +106,8 @@ Route::middleware('auth:sanctum')->group(function () {
                     'name' => $user->name,
                     'username' => $user->username,
                     'email' => $user->email,
-                ]
-            ]
+                ],
+            ],
         ]);
     });
 
@@ -93,49 +141,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('employees/{id}/asset-history', [EmployeeController::class, 'getAssetHistory']);
     Route::apiResource('employees', EmployeeController::class);
 
-    // Asset routes
+    // Asset routes (QR generation moved to heavy operations group above)
     Route::delete('employees/{id}/assets', [AssetController::class, 'destroyByEmployee']);
     Route::post('assets/bulk-delete', [AssetController::class, 'bulkDelete']);
     Route::patch('assets/{id}/update-field', [AssetController::class, 'updateField']);
     Route::patch('assets/{id}/status', [AssetController::class, 'updateStatus']);
-    Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
-    Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
     Route::get('assets/totals', [AssetController::class, 'totals']);
     Route::get('assets/track', [AssetController::class, 'track']);
-
-    // QR Code test endpoint - generates a test QR code to verify API configuration
-    Route::post('qr-code/test', function (\Illuminate\Http\Request $request) {
-        $data = $request->input('data', 'TEST-QR-CODE-123');
-
-        $qrCode = \App\Services\QRCodeMonkeyService::generate($data, [
-            'size' => $request->input('size', 300),
-        ]);
-
-        if ($qrCode) {
-            return response()->json([
-                'success' => true,
-                'message' => 'QR code generated successfully',
-                'data' => [
-                    'qr_code' => $qrCode,
-                    'encoded_data' => $data,
-                    'config' => [
-                        'body' => 'square',
-                        'eye' => 'frame0',
-                        'eyeBall' => 'ball0',
-                        'bodyColor' => '#000000',
-                        'bgColor' => '#FFFFFF',
-                    ],
-                ],
-            ]);
-        }
-
-        $error = \App\Services\QRCodeMonkeyService::getLastError();
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to generate QR code',
-            'error' => $error,
-        ], 500);
-    });
 
     Route::apiResource('assets', AssetController::class);
 
@@ -151,10 +163,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}', [AssetComponentController::class, 'update']);
         Route::delete('/{id}', [AssetComponentController::class, 'destroy']);
         Route::post('/{id}/transfer', [AssetComponentController::class, 'transfer']);
-        Route::post('/{id}/generate-qr-code', [AssetComponentController::class, 'generateQRCode']);
+        // QR generation moved to heavy operations group above
     });
 
     // Repair routes
+    Route::get('repairs/dashboard-summary', [RepairController::class, 'dashboardSummary']);
+    Route::get('repairs/reminders', [RepairController::class, 'getReminders']);
     Route::get('repairs/{id}/remarks', [RepairController::class, 'getRemarks']);
     Route::post('repairs/{id}/remarks', [RepairController::class, 'addRemark']);
     Route::patch('repairs/{id}/status', [RepairController::class, 'updateStatus']);
@@ -162,10 +176,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('repairs/statistics', [RepairController::class, 'statistics']);
     Route::apiResource('repairs', RepairController::class);
 
-    // Report routes
+    // Report routes (export moved to heavy operations group above)
     Route::prefix('reports')->group(function () {
         Route::get('/assets', [ReportController::class, 'getAssetReport']);
-        Route::post('/assets/export', [ReportController::class, 'exportAssets']);
     });
 
     // Report Signatory routes
@@ -174,6 +187,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Dashboard routes
     Route::prefix('dashboard')->group(function () {
+        Route::get('/initial', [DashboardController::class, 'getInitialData']); // Unified endpoint for faster loading
         Route::get('/statistics', [DashboardController::class, 'getStatistics']);
         Route::get('/status-distribution', [DashboardController::class, 'getAssetStatusDistribution']);
         Route::get('/asset-trend', [DashboardController::class, 'getAssetTrend']);
@@ -186,11 +200,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/branch-statistics', [DashboardController::class, 'getBranchStatistics']);
     });
 
-    // Audit Log routes
+    // Audit Log routes (export moved to heavy operations group above)
     Route::prefix('audit-logs')->group(function () {
         Route::get('/', [AuditLogController::class, 'index']);
         Route::get('/statistics', [AuditLogController::class, 'statistics']);
-        Route::get('/export', [AuditLogController::class, 'export']);
         Route::get('/assets/{asset}', [AuditLogController::class, 'getAssetAuditLog']);
         Route::get('/users/{user}', [AuditLogController::class, 'getUserAuditLog']);
     });

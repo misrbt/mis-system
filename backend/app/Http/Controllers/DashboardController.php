@@ -6,6 +6,7 @@ use App\Models\Asset;
 use App\Models\Repair;
 use App\Services\DashboardService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -31,13 +32,204 @@ class DashboardController extends Controller
                 'data' => $statistics,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Dashboard statistics error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            Log::error('Dashboard statistics error: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch dashboard statistics',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get unified initial dashboard data (OPTIMIZED - Single endpoint for faster loading)
+     * Combines statistics, expenses, and activity data to reduce HTTP requests from 8 to 2
+     * This endpoint returns all critical data needed for initial dashboard render
+     */
+    public function getInitialData(Request $request)
+    {
+        try {
+            $year = $request->get('year', now()->year);
+            $month = $request->get('month', now()->month);
+            $cacheKey = "dashboard:initial_data:{$year}:{$month}";
+
+            $data = Cache::remember($cacheKey, 300, function () use ($year, $month) {
+                // Fetch all data in parallel (already cached individually)
+                $statistics = $this->dashboardService->getStatistics();
+                $monthlyExpenses = $this->dashboardService->getMonthlyExpenses();
+                $yearlyExpenses = $this->dashboardService->getYearlyExpenses();
+
+                // Get current month expenses
+                $currentMonthData = collect($monthlyExpenses)->firstWhere('month_key', sprintf('%04d-%02d', $year, $month));
+                $currentMonthExpenses = $currentMonthData ? [
+                    'total_expenses' => $currentMonthData['total_cost'],
+                    'acquisition_cost' => $currentMonthData['acquisition_cost'],
+                    'repair_cost' => $currentMonthData['repair_cost'],
+                    'month' => $currentMonthData['month'],
+                ] : [
+                    'total_expenses' => 0,
+                    'acquisition_cost' => 0,
+                    'repair_cost' => 0,
+                    'month' => date('M Y', mktime(0, 0, 0, $month, 1, $year)),
+                ];
+
+                // Get recent activity (cached separately)
+                $recentActivity = Cache::remember('dashboard:recent_activity:10', 300, function () {
+                    return DB::table('asset_movements')
+                        ->join('assets', 'asset_movements.asset_id', '=', 'assets.id')
+                        ->leftJoin('employee as from_emp', 'asset_movements.from_employee_id', '=', 'from_emp.id')
+                        ->leftJoin('employee as to_emp', 'asset_movements.to_employee_id', '=', 'to_emp.id')
+                        ->leftJoin('status as from_status', 'asset_movements.from_status_id', '=', 'from_status.id')
+                        ->leftJoin('status as to_status', 'asset_movements.to_status_id', '=', 'to_status.id')
+                        ->select(
+                            'asset_movements.id',
+                            'asset_movements.movement_type',
+                            'asset_movements.movement_date',
+                            'asset_movements.reason',
+                            'assets.asset_name',
+                            'assets.serial_number',
+                            DB::raw("COALESCE(from_emp.fullname, '') as from_employee"),
+                            DB::raw("COALESCE(to_emp.fullname, '') as to_employee"),
+                            'from_status.name as from_status',
+                            'to_status.name as to_status'
+                        )
+                        ->orderBy('asset_movements.movement_date', 'desc')
+                        ->limit(10)
+                        ->get()
+                        ->map(function ($activity) {
+                            return [
+                                'id' => $activity->id,
+                                'type' => $activity->movement_type,
+                                'asset' => [
+                                    'name' => $activity->asset_name,
+                                    'serial' => $activity->serial_number,
+                                ],
+                                'from_employee' => trim($activity->from_employee) ?: null,
+                                'to_employee' => trim($activity->to_employee) ?: null,
+                                'from_status' => $activity->from_status,
+                                'to_status' => $activity->to_status,
+                                'reason' => $activity->reason,
+                                'date' => $activity->movement_date,
+                            ];
+                        });
+                });
+
+                // Get assets needing attention (cached separately)
+                $assetsNeedingAttention = Cache::remember('dashboard:assets_needing_attention:50', 300, function () {
+                    $now = now();
+                    $oneMonthFromNow = $now->copy()->addMonth();
+                    $threeMonthsFromNow = $now->copy()->addMonths(3);
+                    $priorityOrderCase = 'CASE
+                        WHEN assets.waranty_expiration_date < ? THEN 1
+                        WHEN status.name = ? THEN 2
+                        ELSE 3
+                    END';
+                    $priorityCase = "CASE
+                        WHEN assets.waranty_expiration_date < ? THEN 'High'
+                        WHEN status.name = ? THEN 'High'
+                        WHEN assets.waranty_expiration_date <= ? THEN 'Medium'
+                        ELSE 'Low'
+                    END";
+
+                    return DB::table('assets')
+                        ->leftJoin('asset_category', 'assets.asset_category_id', '=', 'asset_category.id')
+                        ->leftJoin('status', 'assets.status_id', '=', 'status.id')
+                        ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
+                        ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
+                        ->select(
+                            'assets.id',
+                            'assets.asset_name',
+                            'assets.serial_number',
+                            'assets.waranty_expiration_date as warranty_expiration',
+                            'assets.updated_at',
+                            'assets.created_at',
+                            'asset_category.name as category_name',
+                            'status.name as status_name',
+                            'status.color as status_color',
+                            'branch.branch_name',
+                            'employee.fullname as employee_name'
+                        )
+                        ->selectRaw($priorityOrderCase.' as priority_order', [$now, 'Under Repair'])
+                        ->selectRaw($priorityCase.' as priority', [$now, 'Under Repair', $oneMonthFromNow])
+                        ->where(function ($query) use ($threeMonthsFromNow) {
+                            $query->where(function ($q) use ($threeMonthsFromNow) {
+                                $q->whereNotNull('assets.waranty_expiration_date')
+                                    ->where('assets.waranty_expiration_date', '<=', $threeMonthsFromNow);
+                            })
+                                ->orWhere('status.name', 'Under Repair');
+                        })
+                        ->orderBy('priority_order')
+                        ->orderBy('assets.waranty_expiration_date')
+                        ->limit(50)
+                        ->get()
+                        ->map(function ($asset) use ($now) {
+                            $lastUpdate = $asset->updated_at ?: $asset->created_at;
+                            $nextMaintenance = date('Y-m-d', strtotime($lastUpdate.' +30 days'));
+
+                            $reason = 'Scheduled maintenance';
+                            $warrantyExpiration = $asset->warranty_expiration
+                                ? \Carbon\Carbon::parse($asset->warranty_expiration)
+                                : null;
+                            if ($warrantyExpiration && $warrantyExpiration->lt($now)) {
+                                $reason = 'Warranty expired';
+                            } elseif ($asset->status_name === 'Under Repair') {
+                                $reason = 'Currently under repair';
+                            } elseif ($warrantyExpiration) {
+                                $daysUntilExpiry = $now->diffInDays($warrantyExpiration, false);
+                                if ($daysUntilExpiry <= 30) {
+                                    $reason = "Warranty expiring in {$daysUntilExpiry} days";
+                                } else {
+                                    $reason = 'Warranty expiring in '.ceil($daysUntilExpiry / 30).' months';
+                                }
+                            }
+
+                            return [
+                                'id' => $asset->id,
+                                'asset_name' => $asset->asset_name,
+                                'serial_number' => $asset->serial_number,
+                                'category' => $asset->category_name ?? 'Unknown',
+                                'status' => $asset->status_name ?? 'Unknown',
+                                'status_color' => $asset->status_color ?? '#64748b',
+                                'branch' => $asset->branch_name ?? 'Unassigned',
+                                'assigned_to' => trim($asset->employee_name) ?: 'Unassigned',
+                                'warranty_expiration' => $asset->warranty_expiration,
+                                'next_maintenance' => $nextMaintenance,
+                                'priority' => $asset->priority,
+                                'reason' => $reason,
+                            ];
+                        });
+                });
+
+                return [
+                    'statistics' => $statistics,
+                    'current_month_expenses' => $currentMonthExpenses,
+                    'monthly_expenses' => $monthlyExpenses,
+                    'yearly_expenses' => $yearlyExpenses,
+                    'recent_activity' => $recentActivity,
+                    'assets_needing_attention' => $assetsNeedingAttention,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'meta' => [
+                    'cached_until' => now()->addSeconds(300)->toIso8601String(),
+                    'endpoints_combined' => 6,
+                    'note' => 'Branch statistics available at /dashboard/branch-statistics for progressive loading',
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Dashboard initial data error: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch dashboard initial data',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
             ], 500);
         }
@@ -56,7 +248,7 @@ class DashboardController extends Controller
 
             $trend = DB::table('assets')
                 ->select(
-                    DB::raw($monthExpression . ' as month'),
+                    DB::raw($monthExpression.' as month'),
                     DB::raw('COUNT(*) as count')
                 )
                 ->where('purchase_date', '>=', now()->subMonths(12))
@@ -70,7 +262,7 @@ class DashboardController extends Controller
                 'data' => $trend,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Asset trend error: ' . $e->getMessage());
+            Log::error('Asset trend error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -81,57 +273,60 @@ class DashboardController extends Controller
     }
 
     /**
-     * Get recent activity (OPTIMIZED with joins)
+     * Get recent activity (OPTIMIZED with joins and caching)
      */
     public function getRecentActivity(Request $request)
     {
         try {
             $limit = min($request->get('limit', 20), 100);
+            $cacheKey = "dashboard:recent_activity:{$limit}";
 
-            $activities = DB::table('asset_movements')
-                ->join('assets', 'asset_movements.asset_id', '=', 'assets.id')
-                ->leftJoin('employee as from_emp', 'asset_movements.from_employee_id', '=', 'from_emp.id')
-                ->leftJoin('employee as to_emp', 'asset_movements.to_employee_id', '=', 'to_emp.id')
-                ->leftJoin('status as from_status', 'asset_movements.from_status_id', '=', 'from_status.id')
-                ->leftJoin('status as to_status', 'asset_movements.to_status_id', '=', 'to_status.id')
-                ->select(
-                    'asset_movements.id',
-                    'asset_movements.movement_type',
-                    'asset_movements.movement_date',
-                    'asset_movements.reason',
-                    'assets.asset_name',
-                    'assets.serial_number',
-                    DB::raw("COALESCE(from_emp.fullname, '') as from_employee"),
-                    DB::raw("COALESCE(to_emp.fullname, '') as to_employee"),
-                    'from_status.name as from_status',
-                    'to_status.name as to_status'
-                )
-                ->orderBy('asset_movements.movement_date', 'desc')
-                ->limit($limit)
-                ->get()
-                ->map(function ($activity) {
-                    return [
-                        'id' => $activity->id,
-                        'type' => $activity->movement_type,
-                        'asset' => [
-                            'name' => $activity->asset_name,
-                            'serial' => $activity->serial_number,
-                        ],
-                        'from_employee' => trim($activity->from_employee) ?: null,
-                        'to_employee' => trim($activity->to_employee) ?: null,
-                        'from_status' => $activity->from_status,
-                        'to_status' => $activity->to_status,
-                        'reason' => $activity->reason,
-                        'date' => $activity->movement_date,
-                    ];
-                });
+            $activities = Cache::remember($cacheKey, 300, function () use ($limit) {
+                return DB::table('asset_movements')
+                    ->join('assets', 'asset_movements.asset_id', '=', 'assets.id')
+                    ->leftJoin('employee as from_emp', 'asset_movements.from_employee_id', '=', 'from_emp.id')
+                    ->leftJoin('employee as to_emp', 'asset_movements.to_employee_id', '=', 'to_emp.id')
+                    ->leftJoin('status as from_status', 'asset_movements.from_status_id', '=', 'from_status.id')
+                    ->leftJoin('status as to_status', 'asset_movements.to_status_id', '=', 'to_status.id')
+                    ->select(
+                        'asset_movements.id',
+                        'asset_movements.movement_type',
+                        'asset_movements.movement_date',
+                        'asset_movements.reason',
+                        'assets.asset_name',
+                        'assets.serial_number',
+                        DB::raw("COALESCE(from_emp.fullname, '') as from_employee"),
+                        DB::raw("COALESCE(to_emp.fullname, '') as to_employee"),
+                        'from_status.name as from_status',
+                        'to_status.name as to_status'
+                    )
+                    ->orderBy('asset_movements.movement_date', 'desc')
+                    ->limit($limit)
+                    ->get()
+                    ->map(function ($activity) {
+                        return [
+                            'id' => $activity->id,
+                            'type' => $activity->movement_type,
+                            'asset' => [
+                                'name' => $activity->asset_name,
+                                'serial' => $activity->serial_number,
+                            ],
+                            'from_employee' => trim($activity->from_employee) ?: null,
+                            'to_employee' => trim($activity->to_employee) ?: null,
+                            'from_status' => $activity->from_status,
+                            'to_status' => $activity->to_status,
+                            'reason' => $activity->reason,
+                            'date' => $activity->movement_date,
+                        ];
+                    });
+            });
 
             return response()->json([
                 'success' => true,
                 'data' => $activities,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Recent activity error: ' . $e->getMessage());
+            Log::error('Recent activity error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -154,7 +349,7 @@ class DashboardController extends Controller
                 'data' => $expenses,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Monthly expenses error: ' . $e->getMessage());
+            Log::error('Monthly expenses error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -177,7 +372,7 @@ class DashboardController extends Controller
                 'data' => $expenses,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Yearly expenses error: ' . $e->getMessage());
+            Log::error('Yearly expenses error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -209,7 +404,7 @@ class DashboardController extends Controller
                 'data' => $expenses,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Expense trends error: ' . $e->getMessage());
+            Log::error('Expense trends error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -360,7 +555,7 @@ class DashboardController extends Controller
                 'data' => $breakdown,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Expense breakdown error: ' . $e->getMessage());
+            Log::error('Expense breakdown error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -371,106 +566,110 @@ class DashboardController extends Controller
     }
 
     /**
-     * Get assets needing attention (OPTIMIZED with single query)
+     * Get assets needing attention (OPTIMIZED with single query and caching)
      */
     public function getAssetsNeedingAttention(Request $request)
     {
         try {
             $limit = min($request->get('limit', 50), 100);
-            $now = now();
-            $oneMonthFromNow = $now->copy()->addMonth();
-            $threeMonthsFromNow = $now->copy()->addMonths(3);
-            $priorityOrderCase = 'CASE
-                WHEN assets.waranty_expiration_date < ? THEN 1
-                WHEN status.name = ? THEN 2
-                ELSE 3
-            END';
-            $priorityCase = "CASE
-                WHEN assets.waranty_expiration_date < ? THEN 'High'
-                WHEN status.name = ? THEN 'High'
-                WHEN assets.waranty_expiration_date <= ? THEN 'Medium'
-                ELSE 'Low'
-            END";
+            $cacheKey = "dashboard:assets_needing_attention:{$limit}";
 
-            // Single optimized query with all joins
-            $assets = DB::table('assets')
-                ->leftJoin('asset_category', 'assets.asset_category_id', '=', 'asset_category.id')
-                ->leftJoin('status', 'assets.status_id', '=', 'status.id')
-                ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
-                ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
-                ->select(
-                    'assets.id',
-                    'assets.asset_name',
-                    'assets.serial_number',
-                    'assets.waranty_expiration_date as warranty_expiration',
-                    'assets.updated_at',
-                    'assets.created_at',
-                    'asset_category.name as category_name',
-                    'status.name as status_name',
-                    'status.color as status_color',
-                    'branch.branch_name',
-                    'employee.fullname as employee_name'
-                )
-                ->selectRaw($priorityOrderCase . ' as priority_order', [$now, 'Under Repair'])
-                ->selectRaw($priorityCase . ' as priority', [$now, 'Under Repair', $oneMonthFromNow])
-                ->where(function ($query) use ($threeMonthsFromNow) {
-                    // Warranty expiring within 3 months or already expired
-                    $query->where(function ($q) use ($threeMonthsFromNow) {
-                        $q->whereNotNull('assets.waranty_expiration_date')
-                          ->where('assets.waranty_expiration_date', '<=', $threeMonthsFromNow);
+            $assets = Cache::remember($cacheKey, 300, function () use ($limit) {
+                $now = now();
+                $oneMonthFromNow = $now->copy()->addMonth();
+                $threeMonthsFromNow = $now->copy()->addMonths(3);
+                $priorityOrderCase = 'CASE
+                    WHEN assets.waranty_expiration_date < ? THEN 1
+                    WHEN status.name = ? THEN 2
+                    ELSE 3
+                END';
+                $priorityCase = "CASE
+                    WHEN assets.waranty_expiration_date < ? THEN 'High'
+                    WHEN status.name = ? THEN 'High'
+                    WHEN assets.waranty_expiration_date <= ? THEN 'Medium'
+                    ELSE 'Low'
+                END";
+
+                // Single optimized query with all joins
+                return DB::table('assets')
+                    ->leftJoin('asset_category', 'assets.asset_category_id', '=', 'asset_category.id')
+                    ->leftJoin('status', 'assets.status_id', '=', 'status.id')
+                    ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
+                    ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
+                    ->select(
+                        'assets.id',
+                        'assets.asset_name',
+                        'assets.serial_number',
+                        'assets.waranty_expiration_date as warranty_expiration',
+                        'assets.updated_at',
+                        'assets.created_at',
+                        'asset_category.name as category_name',
+                        'status.name as status_name',
+                        'status.color as status_color',
+                        'branch.branch_name',
+                        'employee.fullname as employee_name'
+                    )
+                    ->selectRaw($priorityOrderCase.' as priority_order', [$now, 'Under Repair'])
+                    ->selectRaw($priorityCase.' as priority', [$now, 'Under Repair', $oneMonthFromNow])
+                    ->where(function ($query) use ($threeMonthsFromNow) {
+                        // Warranty expiring within 3 months or already expired
+                        $query->where(function ($q) use ($threeMonthsFromNow) {
+                            $q->whereNotNull('assets.waranty_expiration_date')
+                                ->where('assets.waranty_expiration_date', '<=', $threeMonthsFromNow);
+                        })
+                        // Or under repair
+                            ->orWhere('status.name', 'Under Repair');
                     })
-                    // Or under repair
-                    ->orWhere('status.name', 'Under Repair');
-                })
-                ->orderBy('priority_order')
-                ->orderBy('assets.waranty_expiration_date')
-                ->limit($limit)
-                ->get()
-                ->map(function ($asset) use ($now) {
-                    // Calculate next maintenance
-                    $lastUpdate = $asset->updated_at ?: $asset->created_at;
-                    $nextMaintenance = date('Y-m-d', strtotime($lastUpdate . ' +30 days'));
+                    ->orderBy('priority_order')
+                    ->orderBy('assets.waranty_expiration_date')
+                    ->limit($limit)
+                    ->get()
+                    ->map(function ($asset) use ($now) {
+                        // Calculate next maintenance
+                        $lastUpdate = $asset->updated_at ?: $asset->created_at;
+                        $nextMaintenance = date('Y-m-d', strtotime($lastUpdate.' +30 days'));
 
-                    // Determine reason
-                    $reason = 'Scheduled maintenance';
-                    $warrantyExpiration = $asset->warranty_expiration
-                        ? \Carbon\Carbon::parse($asset->warranty_expiration)
-                        : null;
-                    if ($warrantyExpiration && $warrantyExpiration->lt($now)) {
-                        $reason = 'Warranty expired';
-                    } elseif ($asset->status_name === 'Under Repair') {
-                        $reason = 'Currently under repair';
-                    } elseif ($warrantyExpiration) {
-                        $daysUntilExpiry = $now->diffInDays($warrantyExpiration, false);
-                        if ($daysUntilExpiry <= 30) {
-                            $reason = "Warranty expiring in {$daysUntilExpiry} days";
-                        } else {
-                            $reason = "Warranty expiring in " . ceil($daysUntilExpiry / 30) . " months";
+                        // Determine reason
+                        $reason = 'Scheduled maintenance';
+                        $warrantyExpiration = $asset->warranty_expiration
+                            ? \Carbon\Carbon::parse($asset->warranty_expiration)
+                            : null;
+                        if ($warrantyExpiration && $warrantyExpiration->lt($now)) {
+                            $reason = 'Warranty expired';
+                        } elseif ($asset->status_name === 'Under Repair') {
+                            $reason = 'Currently under repair';
+                        } elseif ($warrantyExpiration) {
+                            $daysUntilExpiry = $now->diffInDays($warrantyExpiration, false);
+                            if ($daysUntilExpiry <= 30) {
+                                $reason = "Warranty expiring in {$daysUntilExpiry} days";
+                            } else {
+                                $reason = 'Warranty expiring in '.ceil($daysUntilExpiry / 30).' months';
+                            }
                         }
-                    }
 
-                    return [
-                        'id' => $asset->id,
-                        'asset_name' => $asset->asset_name,
-                        'serial_number' => $asset->serial_number,
-                        'category' => $asset->category_name ?? 'Unknown',
-                        'status' => $asset->status_name ?? 'Unknown',
-                        'status_color' => $asset->status_color ?? '#64748b',
-                        'branch' => $asset->branch_name ?? 'Unassigned',
-                        'assigned_to' => trim($asset->employee_name) ?: 'Unassigned',
-                        'warranty_expiration' => $asset->warranty_expiration,
-                        'next_maintenance' => $nextMaintenance,
-                        'priority' => $asset->priority,
-                        'reason' => $reason,
-                    ];
-                });
+                        return [
+                            'id' => $asset->id,
+                            'asset_name' => $asset->asset_name,
+                            'serial_number' => $asset->serial_number,
+                            'category' => $asset->category_name ?? 'Unknown',
+                            'status' => $asset->status_name ?? 'Unknown',
+                            'status_color' => $asset->status_color ?? '#64748b',
+                            'branch' => $asset->branch_name ?? 'Unassigned',
+                            'assigned_to' => trim($asset->employee_name) ?: 'Unassigned',
+                            'warranty_expiration' => $asset->warranty_expiration,
+                            'next_maintenance' => $nextMaintenance,
+                            'priority' => $asset->priority,
+                            'reason' => $reason,
+                        ];
+                    });
+            }); // End Cache::remember
 
             return response()->json([
                 'success' => true,
                 'data' => $assets,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Assets needing attention error: ' . $e->getMessage());
+            Log::error('Assets needing attention error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -495,8 +694,8 @@ class DashboardController extends Controller
                 'data' => $statistics,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Branch statistics error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            Log::error('Branch statistics error: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
@@ -520,7 +719,7 @@ class DashboardController extends Controller
                 'message' => 'Dashboard cache cleared successfully',
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Clear cache error: ' . $e->getMessage());
+            Log::error('Clear cache error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,

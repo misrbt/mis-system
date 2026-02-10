@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Repair\StoreRepairRequest;
+use App\Http\Requests\Repair\UpdateRepairRequest;
 use App\Models\Repair;
 use App\Models\RepairRemark;
+use App\Traits\ValidatesSort;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class RepairController extends Controller
 {
+    use ValidatesSort;
+
     /**
      * Display a listing of repairs with filters.
      */
@@ -18,7 +24,7 @@ class RepairController extends Controller
             $query = Repair::with([
                 'asset.category',
                 'asset.assignedEmployee',
-                'vendor'
+                'vendor',
             ]);
 
             // Filter by asset
@@ -50,15 +56,25 @@ class RepairController extends Controller
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('description', 'like', "%{$search}%")
-                      ->orWhereHas('asset', function ($assetQuery) use ($search) {
-                          $assetQuery->where('asset_name', 'like', "%{$search}%");
-                      });
+                        ->orWhereHas('asset', function ($assetQuery) use ($search) {
+                            $assetQuery->where('asset_name', 'like', "%{$search}%");
+                        });
                 });
             }
 
-            // Sorting
-            $sortBy = $request->get('sort_by', 'created_at');
-            $sortOrder = $request->get('sort_order', 'desc');
+            // Sorting with SQL injection protection
+            $allowedSortFields = [
+                'id', 'repair_date', 'expected_return_date',
+                'actual_return_date', 'repair_cost', 'status',
+                'created_at', 'updated_at',
+            ];
+
+            [$sortBy, $sortOrder] = $this->validateSort(
+                $request->get('sort_by', 'created_at'),
+                $request->get('sort_order', 'desc'),
+                $allowedSortFields
+            );
+
             $query->orderBy($sortBy, $sortOrder);
 
             $repairs = $query->get();
@@ -68,42 +84,18 @@ class RepairController extends Controller
                 'data' => $repairs,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch repairs',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to fetch repairs');
         }
     }
 
     /**
      * Store a newly created repair.
      */
-    public function store(Request $request)
+    public function store(StoreRepairRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'asset_id' => 'required|exists:assets,id',
-            'vendor_id' => 'required|exists:vendors,id',
-            'description' => 'required|string',
-            'repair_date' => 'required|date',
-            'expected_return_date' => 'required|date|after_or_equal:repair_date',
-            'actual_return_date' => 'nullable|date|after_or_equal:repair_date',
-            'repair_cost' => 'nullable|numeric|min:0',
-            'status' => 'required|in:Pending,In Repair,Completed,Returned',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         // Validate that the asset has "Under Repair" status
         $asset = \App\Models\Asset::with('status')->find($request->asset_id);
-        if (!$asset || !$asset->status || $asset->status->name !== 'Under Repair') {
+        if (! $asset || ! $asset->status || $asset->status->name !== 'Under Repair') {
             return response()->json([
                 'success' => false,
                 'message' => 'Only assets with "Under Repair" status can be added to repair records',
@@ -111,7 +103,7 @@ class RepairController extends Controller
         }
 
         try {
-            $repair = Repair::create($request->all());
+            $repair = Repair::create($request->validated());
             $repair->load(['asset.category', 'vendor']);
 
             return response()->json([
@@ -120,11 +112,7 @@ class RepairController extends Controller
                 'data' => $repair,
             ], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create repair record',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to create repair record');
         }
     }
 
@@ -137,7 +125,7 @@ class RepairController extends Controller
             $repair = Repair::with([
                 'asset.category',
                 'asset.assignedEmployee.branch',
-                'vendor'
+                'vendor',
             ])->findOrFail($id);
 
             return response()->json([
@@ -145,42 +133,18 @@ class RepairController extends Controller
                 'data' => $repair,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Repair record not found',
-                'error' => $e->getMessage(),
-            ], 404);
+            return $this->handleException($e, 'Repair record not found', 404);
         }
     }
 
     /**
      * Update the specified repair.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateRepairRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'asset_id' => 'required|exists:assets,id',
-            'vendor_id' => 'required|exists:vendors,id',
-            'description' => 'required|string',
-            'repair_date' => 'required|date',
-            'expected_return_date' => 'required|date|after_or_equal:repair_date',
-            'actual_return_date' => 'nullable|date|after_or_equal:repair_date',
-            'repair_cost' => 'nullable|numeric|min:0',
-            'status' => 'required|in:Pending,In Repair,Completed,Returned',
-            'remarks' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         try {
             $repair = Repair::findOrFail($id);
-            $repair->update($request->all());
+            $repair->update($request->validated());
             $repair->load(['asset.category', 'vendor']);
 
             return response()->json([
@@ -189,11 +153,7 @@ class RepairController extends Controller
                 'data' => $repair,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update repair record',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to update repair record');
         }
     }
 
@@ -286,17 +246,32 @@ class RepairController extends Controller
                     $repair->delivered_by_employee_id = null;
                 }
 
-                // Handle job order file upload
+                // Handle job order file upload with MIME type validation
                 if ($request->hasFile('job_order')) {
                     $file = $request->file('job_order');
-                    $filename = 'job_order_' . $repair->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+
+                    // Validate MIME type (not client-provided extension)
+                    $allowedMimes = ['image/jpeg', 'image/png', 'application/pdf'];
+                    if (! in_array($file->getMimeType(), $allowedMimes, true)) {
+                        throw new \InvalidArgumentException('Invalid file type. Only JPEG, PNG, and PDF are allowed.');
+                    }
+
+                    // Use MIME type to determine extension
+                    $extension = match ($file->getMimeType()) {
+                        'image/jpeg' => 'jpg',
+                        'image/png' => 'png',
+                        'application/pdf' => 'pdf',
+                        default => throw new \InvalidArgumentException('Invalid file type')
+                    };
+
+                    $filename = 'job_order_'.$repair->id.'_'.time().'.'.$extension;
                     $path = $file->storeAs('job_orders', $filename, 'public');
                     $repair->job_order_path = $path;
                 }
             }
 
             // Auto-set actual return date when status becomes "Returned"
-            if ($request->status === 'Returned' && !$repair->actual_return_date) {
+            if ($request->status === 'Returned' && ! $repair->actual_return_date) {
                 $repair->actual_return_date = $request->actual_return_date ?? now();
             }
 
@@ -366,16 +341,16 @@ class RepairController extends Controller
         try {
             $repair = Repair::findOrFail($id);
 
-            if (!$repair->job_order_path) {
+            if (! $repair->job_order_path) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No job order file found for this repair',
                 ], 404);
             }
 
-            $filePath = storage_path('app/public/' . $repair->job_order_path);
+            $filePath = storage_path('app/public/'.$repair->job_order_path);
 
-            if (!file_exists($filePath)) {
+            if (! file_exists($filePath)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Job order file not found',
@@ -468,6 +443,169 @@ class RepairController extends Controller
                 'success' => false,
                 'message' => 'Failed to add remark',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get comprehensive dashboard summary for repairs.
+     * Used in the inventory dashboard repair summary card.
+     */
+    public function dashboardSummary()
+    {
+        try {
+            // Basic counts
+            $pending = Repair::where('status', 'Pending')->count();
+            $inRepair = Repair::where('status', 'In Repair')->count();
+            $completed = Repair::where('status', 'Completed')->count();
+            $returned = Repair::where('status', 'Returned')->count();
+
+            // Due date related counts
+            $overdueCount = Repair::overdue()->count();
+            $dueSoonCount = Repair::dueSoon(4)->count();
+
+            // Get latest 5 active repairs
+            $latestRepairs = Repair::with(['asset.category', 'vendor'])
+                ->active()
+                ->orderBy('created_at', 'desc')
+                ->take(5)
+                ->get()
+                ->map(function ($repair) {
+                    return [
+                        'id' => $repair->id,
+                        'asset_name' => optional($repair->asset)->asset_name ?? 'N/A',
+                        'asset_category' => optional(optional($repair->asset)->category)->name ?? 'N/A',
+                        'vendor_name' => optional($repair->vendor)->company_name ?? 'N/A',
+                        'status' => $repair->status,
+                        'expected_return_date' => $repair->expected_return_date?->format('Y-m-d'),
+                        'days_until_due' => $repair->getDaysUntilDue(),
+                        'due_status' => $repair->getDueStatus(),
+                    ];
+                });
+
+            // Get overdue repairs list
+            $overdueRepairs = Repair::with(['asset.category', 'vendor'])
+                ->overdue()
+                ->orderBy('expected_return_date', 'asc')
+                ->take(10)
+                ->get()
+                ->map(function ($repair) {
+                    return [
+                        'id' => $repair->id,
+                        'asset_name' => optional($repair->asset)->asset_name ?? 'N/A',
+                        'asset_category' => optional(optional($repair->asset)->category)->name ?? 'N/A',
+                        'vendor_name' => optional($repair->vendor)->company_name ?? 'N/A',
+                        'status' => $repair->status,
+                        'expected_return_date' => $repair->expected_return_date?->format('Y-m-d'),
+                        'days_overdue' => abs($repair->getDaysUntilDue()),
+                    ];
+                });
+
+            // Total cost
+            $totalCost = Repair::sum('repair_cost');
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'counts' => [
+                        'pending' => $pending,
+                        'in_repair' => $inRepair,
+                        'completed' => $completed,
+                        'returned' => $returned,
+                        'overdue' => $overdueCount,
+                        'due_soon' => $dueSoonCount,
+                        'total' => $pending + $inRepair + $completed + $returned,
+                        'active' => $pending + $inRepair + $completed,
+                    ],
+                    'total_cost' => $totalCost,
+                    'latest_repairs' => $latestRepairs,
+                    'overdue_repairs' => $overdueRepairs,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch dashboard summary',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get repair reminders (overdue + due within 4 days).
+     * Used for the reminder popup on inventory access.
+     */
+    public function getReminders(Request $request)
+    {
+        try {
+            $dueSoonDays = $request->get('days', 4);
+
+            // Get overdue repairs with safe data access
+            $overdueRepairs = Repair::with(['asset', 'vendor'])
+                ->overdue()
+                ->orderBy('expected_return_date', 'asc')
+                ->limit(10)
+                ->get()
+                ->map(function ($repair) {
+                    $daysUntilDue = $repair->getDaysUntilDue();
+
+                    return [
+                        'id' => $repair->id,
+                        'asset_name' => $repair->asset?->asset_name ?? 'N/A',
+                        'asset_id' => $repair->asset_id,
+                        'vendor_name' => $repair->vendor?->company_name ?? 'N/A',
+                        'status' => $repair->status,
+                        'expected_return_date' => $repair->expected_return_date ? $repair->expected_return_date->format('Y-m-d') : null,
+                        'days_overdue' => $daysUntilDue ? abs($daysUntilDue) : 0,
+                        'reminder_type' => 'overdue',
+                    ];
+                });
+
+            // Get due soon repairs with safe data access
+            $dueSoonRepairs = Repair::with(['asset', 'vendor'])
+                ->dueSoon($dueSoonDays)
+                ->orderBy('expected_return_date', 'asc')
+                ->limit(10)
+                ->get()
+                ->map(function ($repair) {
+                    return [
+                        'id' => $repair->id,
+                        'asset_name' => $repair->asset?->asset_name ?? 'N/A',
+                        'asset_id' => $repair->asset_id,
+                        'vendor_name' => $repair->vendor?->company_name ?? 'N/A',
+                        'status' => $repair->status,
+                        'expected_return_date' => $repair->expected_return_date ? $repair->expected_return_date->format('Y-m-d') : null,
+                        'days_until_due' => $repair->getDaysUntilDue() ?? 0,
+                        'reminder_type' => 'due_soon',
+                    ];
+                });
+
+            $hasReminders = $overdueRepairs->count() > 0 || $dueSoonRepairs->count() > 0;
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'has_reminders' => $hasReminders,
+                    'overdue' => [
+                        'count' => $overdueRepairs->count(),
+                        'repairs' => $overdueRepairs,
+                    ],
+                    'due_soon' => [
+                        'count' => $dueSoonRepairs->count(),
+                        'repairs' => $dueSoonRepairs,
+                    ],
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Repair reminders error: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch repair reminders',
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
             ], 500);
         }
     }
