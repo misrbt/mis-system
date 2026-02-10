@@ -7,6 +7,7 @@ use App\Models\Repair;
 use App\Models\Status;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DashboardService
 {
@@ -366,7 +367,7 @@ class DashboardService
                     0 as repair_cost,
                     COUNT(*) as asset_count
                 FROM assets
-                WHERE EXTRACT(YEAR FROM purchase_date) IN ('.implode(',', $years).')
+                WHERE EXTRACT(YEAR FROM purchase_date) IN (' . implode(',', $years) . ')
                 GROUP BY EXTRACT(YEAR FROM purchase_date)
 
                 UNION ALL
@@ -377,7 +378,7 @@ class DashboardService
                     SUM(repair_cost) as repair_cost,
                     0 as asset_count
                 FROM repairs
-                WHERE EXTRACT(YEAR FROM repair_date) IN ('.implode(',', $years).')
+                WHERE EXTRACT(YEAR FROM repair_date) IN (' . implode(',', $years) . ')
                 GROUP BY EXTRACT(YEAR FROM repair_date)) as combined
             '))
                 ->select(
@@ -424,21 +425,21 @@ class DashboardService
             try {
                 $summary = $this->getAllBranchStats();
             } catch (\Exception $e) {
-                \Log::error('Branch stats error: '.$e->getMessage());
+                Log::error('Branch stats error: ' . $e->getMessage());
                 $summary = [];
             }
 
             try {
                 $monthlyTrends = $this->getBranchMonthlyTrends($months);
             } catch (\Exception $e) {
-                \Log::error('Branch monthly trends error: '.$e->getMessage());
+                Log::error('Branch monthly trends error: ' . $e->getMessage());
                 $monthlyTrends = [];
             }
 
             try {
                 $statusBreakdown = $this->getBranchStatusBreakdown();
             } catch (\Exception $e) {
-                \Log::error('Branch status breakdown error: '.$e->getMessage());
+                Log::error('Branch status breakdown error: ' . $e->getMessage());
                 $statusBreakdown = [];
             }
 
@@ -660,7 +661,7 @@ class DashboardService
     public function clearCache(): void
     {
         Cache::forget('dashboard:statistics');
-        Cache::forget('dashboard:monthly_expenses:'.now()->year);
+        Cache::forget('dashboard:monthly_expenses:' . now()->year);
         Cache::forget('dashboard:yearly_expenses');
 
         // Clear new unified endpoint caches
