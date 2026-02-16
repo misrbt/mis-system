@@ -55,6 +55,7 @@ const getMovementIconComponent = (type) => {
     disposed: Trash2,
     code_generated: QrCode,
     inventory_operation: Database,
+    under_repair_reminder: Wrench,
   }
   return icons[type] || AlertCircle
 }
@@ -140,6 +141,13 @@ const getMovementStyles = (type) => {
       dot: 'bg-cyan-500',
     },
     inventory_operation: {
+      bg: 'bg-amber-50',
+      border: 'border-amber-200',
+      text: 'text-amber-700',
+      icon: 'text-amber-600',
+      dot: 'bg-amber-500',
+    },
+    under_repair_reminder: {
       bg: 'bg-amber-50',
       border: 'border-amber-200',
       text: 'text-amber-700',

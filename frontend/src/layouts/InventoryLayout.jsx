@@ -2,40 +2,38 @@ import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import InventoryNavBar from '../components/navbar/InventoryNavbar'
 import Footer from '../components/navigation/Footer'
-import RepairReminderModal from '../components/repairs/RepairReminderModal'
+import UnderRepairReminderModal from '../components/repairs/UnderRepairReminderModal'
 import { useAuth } from '../context/AuthContext'
-import { useRepairReminders } from '../hooks/useRepairReminders'
+import { useUnderRepairReminder } from '../hooks/useUnderRepairReminder'
 
 function InventoryLayout() {
   const { user, logout } = useAuth()
   const location = useLocation()
   const searchParams = new URLSearchParams(location.search)
-  const [showReminderModal, setShowReminderModal] = useState(false)
+  const [showUnderRepairModal, setShowUnderRepairModal] = useState(false)
 
-  // Fetch repair reminders
+  // Fetch under-repair asset reminders
   const {
-    shouldShowModal,
-    overdueRepairs,
-    dueSoonRepairs,
-    overdueCount,
-    dueSoonCount,
-    dismissReminders,
-  } = useRepairReminders()
+    shouldShowModal: shouldShowUnderRepairModal,
+    underRepairAssets,
+    underRepairCount,
+    dismissReminder: dismissUnderRepairReminder,
+  } = useUnderRepairReminder()
 
-  // Show reminder modal when shouldShowModal becomes true
+  // Show under-repair modal when shouldShowUnderRepairModal becomes true
   useEffect(() => {
-    if (shouldShowModal) {
-      setShowReminderModal(true)
+    if (shouldShowUnderRepairModal) {
+      setShowUnderRepairModal(true)
     }
-  }, [shouldShowModal])
+  }, [shouldShowUnderRepairModal])
 
-  const handleCloseReminderModal = () => {
-    setShowReminderModal(false)
+  const handleCloseUnderRepairModal = () => {
+    setShowUnderRepairModal(false)
   }
 
-  const handleDismissReminders = () => {
-    dismissReminders()
-    setShowReminderModal(false)
+  const handleDismissUnderRepair = () => {
+    dismissUnderRepairReminder()
+    setShowUnderRepairModal(false)
   }
 
   // Pages that use centered layout (narrower, vertically centered)
@@ -92,15 +90,13 @@ function InventoryLayout() {
         horizontalPadding="px-4 sm:px-6 lg:px-8"
       />
 
-      {/* Repair Reminder Modal */}
-      <RepairReminderModal
-        isOpen={showReminderModal}
-        onClose={handleCloseReminderModal}
-        onDismiss={handleDismissReminders}
-        overdueRepairs={overdueRepairs}
-        dueSoonRepairs={dueSoonRepairs}
-        overdueCount={overdueCount}
-        dueSoonCount={dueSoonCount}
+      {/* Under Repair Asset Reminder Modal */}
+      <UnderRepairReminderModal
+        isOpen={showUnderRepairModal}
+        onClose={handleCloseUnderRepairModal}
+        onDismiss={handleDismissUnderRepair}
+        underRepairAssets={underRepairAssets}
+        underRepairCount={underRepairCount}
       />
     </div>
   )

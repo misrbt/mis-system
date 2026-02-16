@@ -197,6 +197,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::get('/yearly-expenses', [DashboardController::class, 'getYearlyExpenses']);
         Route::get('/expense-trends', [DashboardController::class, 'getExpenseTrends']);
         Route::get('/expense-breakdown', [DashboardController::class, 'getExpenseBreakdown']);
+        Route::get('/under-repair-assets', [DashboardController::class, 'getUnderRepairAssets']);
         Route::get('/branch-statistics', [DashboardController::class, 'getBranchStatistics']);
     });
 

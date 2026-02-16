@@ -1032,7 +1032,6 @@ function AssetsPage() {
     : assetsList.length
   const totalAssets = assetsList.length
 
-  // Group assets by employee
   // Pivot table calculation
   const calculatePivotData = useCallback(() => {
     if (!assetsData?.data) return null
@@ -1040,26 +1039,8 @@ function AssetsPage() {
     const assets = assetsData.data
     const { rowDimension, columnDimension, aggregation } = pivotConfig
 
-    // Get dimension values
-    const getRowKey = (asset) => {
-      switch (rowDimension) {
-        case 'category':
-          return asset.category?.category_name || 'Uncategorized'
-        case 'status':
-          return asset.status?.name || 'Unknown'
-        case 'branch':
-          return asset.assigned_employee?.branch?.branch_name || 'Unassigned'
-        case 'vendor':
-          return asset.vendor?.company_name || 'No Vendor'
-        case 'employee':
-          return asset.assigned_employee?.fullname || 'Unassigned'
-        default:
-          return 'Unknown'
-      }
-    }
-
-    const getColumnKey = (asset) => {
-      switch (columnDimension) {
+    const getDimensionKey = (asset, dimension) => {
+      switch (dimension) {
         case 'category':
           return asset.category?.category_name || 'Uncategorized'
         case 'status':
@@ -1076,66 +1057,72 @@ function AssetsPage() {
     }
 
     // Build pivot structure
-    const pivotData = {}
+    const pivotRaw = {}
     const columnKeys = new Set()
 
     assets.forEach((asset) => {
-      const rowKey = getRowKey(asset)
-      const colKey = getColumnKey(asset)
+      const rowKey = getDimensionKey(asset, rowDimension)
+      const colKey = getDimensionKey(asset, columnDimension)
 
-      if (!pivotData[rowKey]) {
-        pivotData[rowKey] = {}
-      }
-      if (!pivotData[rowKey][colKey]) {
-        pivotData[rowKey][colKey] = []
-      }
+      if (!pivotRaw[rowKey]) pivotRaw[rowKey] = {}
+      if (!pivotRaw[rowKey][colKey]) pivotRaw[rowKey][colKey] = []
 
-      pivotData[rowKey][colKey].push(asset)
+      pivotRaw[rowKey][colKey].push(asset)
       columnKeys.add(colKey)
     })
 
-    // Calculate aggregated values
+    // Aggregate values
+    const aggregate = (items) => {
+      switch (aggregation) {
+        case 'count':
+          return items.length
+        case 'sum_book_value':
+          return items.reduce((s, i) => s + (parseFloat(i.book_value) || 0), 0)
+        case 'sum_acq_cost':
+          return items.reduce((s, i) => s + (parseFloat(i.acq_cost) || 0), 0)
+        case 'avg_book_value':
+          return items.reduce((s, i) => s + (parseFloat(i.book_value) || 0), 0) / items.length
+        case 'avg_estimate_life':
+          return items.reduce((s, i) => s + (parseFloat(i.estimate_life) || 0), 0) / items.length
+        default:
+          return items.length
+      }
+    }
+
     const aggregatedData = {}
-    Object.keys(pivotData).forEach((rowKey) => {
+    let maxCellValue = 0
+    Object.keys(pivotRaw).forEach((rowKey) => {
       aggregatedData[rowKey] = {}
-      Object.keys(pivotData[rowKey]).forEach((colKey) => {
-        const items = pivotData[rowKey][colKey]
-        switch (aggregation) {
-          case 'count':
-            aggregatedData[rowKey][colKey] = items.length
-            break
-          case 'sum_book_value':
-            aggregatedData[rowKey][colKey] = items.reduce(
-              (sum, item) => sum + (parseFloat(item.book_value) || 0),
-              0
-            )
-            break
-          case 'sum_acq_cost':
-            aggregatedData[rowKey][colKey] = items.reduce(
-              (sum, item) => sum + (parseFloat(item.acq_cost) || 0),
-              0
-            )
-            break
-          case 'avg_book_value':
-            aggregatedData[rowKey][colKey] =
-              items.reduce((sum, item) => sum + (parseFloat(item.book_value) || 0), 0) /
-              items.length
-            break
-          case 'avg_estimate_life':
-            aggregatedData[rowKey][colKey] =
-              items.reduce((sum, item) => sum + (parseFloat(item.estimate_life) || 0), 0) /
-              items.length
-            break
-          default:
-            aggregatedData[rowKey][colKey] = items.length
-        }
+      Object.keys(pivotRaw[rowKey]).forEach((colKey) => {
+        const val = aggregate(pivotRaw[rowKey][colKey])
+        aggregatedData[rowKey][colKey] = val
+        if (val > maxCellValue) maxCellValue = val
       })
     })
 
+    // Sort rows by total descending
+    const allColKeys = Array.from(columnKeys)
+    const rowTotals = {}
+    Object.keys(aggregatedData).forEach((rk) => {
+      rowTotals[rk] = allColKeys.reduce((s, ck) => s + (aggregatedData[rk][ck] || 0), 0)
+    })
+    const sortedRowKeys = Object.keys(aggregatedData).sort((a, b) => rowTotals[b] - rowTotals[a])
+
+    // Sort columns by total descending
+    const colTotals = {}
+    allColKeys.forEach((ck) => {
+      colTotals[ck] = sortedRowKeys.reduce((s, rk) => s + (aggregatedData[rk][ck] || 0), 0)
+    })
+    const sortedColKeys = allColKeys.sort((a, b) => colTotals[b] - colTotals[a])
+
     return {
       data: aggregatedData,
-      rowKeys: Object.keys(pivotData).sort(),
-      columnKeys: Array.from(columnKeys).sort(),
+      rowKeys: sortedRowKeys,
+      columnKeys: sortedColKeys,
+      rowTotals,
+      colTotals,
+      maxCellValue,
+      grandTotal: sortedRowKeys.reduce((s, rk) => s + rowTotals[rk], 0),
     }
   }, [assetsData, pivotConfig])
 
@@ -1149,53 +1136,65 @@ function AssetsPage() {
     setPivotConfig((prev) => ({ ...prev, [field]: value }))
   }
 
-  // Export pivot to CSV
+  // Export pivot to CSV — matches the displayed pivot configuration
   const exportPivotToCSV = () => {
     if (!pivotData) return
 
-    const { data, rowKeys, columnKeys } = pivotData
-    let csv = `${pivotConfig.rowDimension},${columnKeys.join(',')}`
+    const { data, rowKeys, columnKeys, rowTotals, colTotals, grandTotal } = pivotData
+    const { aggregation, rowDimension, columnDimension, showTotals } = pivotConfig
 
-    if (pivotConfig.showTotals) {
-      csv += ',Total'
+    const aggLabel = {
+      count: 'Count',
+      sum_book_value: 'Total Book Value (₱)',
+      sum_acq_cost: 'Total Acquisition Cost (₱)',
+      avg_book_value: 'Average Book Value (₱)',
+      avg_estimate_life: 'Average Estimated Life (yrs)',
+    }[aggregation] || 'Count'
+
+    const dimLabel = (d) => d.charAt(0).toUpperCase() + d.slice(1)
+
+    const fmtVal = (v) => {
+      if (v === undefined || v === null || v === 0) return ''
+      if (['sum_book_value', 'sum_acq_cost', 'avg_book_value'].includes(aggregation))
+        return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      if (aggregation === 'avg_estimate_life') return v.toFixed(1)
+      return v.toLocaleString()
     }
-    csv += '\n'
 
-    rowKeys.forEach((rowKey) => {
-      let row = `"${rowKey}"`
-      let rowTotal = 0
+    const lines = []
+    // Metadata
+    lines.push(`MIS System — Pivot Table Export`)
+    lines.push(`Generated: ${new Date().toLocaleString()}`)
+    lines.push(`Metric: ${aggLabel}`)
+    lines.push(`Rows: ${dimLabel(rowDimension)} | Columns: ${dimLabel(columnDimension)}`)
+    lines.push(`Total Assets: ${rowKeys.reduce((s, rk) => s + (rowTotals[rk] || 0), 0)}`)
+    lines.push('')
 
-      columnKeys.forEach((colKey) => {
-        const value = data[rowKey][colKey] || 0
-        row += `,${value}`
-        rowTotal += value
-      })
+    // Header
+    const header = [`"${dimLabel(rowDimension)}"`, ...columnKeys.map((ck) => `"${ck}"`)]
+    if (showTotals) header.push('"Total"')
+    lines.push(header.join(','))
 
-      if (pivotConfig.showTotals) {
-        row += `,${rowTotal}`
-      }
-      csv += row + '\n'
+    // Data rows
+    rowKeys.forEach((rk) => {
+      const cells = [`"${rk}"`, ...columnKeys.map((ck) => fmtVal(data[rk][ck] || 0))]
+      if (showTotals) cells.push(fmtVal(rowTotals[rk]))
+      lines.push(cells.join(','))
     })
 
-    if (pivotConfig.showTotals) {
-      let totalsRow = 'Total'
-      let grandTotal = 0
-
-      columnKeys.forEach((colKey) => {
-        const colTotal = rowKeys.reduce((sum, rowKey) => sum + (data[rowKey][colKey] || 0), 0)
-        totalsRow += `,${colTotal}`
-        grandTotal += colTotal
-      })
-
-      totalsRow += `,${grandTotal}`
-      csv += totalsRow + '\n'
+    // Totals row
+    if (showTotals) {
+      const totCells = ['"Total"', ...columnKeys.map((ck) => fmtVal(colTotals[ck]))]
+      totCells.push(fmtVal(grandTotal))
+      lines.push(totCells.join(','))
     }
 
+    const csv = lines.join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `pivot-table-${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `pivot-${rowDimension}-by-${columnDimension}-${new Date().toISOString().split('T')[0]}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
   }

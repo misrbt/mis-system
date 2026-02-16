@@ -112,7 +112,7 @@ class AssetMovement extends Model
      */
     public function getMovementDescription()
     {
-        return match($this->movement_type) {
+        return match ($this->movement_type) {
             'created' => 'Asset created',
             'assigned' => 'Assigned to ' . ($this->toEmployee?->fullname ?? 'employee'),
             'transferred' => 'Transferred from ' . ($this->fromEmployee?->fullname ?? 'previous employee') . ' to ' . ($this->toEmployee?->fullname ?? 'new employee'),
@@ -130,13 +130,14 @@ class AssetMovement extends Model
             'disposed' => 'Asset disposed',
             'code_generated' => 'QR/Barcode generated',
             'inventory_operation' => $this->remarks ?? 'Inventory operation performed',
+            'under_repair_reminder' => 'Under repair reminder shown (' . ($this->metadata['under_repair_count'] ?? '0') . ' assets)',
             default => 'Unknown movement',
         };
     }
 
     public function getIconClass()
     {
-        return match($this->movement_type) {
+        return match ($this->movement_type) {
             'created' => 'Plus',
             'assigned', 'transferred' => 'User',
             'returned' => 'UserX',
@@ -148,13 +149,14 @@ class AssetMovement extends Model
             'disposed' => 'Trash2',
             'code_generated' => 'QrCode',
             'inventory_operation' => 'Database',
+            'under_repair_reminder' => 'Wrench',
             default => 'CircleDot',
         };
     }
 
     public function getColorClass()
     {
-        return match($this->movement_type) {
+        return match ($this->movement_type) {
             'created' => 'green',
             'assigned' => 'blue',
             'transferred' => 'purple',
@@ -172,6 +174,7 @@ class AssetMovement extends Model
             'disposed' => 'red',
             'code_generated' => 'cyan',
             'inventory_operation' => 'yellow',
+            'under_repair_reminder' => 'amber',
             default => 'slate',
         };
     }

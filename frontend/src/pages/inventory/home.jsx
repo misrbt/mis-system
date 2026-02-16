@@ -20,7 +20,6 @@ import {
 
 // UI Components
 import DashboardCard from '../../components/dashboard/DashboardCard'
-import RepairSummaryCard from '../../components/dashboard/RepairSummaryCard'
 import { SkeletonCard, SkeletonChart, SkeletonTable } from '../../components/dashboard/SkeletonLoader'
 
 // Lazy load heavy chart components for better performance
@@ -174,10 +173,6 @@ function InventoryHome() {
           </div>
         </div>
 
-        {/* Repair Summary Section */}
-        <div className="mb-8">
-          <RepairSummaryCard />
-        </div>
 
         {/* Financial Charts */}
         <Suspense fallback={<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"><SkeletonChart /><SkeletonChart /></div>}>

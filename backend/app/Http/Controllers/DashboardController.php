@@ -32,7 +32,7 @@ class DashboardController extends Controller
                 'data' => $statistics,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Dashboard statistics error: '.$e->getMessage(), [
+            Log::error('Dashboard statistics error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
@@ -152,8 +152,8 @@ class DashboardController extends Controller
                             'branch.branch_name',
                             'employee.fullname as employee_name'
                         )
-                        ->selectRaw($priorityOrderCase.' as priority_order', [$now, 'Under Repair'])
-                        ->selectRaw($priorityCase.' as priority', [$now, 'Under Repair', $oneMonthFromNow])
+                        ->selectRaw($priorityOrderCase . ' as priority_order', [$now, 'Under Repair'])
+                        ->selectRaw($priorityCase . ' as priority', [$now, 'Under Repair', $oneMonthFromNow])
                         ->where(function ($query) use ($threeMonthsFromNow) {
                             $query->where(function ($q) use ($threeMonthsFromNow) {
                                 $q->whereNotNull('assets.waranty_expiration_date')
@@ -167,7 +167,7 @@ class DashboardController extends Controller
                         ->get()
                         ->map(function ($asset) use ($now) {
                             $lastUpdate = $asset->updated_at ?: $asset->created_at;
-                            $nextMaintenance = date('Y-m-d', strtotime($lastUpdate.' +30 days'));
+                            $nextMaintenance = date('Y-m-d', strtotime($lastUpdate . ' +30 days'));
 
                             $reason = 'Scheduled maintenance';
                             $warrantyExpiration = $asset->warranty_expiration
@@ -182,7 +182,7 @@ class DashboardController extends Controller
                                 if ($daysUntilExpiry <= 30) {
                                     $reason = "Warranty expiring in {$daysUntilExpiry} days";
                                 } else {
-                                    $reason = 'Warranty expiring in '.ceil($daysUntilExpiry / 30).' months';
+                                    $reason = 'Warranty expiring in ' . ceil($daysUntilExpiry / 30) . ' months';
                                 }
                             }
 
@@ -223,7 +223,7 @@ class DashboardController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Dashboard initial data error: '.$e->getMessage(), [
+            Log::error('Dashboard initial data error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
@@ -248,7 +248,7 @@ class DashboardController extends Controller
 
             $trend = DB::table('assets')
                 ->select(
-                    DB::raw($monthExpression.' as month'),
+                    DB::raw($monthExpression . ' as month'),
                     DB::raw('COUNT(*) as count')
                 )
                 ->where('purchase_date', '>=', now()->subMonths(12))
@@ -262,7 +262,7 @@ class DashboardController extends Controller
                 'data' => $trend,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Asset trend error: '.$e->getMessage());
+            Log::error('Asset trend error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -326,7 +326,7 @@ class DashboardController extends Controller
                 'data' => $activities,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Recent activity error: '.$e->getMessage());
+            Log::error('Recent activity error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -349,7 +349,7 @@ class DashboardController extends Controller
                 'data' => $expenses,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Monthly expenses error: '.$e->getMessage());
+            Log::error('Monthly expenses error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -372,7 +372,7 @@ class DashboardController extends Controller
                 'data' => $expenses,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Yearly expenses error: '.$e->getMessage());
+            Log::error('Yearly expenses error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -404,7 +404,7 @@ class DashboardController extends Controller
                 'data' => $expenses,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Expense trends error: '.$e->getMessage());
+            Log::error('Expense trends error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -555,7 +555,7 @@ class DashboardController extends Controller
                 'data' => $breakdown,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Expense breakdown error: '.$e->getMessage());
+            Log::error('Expense breakdown error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -609,15 +609,15 @@ class DashboardController extends Controller
                         'branch.branch_name',
                         'employee.fullname as employee_name'
                     )
-                    ->selectRaw($priorityOrderCase.' as priority_order', [$now, 'Under Repair'])
-                    ->selectRaw($priorityCase.' as priority', [$now, 'Under Repair', $oneMonthFromNow])
+                    ->selectRaw($priorityOrderCase . ' as priority_order', [$now, 'Under Repair'])
+                    ->selectRaw($priorityCase . ' as priority', [$now, 'Under Repair', $oneMonthFromNow])
                     ->where(function ($query) use ($threeMonthsFromNow) {
                         // Warranty expiring within 3 months or already expired
                         $query->where(function ($q) use ($threeMonthsFromNow) {
                             $q->whereNotNull('assets.waranty_expiration_date')
                                 ->where('assets.waranty_expiration_date', '<=', $threeMonthsFromNow);
                         })
-                        // Or under repair
+                            // Or under repair
                             ->orWhere('status.name', 'Under Repair');
                     })
                     ->orderBy('priority_order')
@@ -627,7 +627,7 @@ class DashboardController extends Controller
                     ->map(function ($asset) use ($now) {
                         // Calculate next maintenance
                         $lastUpdate = $asset->updated_at ?: $asset->created_at;
-                        $nextMaintenance = date('Y-m-d', strtotime($lastUpdate.' +30 days'));
+                        $nextMaintenance = date('Y-m-d', strtotime($lastUpdate . ' +30 days'));
 
                         // Determine reason
                         $reason = 'Scheduled maintenance';
@@ -643,7 +643,7 @@ class DashboardController extends Controller
                             if ($daysUntilExpiry <= 30) {
                                 $reason = "Warranty expiring in {$daysUntilExpiry} days";
                             } else {
-                                $reason = 'Warranty expiring in '.ceil($daysUntilExpiry / 30).' months';
+                                $reason = 'Warranty expiring in ' . ceil($daysUntilExpiry / 30) . ' months';
                             }
                         }
 
@@ -669,12 +669,108 @@ class DashboardController extends Controller
                 'data' => $assets,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Assets needing attention error: '.$e->getMessage());
+            Log::error('Assets needing attention error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch assets needing attention',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all assets currently with "Under Repair" status
+     * Used for the reminder popup on inventory/dashboard access
+     */
+    public function getUnderRepairAssets()
+    {
+        try {
+            $cacheKey = 'dashboard:under_repair_assets';
+
+            $assets = Cache::remember($cacheKey, 120, function () {
+                $now = now();
+
+                return DB::table('assets')
+                    ->join('status', 'assets.status_id', '=', 'status.id')
+                    ->leftJoin('asset_category', 'assets.asset_category_id', '=', 'asset_category.id')
+                    ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
+                    ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
+                    ->select(
+                        'assets.id',
+                        'assets.asset_name',
+                        'assets.serial_number',
+                        'assets.updated_at',
+                        'assets.purchase_date',
+                        'asset_category.name as category_name',
+                        'status.name as status_name',
+                        'branch.branch_name',
+                        'employee.fullname as employee_name'
+                    )
+                    ->where('status.name', 'Under Repair')
+                    ->orderBy('assets.updated_at', 'desc')
+                    ->get()
+                    ->map(function ($asset) use ($now) {
+                        // Calculate days under repair (since last updated to this status)
+                        $updatedAt = $asset->updated_at
+                            ? \Carbon\Carbon::parse($asset->updated_at)
+                            : $now;
+                        $daysUnderRepair = $updatedAt->diffInDays($now);
+
+                        return [
+                            'id' => $asset->id,
+                            'asset_name' => $asset->asset_name,
+                            'serial_number' => $asset->serial_number,
+                            'category' => $asset->category_name ?? 'Unknown',
+                            'branch' => $asset->branch_name ?? 'Unassigned',
+                            'assigned_to' => trim($asset->employee_name) ?: 'Unassigned',
+                            'days_under_repair' => $daysUnderRepair,
+                            'since' => $updatedAt->format('Y-m-d'),
+                        ];
+                    });
+            });
+
+            // Log audit trail when reminder is shown to user and there are under-repair assets
+            if ($assets->count() > 0) {
+                try {
+                    \App\Models\AssetMovement::create([
+                        'asset_id' => null,
+                        'movement_type' => 'under_repair_reminder',
+                        'performed_by_user_id' => \Illuminate\Support\Facades\Auth::id(),
+                        'reason' => 'Under repair reminder shown on dashboard access',
+                        'remarks' => 'Reminded: ' . $assets->count() . ' asset(s) currently under repair',
+                        'metadata' => [
+                            'entity_type' => 'under_repair_reminder',
+                            'operation' => 'reminder_shown',
+                            'under_repair_count' => $assets->count(),
+                            'asset_names' => $assets->pluck('asset_name')->toArray(),
+                        ],
+                        'movement_date' => now(),
+                        'ip_address' => \Illuminate\Support\Facades\Request::ip(),
+                        'user_agent' => \Illuminate\Support\Facades\Request::userAgent(),
+                    ]);
+                } catch (\Exception $auditError) {
+                    Log::warning('Failed to log under repair reminder audit: ' . $auditError->getMessage());
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'has_under_repair' => $assets->count() > 0,
+                    'count' => $assets->count(),
+                    'assets' => $assets,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Under repair assets error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch under repair assets',
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
             ], 500);
         }
     }
@@ -694,7 +790,7 @@ class DashboardController extends Controller
                 'data' => $statistics,
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Branch statistics error: '.$e->getMessage(), [
+            Log::error('Branch statistics error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
@@ -719,7 +815,7 @@ class DashboardController extends Controller
                 'message' => 'Dashboard cache cleared successfully',
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Clear cache error: '.$e->getMessage());
+            Log::error('Clear cache error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,

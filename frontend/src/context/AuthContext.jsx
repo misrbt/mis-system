@@ -51,6 +51,9 @@ export function AuthProvider({ children }) {
 
       if (response.data.success) {
         const { user: userData, token: authToken } = response.data.data
+        // Clear under-repair reminder dismissal so it shows on each new login session
+        localStorage.removeItem('under_repair_reminder_dismissed')
+        localStorage.removeItem('under_repair_reminder_dismissed_expiry')
         localStorage.setItem('auth_token', authToken)
         setToken(authToken)
         setUser(userData)
@@ -95,6 +98,9 @@ export function AuthProvider({ children }) {
       console.error('Logout error:', error)
     } finally {
       localStorage.removeItem('auth_token')
+      // Clear under-repair reminder dismissal so it shows on next login
+      localStorage.removeItem('under_repair_reminder_dismissed')
+      localStorage.removeItem('under_repair_reminder_dismissed_expiry')
       setToken(null)
       setUser(null)
       setIsAuthenticated(false)
