@@ -20,6 +20,7 @@ use App\Http\Controllers\ReportSignatoryController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\SoftwareLicenseController;
 use App\Http\Controllers\StatusController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\VendorController;
 use Illuminate\Support\Facades\Route;
 
@@ -110,6 +111,10 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
             ],
         ]);
     });
+
+    // User Management routes
+    Route::apiResource('users', UserController::class);
+    Route::patch('users/{user}/toggle-status', [UserController::class, 'toggleStatus']);
 
     // Branch routes
     Route::apiResource('branches', BranchController::class);

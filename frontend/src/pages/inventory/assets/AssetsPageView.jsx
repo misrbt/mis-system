@@ -31,8 +31,8 @@ import { formatCurrency, formatDate } from '../../../utils/assetFormatters'
 import AssetsHeaderBar from './AssetsHeaderBar'
 import AssetsFiltersPanel from './AssetsFiltersPanel'
 import AssetsBulkActions from './AssetsBulkActions'
-import AdvancedAssetTracker from './AdvancedAssetTracker'
 const AssetsPivotView = lazy(() => import('./AssetsPivotView'))
+const AdvancedAssetTracker = lazy(() => import('./AdvancedAssetTracker'))
 
 const normalizeArrayResponse = (data) => {
   if (Array.isArray(data?.data)) return data.data
@@ -152,6 +152,8 @@ function AssetsPage() {
   const [tableGlobalFilter, setTableGlobalFilter] = useState('')
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
+  const [mobileSearchInput, setMobileSearchInput] = useState('')
+  const mobileSearchTimeout = useRef(null)
   const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
   const isTableView = viewMode === 'table'
   const [vendorFormData, setVendorFormData] = useState({
@@ -166,40 +168,45 @@ function AssetsPage() {
   // Tab state
   const [activeTab, setActiveTab] = useState('inventory')
 
+  const viewModeRef = useRef(viewMode)
+  viewModeRef.current = viewMode
+
+  // Defer heavy secondary queries until after first paint
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const smallQuery = window.matchMedia('(max-width: 639px)')
     const largeQuery = window.matchMedia('(min-width: 640px)')
     const syncViewMode = () => {
-      if (smallQuery.matches && viewMode !== 'cards') {
+      if (smallQuery.matches && viewModeRef.current !== 'cards') {
         setViewMode('cards')
       }
-      if (largeQuery.matches && viewMode === 'cards') {
+      if (largeQuery.matches && viewModeRef.current === 'cards') {
         setViewMode('table')
       }
     }
-
     syncViewMode()
-
     smallQuery.addEventListener('change', syncViewMode)
     largeQuery.addEventListener('change', syncViewMode)
     return () => {
       smallQuery.removeEventListener('change', syncViewMode)
       largeQuery.removeEventListener('change', syncViewMode)
     }
-  }, [viewMode])
+  }, []) // Runs once on mount only; uses ref to read current viewMode
 
   // Filter state - initialize from URL search params or sessionStorage so filters persist across navigation
   const isInitialMount = useRef(true)
   const [filters, setFilters] = useState(() => {
     const restored = { ...INITIAL_FILTERS }
     // First try URL search params
-    let hasUrlParams = false
     Object.keys(INITIAL_FILTERS).forEach((key) => {
       const val = searchParams.get(key)
       if (val) {
         restored[key] = val
-        hasUrlParams = true
       }
     })
     // Fallback to sessionStorage removed to prevent auto-loading filters on clean navigation
@@ -229,8 +236,11 @@ function AssetsPage() {
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params.set(key, value)
     })
-    setSearchParams(params, { replace: true })
     const paramStr = params.toString()
+    // Only push to router when params actually changed to avoid unnecessary re-renders
+    if (paramStr !== searchParams.toString()) {
+      setSearchParams(params, { replace: true })
+    }
     if (paramStr) {
       sessionStorage.setItem('assets_filter_params', paramStr)
     } else {
@@ -254,6 +264,8 @@ function AssetsPage() {
       const response = await apiClient.get(`/assets?${params}`)
       return response.data
     },
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
   })
 
   const { data: assetsTotalsData, isLoading: isLoadingTotals } = useQuery({
@@ -264,6 +276,8 @@ function AssetsPage() {
       return response.data
     },
     enabled: isTableView,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
   })
 
   // Fetch filter options
@@ -273,6 +287,7 @@ function AssetsPage() {
       const response = await apiClient.get('/branches')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: categories } = useQuery({
@@ -281,6 +296,7 @@ function AssetsPage() {
       const response = await apiClient.get('/asset-categories')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: subcategories } = useQuery({
@@ -310,6 +326,7 @@ function AssetsPage() {
       const response = await apiClient.get('/statuses')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: vendors } = useQuery({
@@ -318,6 +335,7 @@ function AssetsPage() {
       const response = await apiClient.get('/vendors')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: employees } = useQuery({
@@ -326,6 +344,8 @@ function AssetsPage() {
       const response = await apiClient.get('/employees')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
+    enabled: hydrated,
   })
 
   // Fetch equipment list
@@ -335,6 +355,7 @@ function AssetsPage() {
       const response = await apiClient.get('/equipment')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const employeeAcqTotals = useMemo(() => {
@@ -1030,7 +1051,6 @@ function AssetsPage() {
   const tableFilteredCount = deferredTableGlobalFilter
     ? table.getFilteredRowModel().rows.length
     : assetsList.length
-  const totalAssets = assetsList.length
 
   // Pivot table calculation
   const calculatePivotData = useCallback(() => {
@@ -1406,8 +1426,12 @@ function AssetsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                value={mobileGlobalFilter ?? ''}
-                onChange={(e) => setMobileGlobalFilter(e.target.value)}
+                value={mobileSearchInput}
+                onChange={(e) => {
+                  setMobileSearchInput(e.target.value)
+                  clearTimeout(mobileSearchTimeout.current)
+                  mobileSearchTimeout.current = setTimeout(() => setMobileGlobalFilter(e.target.value), 300)
+                }}
                 placeholder="Search assets..."
                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -1680,78 +1704,92 @@ function AssetsPage() {
 
       {/* Advanced Asset Tracker Tab */}
       {activeTab === 'tracker' && (
-        <AdvancedAssetTracker
-          branches={branches}
+        <Suspense
+          fallback={(
+            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
+              <div className="flex items-center justify-center">
+                <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+                <span className="ml-2 text-slate-600">Loading tracker...</span>
+              </div>
+            </div>
+          )}
+        >
+          <AdvancedAssetTracker
+            branches={branches}
+            categories={categories}
+            statuses={statuses}
+            vendors={vendors}
+            employees={employees}
+          />
+        </Suspense>
+      )}
+
+      {/* Add Modal — only mounted while open to avoid hook overhead when closed */}
+      {isAddModalOpen && (
+        <AssetFormModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          title="Add New Asset"
+          onSubmit={handleCreate}
+          submitLabel={createMutation.isPending ? 'Creating...' : 'Create Asset'}
+          isSubmitting={createMutation.isPending}
+          formData={formData}
+          onInputChange={handleInputChange}
+          onVendorChange={handleVendorChange}
+          onEmployeeChange={handleEmployeeChange}
+          onGenerateSerial={generateSerialNumber}
+          onGenerateComponentSerial={generateComponentSerialNumber}
+          onAddVendor={openVendorModal}
           categories={categories}
-          statuses={statuses}
-          vendors={vendors}
-          employees={employees}
+          subcategories={subcategories || []}
+          vendorOptions={vendorOptions}
+          employeeOptions={employeeOptions}
+          statusOptions={statusOptions}
+          assignmentTitle="Assignment & Remarks"
+          assignmentSubtitle="Employee assignment and additional notes"
+          usePlaceholders
+          components={components}
+          onComponentAdd={handleComponentAdd}
+          onComponentRemove={handleComponentRemove}
+          onComponentChange={handleComponentChange}
+          equipmentOptions={equipmentOptions}
+          isEditMode={false}
         />
       )}
 
-      {/* Add Modal - Part 1 */}
-      <AssetFormModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Add New Asset"
-        onSubmit={handleCreate}
-        submitLabel={createMutation.isPending ? 'Creating...' : 'Create Asset'}
-        isSubmitting={createMutation.isPending}
-        formData={formData}
-        onInputChange={handleInputChange}
-        onVendorChange={handleVendorChange}
-        onEmployeeChange={handleEmployeeChange}
-        onGenerateSerial={generateSerialNumber}
-        onGenerateComponentSerial={generateComponentSerialNumber}
-        onAddVendor={openVendorModal}
-        categories={categories}
-        subcategories={subcategories || []}
-        vendorOptions={vendorOptions}
-        employeeOptions={employeeOptions}
-        statusOptions={statusOptions}
-        assignmentTitle="Assignment & Remarks"
-        assignmentSubtitle="Employee assignment and additional notes"
-        usePlaceholders
-        components={components}
-        onComponentAdd={handleComponentAdd}
-        onComponentRemove={handleComponentRemove}
-
-        onComponentChange={handleComponentChange}
-        equipmentOptions={equipmentOptions}
-        isEditMode={false}
-      />
-
-      {/* Edit Modal - Similar to Add Modal */}
-      <AssetFormModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        title="Edit Asset"
-        onSubmit={handleUpdate}
-        submitLabel={updateMutation.isPending ? 'Updating...' : 'Update Asset'}
-        isSubmitting={updateMutation.isPending}
-        formData={formData}
-        onInputChange={handleInputChange}
-        onVendorChange={handleVendorChange}
-        onEmployeeChange={handleEmployeeChange}
-        onAddVendor={openVendorModal}
-        onGenerateSerial={generateSerialNumber}
-        categories={categories}
-        subcategories={subcategories || []}
-        vendorOptions={vendorOptions}
-        employeeOptions={employeeOptions}
-        statusOptions={statusOptions}
-        showStatus
-        showBookValue
-        assignmentTitle="Assignment & Status"
-        assignmentSubtitle="Employee assignment and asset status"
-        equipmentOptions={equipmentOptions}
-        components={components}
-        onComponentAdd={handleComponentAdd}
-        onComponentRemove={handleComponentRemove}
-        onComponentChange={handleComponentChange}
-        onGenerateComponentSerial={generateComponentSerialNumber}
-        isEditMode={true}
-      />
+      {/* Edit Modal — only mounted while open to avoid hook overhead when closed */}
+      {isEditModalOpen && (
+        <AssetFormModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          title="Edit Asset"
+          onSubmit={handleUpdate}
+          submitLabel={updateMutation.isPending ? 'Updating...' : 'Update Asset'}
+          isSubmitting={updateMutation.isPending}
+          formData={formData}
+          onInputChange={handleInputChange}
+          onVendorChange={handleVendorChange}
+          onEmployeeChange={handleEmployeeChange}
+          onAddVendor={openVendorModal}
+          onGenerateSerial={generateSerialNumber}
+          categories={categories}
+          subcategories={subcategories || []}
+          vendorOptions={vendorOptions}
+          employeeOptions={employeeOptions}
+          statusOptions={statusOptions}
+          showStatus
+          showBookValue
+          assignmentTitle="Assignment & Status"
+          assignmentSubtitle="Employee assignment and asset status"
+          equipmentOptions={equipmentOptions}
+          components={components}
+          onComponentAdd={handleComponentAdd}
+          onComponentRemove={handleComponentRemove}
+          onComponentChange={handleComponentChange}
+          onGenerateComponentSerial={generateComponentSerialNumber}
+          isEditMode={true}
+        />
+      )}
 
       {/* Add Vendor Modal */}
       <Modal

@@ -1186,6 +1186,7 @@ export default function useAssetViewController({ id, employeeId }) {
     statistics,
     actualEmployeeId,
     isLoading,
+    isLoadingEmployee,
     isLoadingMovements,
     isLoadingAssignments,
     isLoadingHistory,

@@ -77,7 +77,8 @@ class RepairController extends Controller
 
             $query->orderBy($sortBy, $sortOrder);
 
-            $repairs = $query->get();
+            $perPage = $request->input('per_page', 50);
+            $repairs = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,

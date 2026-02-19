@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -26,9 +27,6 @@ const initialForm = {
 }
 
 function BranchPage() {
-  const [branches, setBranches] = useState([])
-  const [loading, setLoading] = useState(true)
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState(null)
@@ -37,35 +35,60 @@ function BranchPage() {
   const [mobileSorting, setMobileSorting] = useState([])
 
   const resetForm = () => setFormData(initialForm)
-  const getErrorMessage = (error, fallbackMessage) => {
-    if (error.response?.data?.errors) {
-      const errors = error.response.data.errors
-      return Object.values(errors).flat().join('\n')
-    }
-    return error.response?.data?.message || error.message || fallbackMessage
-  }
 
-  const fetchBranches = useCallback(async () => {
-    try {
-      setLoading(true)
+  const queryClient = useQueryClient()
+
+  const { data: branches = [], isLoading: loading } = useQuery({
+    queryKey: ['branches'],
+    queryFn: async () => {
       const response = await fetchBranchesRequest()
-      if (response.data?.success) {
-        setBranches(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch branches',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+      return response.data?.data ?? []
+    },
+  })
 
-  useEffect(() => {
-    fetchBranches()
-  }, [fetchBranches])
+  const createMutation = useMutation({
+    mutationFn: (data) => createBranchRequest(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['branches'] })
+      setIsAddModalOpen(false)
+      resetForm()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Branch created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join('\n')
+        : error.response?.data?.message || error.message || 'Failed to create branch'
+      Swal.fire({ icon: 'error', title: 'Error', text: msg })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => updateBranchRequest(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['branches'] })
+      closeEditModal()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Branch updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join('\n')
+        : error.response?.data?.message || error.message || 'Failed to update branch'
+      Swal.fire({ icon: 'error', title: 'Error', text: msg })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteBranchRequest(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['branches'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Branch deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete branch' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -94,86 +117,29 @@ function BranchPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await createBranchRequest(formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchBranches()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: getErrorMessage(error, 'Failed to create branch'),
-      })
-    }
+    createMutation.mutate(formData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await updateBranchRequest(selectedBranch.id, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        closeEditModal()
-        fetchBranches()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: getErrorMessage(error, 'Failed to update branch'),
-      })
-    }
+    updateMutation.mutate({ id: selectedBranch.id, data: formData })
   }
 
-  const handleDelete = useCallback(
-    async (branch) => {
-      const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: `Delete branch "${branch.branch_name}"?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc2626',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-      })
-
-      if (result.isConfirmed) {
-        try {
-          const response = await deleteBranchRequest(branch.id)
-          if (response.data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Deleted!',
-              text: response.data.message,
-              timer: 2000,
-            })
-            fetchBranches()
-          }
-        } catch (error) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: error.response?.data?.message || 'Failed to delete branch',
-          })
-        }
-      }
-    },
-    [fetchBranches]
-  )
+  const handleDelete = useCallback(async (branch) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Delete branch "${branch.branch_name}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+    })
+    if (result.isConfirmed) {
+      deleteMutateRef.current(branch.id)
+    }
+  }, [])
 
   const columns = useMemo(() => getBranchColumns(openEditModal, handleDelete), [handleDelete, openEditModal])
   const mobileColumns = useMemo(
@@ -207,7 +173,9 @@ function BranchPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : branches.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 

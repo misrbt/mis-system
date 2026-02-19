@@ -7,6 +7,7 @@ use App\Http\Requests\SoftwareLicense\UpdateSoftwareLicenseRequest;
 use App\Models\SoftwareLicense;
 use App\Traits\ValidatesSort;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class SoftwareLicenseController extends Controller
 {

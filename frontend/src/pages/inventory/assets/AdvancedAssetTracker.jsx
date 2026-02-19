@@ -117,7 +117,7 @@ const AdvancedAssetTracker = ({
   }, [])
 
   // Fetch assets with filters
-  const { data: assetsData, isLoading, refetch } = useQuery({
+  const { data: assetsData, isLoading } = useQuery({
     queryKey: ['tracked-assets', appliedFilters],
     queryFn: async () => {
       const queryString = buildQueryParams(appliedFilters)
@@ -126,6 +126,7 @@ const AdvancedAssetTracker = ({
     },
     enabled: showResults,
     staleTime: 0,
+
   })
 
   const assets = useMemo(() => assetsData || [], [assetsData])

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Key, User, Building2, Briefcase, Users, Package } from 'lucide-react'
 import {
   useReactTable,
@@ -16,20 +17,9 @@ import OfficeToolsTab from './software-license/OfficeToolsTab'
 
 function SoftwareLicensePage() {
   const [activeTab, setActiveTab] = useState('licenses')
-  const [licenses, setLicenses] = useState([])
-  const [loading, setLoading] = useState(true)
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedLicense, setSelectedLicense] = useState(null)
-
-  // Dropdown data
-  const [employees, setEmployees] = useState([])
-  const [positions, setPositions] = useState([])
-  const [sections, setSections] = useState([])
-  const [branches, setBranches] = useState([])
-  const [assetCategories, setAssetCategories] = useState([])
-  const [officeTools, setOfficeTools] = useState([])
 
   const [formData, setFormData] = useState({
     employee_id: '',
@@ -47,50 +37,100 @@ function SoftwareLicensePage() {
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
 
-  const fetchLicenses = async () => {
-    try {
-      setLoading(true)
+  const queryClient = useQueryClient()
+
+  const { data: licenses = [], isLoading: loading } = useQuery({
+    queryKey: ['software-licenses'],
+    queryFn: async () => {
       const response = await apiClient.get('/software-licenses')
-      if (response.data.success) {
-        setLicenses(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch software licenses',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+      return response.data?.data ?? []
+    },
+  })
 
-  const fetchDropdownData = async () => {
-    try {
-      const [empRes, posRes, secRes, branchRes, catRes, officeRes] = await Promise.all([
-        apiClient.get('/employees'),
-        apiClient.get('/positions'),
-        apiClient.get('/sections'),
-        apiClient.get('/branches'),
-        apiClient.get('/asset-categories'),
-        apiClient.get('/office-tools'),
-      ])
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: async () => {
+      const response = await apiClient.get('/employees')
+      return response.data?.data ?? []
+    },
+  })
 
-      if (empRes.data.success) setEmployees(empRes.data.data)
-      if (posRes.data.success) setPositions(posRes.data.data)
-      if (secRes.data.success) setSections(secRes.data.data)
-      if (branchRes.data.success) setBranches(branchRes.data.data)
-      if (catRes.data.success) setAssetCategories(catRes.data.data)
-      if (officeRes.data.success) setOfficeTools(officeRes.data.data)
-    } catch (error) {
-      console.error('Failed to fetch dropdown data:', error)
-    }
-  }
+  const { data: positions = [] } = useQuery({
+    queryKey: ['positions'],
+    queryFn: async () => {
+      const response = await apiClient.get('/positions')
+      return response.data?.data ?? []
+    },
+  })
 
-  useEffect(() => {
-    fetchLicenses()
-    fetchDropdownData()
-  }, [])
+  const { data: sections = [] } = useQuery({
+    queryKey: ['sections'],
+    queryFn: async () => {
+      const response = await apiClient.get('/sections')
+      return response.data?.data ?? []
+    },
+  })
+
+  const { data: branches = [] } = useQuery({
+    queryKey: ['branches'],
+    queryFn: async () => {
+      const response = await apiClient.get('/branches')
+      return response.data?.data ?? []
+    },
+  })
+
+  const { data: assetCategories = [] } = useQuery({
+    queryKey: ['asset-categories'],
+    queryFn: async () => {
+      const response = await apiClient.get('/asset-categories')
+      return response.data?.data ?? []
+    },
+  })
+
+  const { data: officeTools = [] } = useQuery({
+    queryKey: ['office-tools'],
+    queryFn: async () => {
+      const response = await apiClient.get('/office-tools')
+      return response.data?.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/software-licenses', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['software-licenses'] })
+      setIsAddModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Software license created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to create software license' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => apiClient.put(`/software-licenses/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['software-licenses'] })
+      setIsEditModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Software license updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to update software license' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => apiClient.delete(`/software-licenses/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['software-licenses'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Software license deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete software license' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -132,64 +172,18 @@ function SoftwareLicensePage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      // Convert empty strings to null for proper foreign key handling
-      const cleanedData = Object.fromEntries(
-        Object.entries(formData).map(([key, value]) => [
-          key,
-          value === '' ? null : value
-        ])
-      )
-
-      const response = await apiClient.post('/software-licenses', cleanedData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchLicenses()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to create software license',
-      })
-    }
+    const cleanedData = Object.fromEntries(
+      Object.entries(formData).map(([key, value]) => [key, value === '' ? null : value])
+    )
+    createMutation.mutate(cleanedData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      // Convert empty strings to null for proper foreign key handling
-      const cleanedData = Object.fromEntries(
-        Object.entries(formData).map(([key, value]) => [
-          key,
-          value === '' ? null : value
-        ])
-      )
-
-      const response = await apiClient.put(`/software-licenses/${selectedLicense.id}`, cleanedData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsEditModalOpen(false)
-        fetchLicenses()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update software license',
-      })
-    }
+    const cleanedData = Object.fromEntries(
+      Object.entries(formData).map(([key, value]) => [key, value === '' ? null : value])
+    )
+    updateMutation.mutate({ id: selectedLicense.id, data: cleanedData })
   }
 
   const handleDelete = useCallback(async (license) => {
@@ -204,26 +198,8 @@ function SoftwareLicensePage() {
       confirmButtonText: 'Yes, delete it!',
       cancelButtonText: 'Cancel',
     })
-
     if (result.isConfirmed) {
-      try {
-        const response = await apiClient.delete(`/software-licenses/${license.id}`)
-        if (response.data.success) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Deleted!',
-            text: response.data.message,
-            timer: 2000,
-          })
-          fetchLicenses()
-        }
-      } catch (error) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.response?.data?.message || 'Failed to delete software license',
-        })
-      }
+      deleteMutateRef.current(license.id)
     }
   }, [])
 
@@ -342,7 +318,9 @@ function SoftwareLicensePage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : licenses.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 

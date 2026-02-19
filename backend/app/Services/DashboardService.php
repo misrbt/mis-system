@@ -359,15 +359,19 @@ class DashboardService
             $currentYear = now()->year;
             $years = range($currentYear - 2, $currentYear);
 
-            // Single query for all years
-            $data = DB::table(DB::raw('
+            // Sanitize years array - ensure only integers
+            $years = array_map('intval', $years);
+            $yearPlaceholders = implode(',', array_fill(0, count($years), '?'));
+
+            // Single query for all years using parameter binding
+            $data = DB::table(DB::raw("
                 (SELECT
                     EXTRACT(YEAR FROM purchase_date) as year,
                     SUM(acq_cost) as acquisition_cost,
                     0 as repair_cost,
                     COUNT(*) as asset_count
                 FROM assets
-                WHERE EXTRACT(YEAR FROM purchase_date) IN (' . implode(',', $years) . ')
+                WHERE EXTRACT(YEAR FROM purchase_date) IN ({$yearPlaceholders})
                 GROUP BY EXTRACT(YEAR FROM purchase_date)
 
                 UNION ALL
@@ -378,15 +382,16 @@ class DashboardService
                     SUM(repair_cost) as repair_cost,
                     0 as asset_count
                 FROM repairs
-                WHERE EXTRACT(YEAR FROM repair_date) IN (' . implode(',', $years) . ')
+                WHERE EXTRACT(YEAR FROM repair_date) IN ({$yearPlaceholders})
                 GROUP BY EXTRACT(YEAR FROM repair_date)) as combined
-            '))
+            "))
                 ->select(
                     'year',
                     DB::raw('SUM(acquisition_cost) as acquisition_cost'),
                     DB::raw('SUM(repair_cost) as repair_cost'),
                     DB::raw('SUM(asset_count) as asset_count')
                 )
+                ->addBinding(array_merge($years, $years), 'select')
                 ->groupBy('year')
                 ->get()
                 ->keyBy('year');
@@ -425,21 +430,21 @@ class DashboardService
             try {
                 $summary = $this->getAllBranchStats();
             } catch (\Exception $e) {
-                Log::error('Branch stats error: ' . $e->getMessage());
+                Log::error('Branch stats error: '.$e->getMessage());
                 $summary = [];
             }
 
             try {
                 $monthlyTrends = $this->getBranchMonthlyTrends($months);
             } catch (\Exception $e) {
-                Log::error('Branch monthly trends error: ' . $e->getMessage());
+                Log::error('Branch monthly trends error: '.$e->getMessage());
                 $monthlyTrends = [];
             }
 
             try {
                 $statusBreakdown = $this->getBranchStatusBreakdown();
             } catch (\Exception $e) {
-                Log::error('Branch status breakdown error: ' . $e->getMessage());
+                Log::error('Branch status breakdown error: '.$e->getMessage());
                 $statusBreakdown = [];
             }
 
@@ -661,7 +666,7 @@ class DashboardService
     public function clearCache(): void
     {
         Cache::forget('dashboard:statistics');
-        Cache::forget('dashboard:monthly_expenses:' . now()->year);
+        Cache::forget('dashboard:monthly_expenses:'.now()->year);
         Cache::forget('dashboard:yearly_expenses');
 
         // Clear new unified endpoint caches

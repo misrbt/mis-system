@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Wrench, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, AlertTriangle, Clock } from 'lucide-react'
 import {
@@ -60,6 +60,10 @@ function RepairsPage() {
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
 
+  // Defer heavy secondary queries until after first paint
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => { setHydrated(true) }, [])
+
   const { data: repairsData, isLoading } = useQuery({
     queryKey: ['repairs', filters],
     queryFn: async () => {
@@ -80,6 +84,7 @@ function RepairsPage() {
   const { data: assetsData } = useQuery({
     queryKey: ['assets', 'repairs'],
     queryFn: async () => (await fetchRepairAssets()).data,
+    enabled: hydrated,
   })
 
   const { data: vendorsData } = useQuery({
@@ -155,6 +160,12 @@ function RepairsPage() {
     },
   })
 
+  // Stable refs for mutation functions — prevents useCallback deps from changing every render
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
+  const updateStatusMutateRef = useRef(updateStatusMutation.mutate)
+  updateStatusMutateRef.current = updateStatusMutation.mutate
+
   const handleInputChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -210,10 +221,10 @@ function RepairsPage() {
       })
 
       if (result.isConfirmed) {
-        deleteMutation.mutate(repair.id)
+        deleteMutateRef.current(repair.id)
       }
     },
-    [deleteMutation]
+    [] // stable: reads deleteMutateRef.current at call time
   )
 
   const handleStatusChange = useCallback(
@@ -248,10 +259,10 @@ function RepairsPage() {
           status: newStatus,
           actual_return_date: newStatus === 'Returned' ? new Date().toISOString().split('T')[0] : null,
         }
-        updateStatusMutation.mutate({ id: repair.id, ...payload })
+        updateStatusMutateRef.current({ id: repair.id, ...payload })
       }
     },
-    [updateStatusMutation]
+    [] // stable: reads updateStatusMutateRef.current at call time
   )
 
   const handleCompleteSubmit = (formData) => {
@@ -360,7 +371,9 @@ function RepairsPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : repairsList.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 

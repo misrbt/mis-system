@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -15,8 +16,7 @@ import { getCategoryColumns } from '../../components/asset-categories/categoryCo
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../services/assetCategoryService'
 
 function AssetCategoryPage() {
-  const [categories, setCategories] = useState([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -25,30 +25,18 @@ function AssetCategoryPage() {
   const [formData, setFormData] = useState({ name: '' })
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
+  const [searchInput, setSearchInput] = useState('')
+  const searchTimeout = useRef(null)
 
   const resetForm = () => setFormData({ name: '' })
 
-  const fetchCategories = useCallback(async () => {
-    try {
-      setLoading(true)
+  const { data: categories = [], isLoading: loading } = useQuery({
+    queryKey: ['asset-categories'],
+    queryFn: async () => {
       const response = await getCategories()
-      if (response.data?.success) {
-        setCategories(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch categories',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchCategories()
-  }, [fetchCategories])
+      return response.data?.success ? response.data.data : []
+    },
+  })
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -83,7 +71,7 @@ function AssetCategoryPage() {
           timer: 2000,
         })
         setIsAddModalOpen(false)
-        fetchCategories()
+        queryClient.invalidateQueries({ queryKey: ['asset-categories'] })
       }
     } catch (error) {
       Swal.fire({
@@ -106,7 +94,7 @@ function AssetCategoryPage() {
           timer: 2000,
         })
         closeEditModal()
-        fetchCategories()
+        queryClient.invalidateQueries({ queryKey: ['asset-categories'] })
       }
     } catch (error) {
       Swal.fire({
@@ -140,7 +128,7 @@ function AssetCategoryPage() {
               text: response.data.message,
               timer: 2000,
             })
-            fetchCategories()
+            queryClient.invalidateQueries({ queryKey: ['asset-categories'] })
           }
         } catch (error) {
           Swal.fire({
@@ -151,7 +139,7 @@ function AssetCategoryPage() {
         }
       }
     },
-    [fetchCategories]
+    [queryClient]
   )
 
   const columns = useMemo(() => getCategoryColumns(openEditModal, handleDelete), [handleDelete, openEditModal])
@@ -185,7 +173,9 @@ function AssetCategoryPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : categories.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
@@ -213,8 +203,12 @@ function AssetCategoryPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              value={mobileGlobalFilter ?? ''}
-              onChange={(e) => setMobileGlobalFilter(e.target.value)}
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value)
+                clearTimeout(searchTimeout.current)
+                searchTimeout.current = setTimeout(() => setMobileGlobalFilter(e.target.value), 300)
+              }}
               placeholder="Search categories..."
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />

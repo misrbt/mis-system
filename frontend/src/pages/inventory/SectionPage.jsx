@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -22,9 +23,6 @@ import {
 const initialForm = { name: '' }
 
 function SectionPage() {
-  const [sections, setSections] = useState([])
-  const [loading, setLoading] = useState(true)
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedSection, setSelectedSection] = useState(null)
@@ -34,27 +32,53 @@ function SectionPage() {
 
   const resetForm = () => setFormData(initialForm)
 
-  const fetchSections = useCallback(async () => {
-    try {
-      setLoading(true)
-      const response = await fetchSectionsRequest()
-      if (response.data?.success) {
-        setSections(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch sections',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    fetchSections()
-  }, [fetchSections])
+  const { data: sections = [], isLoading: loading } = useQuery({
+    queryKey: ['sections'],
+    queryFn: async () => {
+      const response = await fetchSectionsRequest()
+      return response.data?.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => createSectionRequest(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sections'] })
+      setIsAddModalOpen(false)
+      resetForm()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Section created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to create section' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => updateSectionRequest(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sections'] })
+      closeEditModal()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Section updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to update section' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteSectionRequest(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sections'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Section deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete section' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -79,86 +103,29 @@ function SectionPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await createSectionRequest(formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchSections()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to create section',
-      })
-    }
+    createMutation.mutate(formData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await updateSectionRequest(selectedSection.id, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        closeEditModal()
-        fetchSections()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update section',
-      })
-    }
+    updateMutation.mutate({ id: selectedSection.id, data: formData })
   }
 
-  const handleDelete = useCallback(
-    async (section) => {
-      const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: `Delete section "${section.name}"?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc2626',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-      })
-
-      if (result.isConfirmed) {
-        try {
-          const response = await deleteSectionRequest(section.id)
-          if (response.data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Deleted!',
-              text: response.data.message,
-              timer: 2000,
-            })
-            fetchSections()
-          }
-        } catch (error) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: error.response?.data?.message || 'Failed to delete section',
-          })
-        }
-      }
-    },
-    [fetchSections]
-  )
+  const handleDelete = useCallback(async (section) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Delete section "${section.name}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+    })
+    if (result.isConfirmed) {
+      deleteMutateRef.current(section.id)
+    }
+  }, [])
 
   const columns = useMemo(() => getSectionColumns(openEditModal, handleDelete), [handleDelete, openEditModal])
   const mobileColumns = useMemo(
@@ -190,7 +157,9 @@ function SectionPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : sections.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 

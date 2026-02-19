@@ -22,7 +22,9 @@ function EmployeeListPage() {
     queryFn: async () => (await fetchBranchesRequest()).data,
   })
 
-  const employees = Array.isArray(employeesData?.data)
+  const employees = Array.isArray(employeesData?.data?.data)
+    ? employeesData.data.data
+    : Array.isArray(employeesData?.data)
     ? employeesData.data
     : Array.isArray(employeesData)
     ? employeesData

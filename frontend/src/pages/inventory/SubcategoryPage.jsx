@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package, Filter } from 'lucide-react'
 import {
   useReactTable,
@@ -16,10 +17,7 @@ import { getSubcategories, createSubcategory, updateSubcategory, deleteSubcatego
 import { getCategories } from '../../services/assetCategoryService'
 
 function SubcategoryPage() {
-  const [subcategories, setSubcategories] = useState([])
-  const [categories, setCategories] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -29,49 +27,28 @@ function SubcategoryPage() {
   const [formData, setFormData] = useState({ category_id: '', name: '', description: '' })
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
+  const [searchInput, setSearchInput] = useState('')
+  const searchTimeout = useRef(null)
 
   const resetForm = () => setFormData({ category_id: '', name: '', description: '' })
 
-  const fetchCategories = useCallback(async () => {
-    try {
-      setCategoriesLoading(true)
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ['asset-categories'],
+    queryFn: async () => {
       const response = await getCategories()
-      if (response.data?.success) {
-        setCategories(response.data.data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch categories:', error)
-    } finally {
-      setCategoriesLoading(false)
-    }
-  }, [])
+      return response.data?.success ? response.data.data : []
+    },
+    staleTime: 5 * 60 * 1000,
+  })
 
-  const fetchSubcategories = useCallback(async () => {
-    try {
-      setLoading(true)
+  const { data: subcategories = [], isLoading: loading } = useQuery({
+    queryKey: ['asset-subcategories-list', categoryFilter],
+    queryFn: async () => {
       const params = categoryFilter ? { category_id: categoryFilter } : {}
       const response = await getSubcategories(params)
-      if (response.data?.success) {
-        setSubcategories(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch subcategories',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [categoryFilter])
-
-  useEffect(() => {
-    fetchCategories()
-  }, [fetchCategories])
-
-  useEffect(() => {
-    fetchSubcategories()
-  }, [fetchSubcategories])
+      return response.data?.success ? response.data.data : []
+    },
+  })
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -110,7 +87,7 @@ function SubcategoryPage() {
           timer: 2000,
         })
         setIsAddModalOpen(false)
-        fetchSubcategories()
+        queryClient.invalidateQueries({ queryKey: ['asset-subcategories-list'] })
       }
     } catch (error) {
       Swal.fire({
@@ -133,7 +110,7 @@ function SubcategoryPage() {
           timer: 2000,
         })
         closeEditModal()
-        fetchSubcategories()
+        queryClient.invalidateQueries({ queryKey: ['asset-subcategories-list'] })
       }
     } catch (error) {
       Swal.fire({
@@ -167,7 +144,7 @@ function SubcategoryPage() {
               text: response.data.message,
               timer: 2000,
             })
-            fetchSubcategories()
+            queryClient.invalidateQueries({ queryKey: ['asset-subcategories-list'] })
           }
         } catch (error) {
           Swal.fire({
@@ -178,7 +155,7 @@ function SubcategoryPage() {
         }
       }
     },
-    [fetchSubcategories]
+    [queryClient]
   )
 
   const columns = useMemo(() => getSubcategoryColumns(openEditModal, handleDelete), [handleDelete, openEditModal])
@@ -212,7 +189,9 @@ function SubcategoryPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : subcategories.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
@@ -265,8 +244,12 @@ function SubcategoryPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              value={mobileGlobalFilter ?? ''}
-              onChange={(e) => setMobileGlobalFilter(e.target.value)}
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value)
+                clearTimeout(searchTimeout.current)
+                searchTimeout.current = setTimeout(() => setMobileGlobalFilter(e.target.value), 300)
+              }}
               placeholder="Search subcategories..."
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />

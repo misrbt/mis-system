@@ -45,7 +45,7 @@ function InventoryLayout() {
   const isMediumLayout = mediumPages.includes(location.pathname)
 
   const isReportWideLayout = location.pathname === '/inventory/reports' && searchParams.get('layout') === 'wide'
-
+  
   // Pages that use wide layout
   const widePages = ['/inventory/home', '/inventory/assets', '/inventory/reports', '/inventory/replenishment']
   const isWideLayout = widePages.includes(location.pathname) ||

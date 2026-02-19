@@ -14,12 +14,14 @@ class EmployeeController extends Controller
     /**
      * Display a listing of employees.
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
+            $perPage = $request->input('per_page', 50);
+
             $employees = Employee::with(['branch', 'position', 'department'])
                 ->orderBy('fullname', 'asc')
-                ->get();
+                ->paginate($perPage);
 
             return response()->json([
                 'success' => true,

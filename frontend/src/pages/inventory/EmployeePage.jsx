@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -30,12 +31,6 @@ const initialForm = {
 }
 
 function EmployeePage() {
-  const [employees, setEmployees] = useState([])
-  const [branches, setBranches] = useState([])
-  const [sections, setSections] = useState([])
-  const [positions, setPositions] = useState([])
-  const [loading, setLoading] = useState(true)
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState(null)
@@ -45,48 +40,83 @@ function EmployeePage() {
 
   const resetForm = () => setFormData(initialForm)
 
-  const fetchEmployees = useCallback(async () => {
-    try {
-      setLoading(true)
+  const queryClient = useQueryClient()
+
+  const { data: employees = [], isLoading: loading } = useQuery({
+    queryKey: ['employees'],
+    queryFn: async () => {
       const response = await fetchEmployeesRequest()
-      if (response.data?.success) {
-        setEmployees(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch employees',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+      return response.data?.data ?? []
+    },
+  })
 
-  const fetchReferenceData = useCallback(async () => {
-    try {
-      const [branchRes, sectionRes, positionRes] = await Promise.all([
-        fetchBranchesRequest(),
-        fetchSectionsRequest(),
-        fetchPositionsRequest(),
-      ])
-      if (branchRes.data?.success) setBranches(branchRes.data.data)
-      if (sectionRes.data?.success) setSections(sectionRes.data.data)
-      if (positionRes.data?.success) setPositions(positionRes.data.data)
-    } catch (error) {
-      console.error(error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Failed to load reference data',
-      })
-    }
-  }, [])
+  const { data: branches = [] } = useQuery({
+    queryKey: ['branches'],
+    queryFn: async () => {
+      const response = await fetchBranchesRequest()
+      return response.data?.data ?? []
+    },
+  })
 
-  useEffect(() => {
-    fetchReferenceData()
-    fetchEmployees()
-  }, [fetchEmployees, fetchReferenceData])
+  const { data: sections = [] } = useQuery({
+    queryKey: ['sections'],
+    queryFn: async () => {
+      const response = await fetchSectionsRequest()
+      return response.data?.data ?? []
+    },
+  })
+
+  const { data: positions = [] } = useQuery({
+    queryKey: ['positions'],
+    queryFn: async () => {
+      const response = await fetchPositionsRequest()
+      return response.data?.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => createEmployeeRequest(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      setIsAddModalOpen(false)
+      resetForm()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Employee created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join('\n')
+        : error.response?.data?.message || 'Failed to create employee'
+      Swal.fire({ icon: 'error', title: 'Error', text: msg })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => updateEmployeeRequest(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      closeEditModal()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Employee updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join('\n')
+        : error.response?.data?.message || 'Failed to update employee'
+      Swal.fire({ icon: 'error', title: 'Error', text: msg })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteEmployeeRequest(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Employee deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete employee' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -116,88 +146,29 @@ function EmployeePage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await createEmployeeRequest(formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchEmployees()
-      }
-    } catch (error) {
-      const fullnameError = error.response?.data?.errors?.fullname?.[0]
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: fullnameError || error.response?.data?.message || 'Failed to create employee',
-      })
-    }
+    createMutation.mutate(formData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await updateEmployeeRequest(selectedEmployee.id, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        closeEditModal()
-        fetchEmployees()
-      }
-    } catch (error) {
-      const fullnameError = error.response?.data?.errors?.fullname?.[0]
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: fullnameError || error.response?.data?.message || 'Failed to update employee',
-      })
-    }
+    updateMutation.mutate({ id: selectedEmployee.id, data: formData })
   }
 
-  const handleDelete = useCallback(
-    async (employee) => {
-      const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: `Delete employee "${employee.fullname}"?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc2626',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-      })
-
-      if (result.isConfirmed) {
-        try {
-          const response = await deleteEmployeeRequest(employee.id)
-          if (response.data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Deleted!',
-              text: response.data.message,
-              timer: 2000,
-            })
-            fetchEmployees()
-          }
-        } catch (error) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: error.response?.data?.message || 'Failed to delete employee',
-          })
-        }
-      }
-    },
-    [fetchEmployees]
-  )
+  const handleDelete = useCallback(async (employee) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Delete employee "${employee.fullname}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+    })
+    if (result.isConfirmed) {
+      deleteMutateRef.current(employee.id)
+    }
+  }, [])
 
   const columns = useMemo(() => getEmployeeColumns(openEditModal, handleDelete), [handleDelete, openEditModal])
   const mobileColumns = useMemo(
@@ -232,7 +203,9 @@ function EmployeePage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : employees.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
