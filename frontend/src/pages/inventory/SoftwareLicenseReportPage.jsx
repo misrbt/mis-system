@@ -26,6 +26,7 @@ function SoftwareLicenseReportPage() {
       setIsGenerating(true)
       const params = new URLSearchParams()
       if (filters.branch_id) params.append('branch_id', filters.branch_id)
+      params.append('all', 'true')
 
       const response = await apiClient.get(`/software-licenses?${params.toString()}`)
 

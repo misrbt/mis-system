@@ -7,6 +7,7 @@ use App\Http\Requests\SoftwareLicense\UpdateSoftwareLicenseRequest;
 use App\Models\SoftwareLicense;
 use App\Traits\ValidatesSort;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class SoftwareLicenseController extends Controller
 {
@@ -91,6 +92,15 @@ class SoftwareLicenseController extends Controller
             );
 
             $query->orderBy($sortBy, $sortOrder);
+
+            // Check for 'all' parameter to return non-paginated data
+            if ($request->boolean('all', false)) {
+                $assets = $query->get();
+                return response()->json([
+                    'success' => true,
+                    'data' => $assets,
+                ], 200);
+            }
 
             // Pagination - limit results per page (max 100)
             $perPage = min($request->get('per_page', 50), 100);
@@ -235,7 +245,7 @@ class SoftwareLicenseController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => count($request->ids).' software license(s) deleted successfully',
+                'message' => count($request->ids) . ' software license(s) deleted successfully',
             ], 200);
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to delete software licenses');
