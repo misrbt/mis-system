@@ -7,6 +7,7 @@ use App\Http\Requests\OfficeTool\UpdateOfficeToolRequest;
 use App\Models\OfficeTool;
 use App\Traits\ValidatesSort;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class OfficeToolController extends Controller
 {
@@ -178,7 +179,7 @@ class OfficeToolController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => count($request->ids).' office tool(s) deleted successfully',
+                'message' => count($request->ids) . ' office tool(s) deleted successfully',
             ], 200);
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to delete office tools');

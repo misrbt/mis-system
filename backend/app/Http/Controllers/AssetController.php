@@ -80,11 +80,13 @@ class AssetController extends Controller
             }
 
             // Strip heavy fields not needed in the list view:
-            // - qr_code / barcode: large base64 image strings
+            // - qr_code / barcode: large base64 image strings (except when viewing a specific employee's assets in card view)
             // - calculated_book_value / depreciation_info: expensive computed appends
             //   (book_value accessor is still included; appends are redundant here)
-            $paginated->getCollection()->each(function ($asset) {
-                $asset->makeHidden(['qr_code', 'barcode']);
+            $paginated->getCollection()->each(function ($asset) use ($hasEmployeeFilter) {
+                if (! $hasEmployeeFilter) {
+                    $asset->makeHidden(['qr_code', 'barcode']);
+                }
                 $asset->setAppends([]);
             });
 

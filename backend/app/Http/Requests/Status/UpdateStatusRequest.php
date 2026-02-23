@@ -14,7 +14,7 @@ class UpdateStatusRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|max:255|unique:status,name,'.$this->route('id'),
+            'name' => 'required|string|max:255|unique:status,name,'.$this->route('status'),
             'color' => 'nullable|string|regex:/^#[0-9A-Fa-f]{6}$/',
         ];
     }

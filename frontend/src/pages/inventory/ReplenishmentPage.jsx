@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   RefreshCw,
@@ -8,15 +8,20 @@ import {
 } from 'lucide-react'
 import apiClient from '../../services/apiClient'
 import { getReplenishmentColumns } from './replenishment/replenishmentColumns'
-import ReplenishmentFormModal from './replenishment/ReplenishmentFormModal'
-import AssignModal from './replenishment/AssignModal'
 import Modal from '../../components/Modal'
+
+const ReplenishmentFormModal = lazy(() => import('./replenishment/ReplenishmentFormModal'))
+const AssignModal = lazy(() => import('./replenishment/AssignModal'))
 import DataTable from '../../components/DataTable'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
 
 const normalizeArrayResponse = (data) => {
+  // Handle paginated responses (data.data.data)
+  if (data?.data && Array.isArray(data.data.data)) return data.data.data
+  // Handle standard wrapped responses (data.data)
   if (Array.isArray(data?.data)) return data.data
+  // Handle direct arrays
   if (Array.isArray(data)) return data
   return []
 }
@@ -116,15 +121,22 @@ function ReplenishmentPage() {
   const [selectedReplenishment, setSelectedReplenishment] = useState(null)
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState(INITIAL_FILTERS)
+  const [queryFilters, setQueryFilters] = useState(INITIAL_FILTERS)
   const [formData, setFormData] = useState(INITIAL_FORM_DATA)
   const [components, setComponents] = useState([])
 
+  // Debounce filters: update queryFilters 300ms after user stops changing filters
+  useEffect(() => {
+    const id = setTimeout(() => setQueryFilters(filters), 300)
+    return () => clearTimeout(id)
+  }, [filters])
+
   // Fetch replenishments
   const { data: replenishmentsData, isLoading, refetch, isError, error } = useQuery({
-    queryKey: ['replenishments', filters],
+    queryKey: ['replenishments', queryFilters],
     queryFn: async () => {
       const params = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
+      Object.entries(queryFilters).forEach(([key, value]) => {
         if (value) params.append(key, value)
       })
       const response = await apiClient.get(`/replenishments?${params.toString()}`)
@@ -134,7 +146,9 @@ function ReplenishmentPage() {
     enabled: true,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    staleTime: Infinity,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
   })
 
   // modalOpen = any form modal is open (drives secondary query loading)
@@ -153,6 +167,7 @@ function ReplenishmentPage() {
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: subcategories } = useQuery({
@@ -166,6 +181,7 @@ function ReplenishmentPage() {
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: statuses } = useQuery({
@@ -178,6 +194,7 @@ function ReplenishmentPage() {
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: vendors } = useQuery({
@@ -190,6 +207,7 @@ function ReplenishmentPage() {
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: branches } = useQuery({
@@ -202,6 +220,7 @@ function ReplenishmentPage() {
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   // Employees and equipment only needed inside the form modal
@@ -215,6 +234,7 @@ function ReplenishmentPage() {
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: equipmentList } = useQuery({
@@ -227,6 +247,7 @@ function ReplenishmentPage() {
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   // Vendor modal state
@@ -248,7 +269,7 @@ function ReplenishmentPage() {
 
   const vendorOptions = useMemo(
     () =>
-      (Array.isArray(vendors) ? vendors : []).map((vendor) => ({
+      normalizeArrayResponse(vendors).map((vendor) => ({
         id: vendor.id,
         name: vendor.company_name,
       })),
@@ -257,7 +278,7 @@ function ReplenishmentPage() {
 
   const employeeOptions = useMemo(
     () =>
-      (Array.isArray(employees) ? employees : []).map((emp) => ({
+      normalizeArrayResponse(employees).map((emp) => ({
         id: emp.id,
         name: emp.fullname,
         position: emp.position?.title,
@@ -267,13 +288,13 @@ function ReplenishmentPage() {
   )
 
   const branchOptions = useMemo(
-    () => (Array.isArray(branches) ? branches : []),
+    () => normalizeArrayResponse(branches),
     [branches]
   )
 
   const equipmentOptions = useMemo(
     () =>
-      (Array.isArray(equipmentList) ? equipmentList : []).map((eq) => ({
+      normalizeArrayResponse(equipmentList).map((eq) => ({
         id: eq.id,
         name: `${eq.brand} ${eq.model}`,
         brand: eq.brand,
@@ -342,19 +363,6 @@ function ReplenishmentPage() {
     },
   })
 
-  const assignBranchMutation = useMutation({
-    mutationFn: ({ id, branchId }) =>
-      apiClient.post(`/replenishments/${id}/assign-branch`, { branch_id: branchId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['replenishments'] })
-      notifySuccess('Success', 'Asset assigned to branch successfully')
-      setIsAssignModalOpen(false)
-    },
-    onError: (error) => {
-      notifyError('Failed to assign asset', error)
-    },
-  })
-
   const removeAssignmentMutation = useMutation({
     mutationFn: (id) => apiClient.post(`/replenishments/${id}/remove-assignment`),
     onSuccess: () => {
@@ -389,22 +397,6 @@ function ReplenishmentPage() {
       notifyError('Failed to create vendor', error)
     },
   })
-
-  // Stable mutation refs — allow useCallbacks to have empty deps while always calling latest mutate
-  const createMutateRef = useRef(createMutation.mutate)
-  createMutateRef.current = createMutation.mutate
-  const updateMutateRef = useRef(updateMutation.mutate)
-  updateMutateRef.current = updateMutation.mutate
-  const deleteMutateRef = useRef(deleteMutation.mutate)
-  deleteMutateRef.current = deleteMutation.mutate
-  const assignEmployeeMutateRef = useRef(assignEmployeeMutation.mutate)
-  assignEmployeeMutateRef.current = assignEmployeeMutation.mutate
-  const assignBranchMutateRef = useRef(assignBranchMutation.mutate)
-  assignBranchMutateRef.current = assignBranchMutation.mutate
-  const removeAssignmentMutateRef = useRef(removeAssignmentMutation.mutate)
-  removeAssignmentMutateRef.current = removeAssignmentMutation.mutate
-  const createVendorMutateRef = useRef(createVendorMutation.mutate)
-  createVendorMutateRef.current = createVendorMutation.mutate
 
   // Handlers
   const handleInputChange = useCallback((e) => {
@@ -465,8 +457,8 @@ function ReplenishmentPage() {
 
   const handleCreateVendor = useCallback((e) => {
     e.preventDefault()
-    createVendorMutateRef.current(vendorFormData)
-  }, [vendorFormData])
+    createVendorMutation.mutate(vendorFormData)
+  }, [vendorFormData, createVendorMutation])
 
   // Component handlers for Desktop PC
   const handleComponentAdd = useCallback(() => {
@@ -539,6 +531,7 @@ function ReplenishmentPage() {
 
   const clearFilters = useCallback(() => {
     setFilters(INITIAL_FILTERS)
+    setQueryFilters(INITIAL_FILTERS)
   }, [])
 
   const openAddModal = useCallback(() => {
@@ -569,15 +562,15 @@ function ReplenishmentPage() {
         status_id: formData.status_id ? Number(formData.status_id) : null,
         estimate_life: formData.estimate_life ? Number(formData.estimate_life) : null,
       }
-      createMutateRef.current(payload)
+      createMutation.mutate(payload)
     },
-    [formData]
+    [formData, createMutation]
   )
 
   const handleUpdate = useCallback(
     (e) => {
       e.preventDefault()
-      updateMutateRef.current({
+      updateMutation.mutate({
         id: selectedReplenishment.id,
         data: {
           ...formData,
@@ -589,7 +582,7 @@ function ReplenishmentPage() {
         },
       })
     },
-    [formData, selectedReplenishment]
+    [formData, selectedReplenishment, updateMutation]
   )
 
   const handleDelete = useCallback(async (replenishment) => {
@@ -604,21 +597,17 @@ function ReplenishmentPage() {
       cancelButtonText: 'Cancel',
     })
     if (result.isConfirmed) {
-      deleteMutateRef.current(replenishment.id)
+      deleteMutation.mutate(replenishment.id)
     }
-  }, [])
+  }, [deleteMutation])
 
   const handleAssignEmployee = useCallback((id, employeeId) => {
-    assignEmployeeMutateRef.current({ id, employeeId })
-  }, [])
-
-  const handleAssignBranch = useCallback((id, branchId) => {
-    assignBranchMutateRef.current({ id, branchId })
-  }, [])
+    assignEmployeeMutation.mutate({ id, employeeId })
+  }, [assignEmployeeMutation])
 
   const handleRemoveAssignment = useCallback((id) => {
-    removeAssignmentMutateRef.current(id)
-  }, [])
+    removeAssignmentMutation.mutate(id)
+  }, [removeAssignmentMutation])
 
   // Table columns
   const columns = useMemo(
@@ -634,9 +623,17 @@ function ReplenishmentPage() {
     [statusColorMap, openEditModal, openAssignModal, handleDelete]
   )
 
-  const replenishmentsList = Array.isArray(replenishmentsData?.data) ? replenishmentsData.data : []
+  const replenishmentsList = useMemo(() => {
+    const raw = replenishmentsData?.data
+    if (Array.isArray(raw?.data)) return raw.data
+    if (Array.isArray(raw)) return raw
+    return []
+  }, [replenishmentsData?.data])
 
-  const hasActiveFilters = Object.values(filters).some((v) => v)
+  const hasActiveFilters = useMemo(
+    () => Object.values(filters).some((v) => v),
+    [filters]
+  )
 
   return (
     <div className="space-y-6">
@@ -802,9 +799,10 @@ function ReplenishmentPage() {
         />
       )}
 
-      {/* Add Modal — only mounted when open */}
+      {/* Add Modal — lazy loaded, only mounted when open */}
       {isAddModalOpen && (
-        <ReplenishmentFormModal
+        <Suspense fallback={null}>
+          <ReplenishmentFormModal
           isOpen={true}
           onClose={() => setIsAddModalOpen(false)}
           title="Add Reserve Asset"
@@ -828,11 +826,13 @@ function ReplenishmentPage() {
           onComponentChange={handleComponentChange}
           isEditMode={false}
         />
+        </Suspense>
       )}
 
-      {/* Edit Modal — only mounted when open */}
+      {/* Edit Modal — lazy loaded, only mounted when open */}
       {isEditModalOpen && (
-        <ReplenishmentFormModal
+        <Suspense fallback={null}>
+          <ReplenishmentFormModal
           isOpen={true}
           onClose={() => setIsEditModalOpen(false)}
           title="Edit Reserve Asset"
@@ -857,11 +857,13 @@ function ReplenishmentPage() {
           isEditMode={true}
           showBookValue={true}
         />
+        </Suspense>
       )}
 
-      {/* Assign Modal — only mounted when open */}
+      {/* Assign Modal — lazy loaded, only mounted when open */}
       {isAssignModalOpen && (
-        <AssignModal
+        <Suspense fallback={null}>
+          <AssignModal
           isOpen={true}
           onClose={() => setIsAssignModalOpen(false)}
           replenishment={selectedReplenishment}
@@ -873,6 +875,7 @@ function ReplenishmentPage() {
             removeAssignmentMutation.isPending
           }
         />
+        </Suspense>
       )}
 
       {/* Add Vendor Modal */}

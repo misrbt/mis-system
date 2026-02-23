@@ -14,7 +14,7 @@ class UpdateSectionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|max:255|unique:section,name,'.$this->route('id'),
+            'name' => 'required|string|max:255|unique:section,name,'.$this->route('section'),
         ];
     }
 }

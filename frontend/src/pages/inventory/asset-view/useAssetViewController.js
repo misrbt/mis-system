@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 import apiClient from "../../../services/apiClient";
@@ -11,7 +11,6 @@ import { fetchEmployeeAssetHistory } from "../../../services/employeeAssetHistor
 export default function useAssetViewController({ id, employeeId }) {
   const isAssetView = !!id;
   const navigate = useNavigate();
-  const location = useLocation();
   const queryClient = useQueryClient();
 
   // Preserve the assets page filter params so we can restore them on navigate back
@@ -222,7 +221,17 @@ export default function useAssetViewController({ id, employeeId }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const employees = useMemo(() => employeesData?.data || [], [employeesData?.data]);
+  const employees = useMemo(
+    () =>
+      Array.isArray(employeesData?.data?.data)
+        ? employeesData.data.data
+        : Array.isArray(employeesData?.data)
+        ? employeesData.data
+        : Array.isArray(employeesData)
+        ? employeesData
+        : [],
+    [employeesData]
+  );
 
   const filteredEmployees = useMemo(() => {
     if (!employeeSearch) return employees;

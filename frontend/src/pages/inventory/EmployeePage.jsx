@@ -37,6 +37,7 @@ function EmployeePage() {
   const [formData, setFormData] = useState(initialForm)
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
+  const [branchFilter, setBranchFilter] = useState('')
 
   const resetForm = () => setFormData(initialForm)
 
@@ -46,7 +47,7 @@ function EmployeePage() {
     queryKey: ['employees'],
     queryFn: async () => {
       const response = await fetchEmployeesRequest()
-      return response.data?.data ?? []
+      return response.data?.data?.data ?? []
     },
   })
 
@@ -181,8 +182,13 @@ function EmployeePage() {
     []
   )
 
+  const filteredEmployees = useMemo(() => {
+    if (!branchFilter) return employees
+    return employees.filter(emp => emp.branch_id === parseInt(branchFilter))
+  }, [employees, branchFilter])
+
   const mobileTable = useReactTable({
-    data: employees,
+    data: filteredEmployees,
     columns: mobileColumns,
     state: {
       globalFilter: mobileGlobalFilter,
@@ -205,25 +211,43 @@ function EmployeePage() {
   const mobilePagination = mobileTable.getState().pagination
   const mobileFilteredCount = mobileGlobalFilter
     ? mobileTable.getFilteredRowModel().rows.length
-    : employees.length
+    : filteredEmployees.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Employee Management</h1>
-          <p className="text-sm text-slate-600 mt-1.5">Manage employees and their assignments</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Employee Management</h1>
+            <p className="text-sm text-slate-600 mt-1.5">Manage employees and their assignments</p>
+          </div>
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Add New Employee</span>
+          </button>
         </div>
-        <button
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add New Employee</span>
-        </button>
+
+        {/* Branch Filter */}
+        <div className="hidden sm:block">
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[200px]"
+          >
+            <option value="">All Branches</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.branch_name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Mobile Cards */}
@@ -239,6 +263,18 @@ function EmployeePage() {
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">All Branches</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.branch_name}
+              </option>
+            ))}
+          </select>
           <div className="flex items-center gap-2">
             <select
               value={mobileSortId}
@@ -389,7 +425,7 @@ function EmployeePage() {
 
       {/* Data Table */}
       <div className="hidden sm:block">
-        <DataTable columns={columns} data={employees} loading={loading} pageSize={10} />
+        <DataTable columns={columns} data={filteredEmployees} loading={loading} pageSize={10} />
       </div>
 
       {/* Add Modal */}

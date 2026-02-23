@@ -94,7 +94,12 @@ function RepairsPage() {
 
   const assets = normalizeArrayResponse(assetsData)
   const vendors = normalizeArrayResponse(vendorsData)
-  const repairsList = Array.isArray(repairsData?.data) ? repairsData.data : []
+  const repairsList = (() => {
+    const raw = repairsData?.data
+    if (Array.isArray(raw?.data)) return raw.data
+    if (Array.isArray(raw)) return raw
+    return []
+  })()
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateRepair(id, data),

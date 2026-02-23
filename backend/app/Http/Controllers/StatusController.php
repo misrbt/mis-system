@@ -36,6 +36,9 @@ class StatusController extends Controller
         try {
             $status = Status::create($request->validated());
 
+            // Clear cache
+            \Illuminate\Support\Facades\Cache::forget('statuses_all');
+
             return response()->json([
                 'success' => true,
                 'message' => 'Status created successfully',
@@ -72,6 +75,9 @@ class StatusController extends Controller
             $status = Status::findOrFail($id);
             $status->update($request->validated());
 
+            // Clear cache
+            \Illuminate\Support\Facades\Cache::forget('statuses_all');
+
             return response()->json([
                 'success' => true,
                 'message' => 'Status updated successfully',
@@ -90,6 +96,9 @@ class StatusController extends Controller
         try {
             $status = Status::findOrFail($id);
             $status->delete();
+
+            // Clear cache
+            \Illuminate\Support\Facades\Cache::forget('statuses_all');
 
             return response()->json([
                 'success' => true,

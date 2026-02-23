@@ -64,9 +64,14 @@ class RepairController extends Controller
 
             // Sorting with SQL injection protection
             $allowedSortFields = [
-                'id', 'repair_date', 'expected_return_date',
-                'actual_return_date', 'repair_cost', 'status',
-                'created_at', 'updated_at',
+                'id',
+                'repair_date',
+                'expected_return_date',
+                'actual_return_date',
+                'repair_cost',
+                'status',
+                'created_at',
+                'updated_at',
             ];
 
             [$sortBy, $sortOrder] = $this->validateSort(
@@ -165,6 +170,13 @@ class RepairController extends Controller
     {
         try {
             $repair = Repair::findOrFail($id);
+
+            // Delete associated remarks first to prevent foreign key constraint violations
+            $repair->remarks()->delete();
+
+            // Delete associated asset movements
+            \App\Models\AssetMovement::where('repair_id', $repair->id)->delete();
+
             $repair->delete();
 
             return response()->json([
@@ -265,7 +277,7 @@ class RepairController extends Controller
                         default => throw new \InvalidArgumentException('Invalid file type')
                     };
 
-                    $filename = 'job_order_'.$repair->id.'_'.time().'.'.$extension;
+                    $filename = 'job_order_' . $repair->id . '_' . time() . '.' . $extension;
                     $path = $file->storeAs('job_orders', $filename, 'public');
                     $repair->job_order_path = $path;
                 }
@@ -349,7 +361,7 @@ class RepairController extends Controller
                 ], 404);
             }
 
-            $filePath = storage_path('app/public/'.$repair->job_order_path);
+            $filePath = storage_path('app/public/' . $repair->job_order_path);
 
             if (! file_exists($filePath)) {
                 return response()->json([
@@ -598,7 +610,7 @@ class RepairController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Repair reminders error: '.$e->getMessage(), [
+            Log::error('Repair reminders error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'line' => $e->getLine(),
             ]);

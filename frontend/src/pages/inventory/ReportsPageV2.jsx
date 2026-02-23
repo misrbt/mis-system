@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import apiClient from '../../services/apiClient'
 import { useAuth } from '../../context/AuthContext'
@@ -38,7 +37,7 @@ const statusStyle = (status) => {
   const hex = status.color.replace('#', '')
   const r = parseInt(hex.substring(0, 2), 16)
   const g = parseInt(hex.substring(2, 4), 16)
-  const b = parseInt(url => hex.length === 6 ? hex.substring(4, 6) : '00', 16) || 0
+  const b = parseInt(hex.length === 6 ? hex.substring(4, 6) : '00', 16) || 0
   
   // If parsing fails, fall back to the color itself or gray
   if (isNaN(r) || isNaN(g)) {
@@ -58,7 +57,6 @@ const statusStyle = (status) => {
 
 function ReportsPage() {
   const { user } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
   const [showFilters, setShowFilters] = useState(true)
   
   // Filter State
@@ -124,9 +122,7 @@ function ReportsPage() {
   // Main Report Data Query
   const { 
     data: reportData, 
-    isLoading, 
     isFetching, 
-    refetch 
   } = useQuery({
     queryKey: ['asset-report', activeFilters],
     queryFn: async () => {
@@ -199,13 +195,13 @@ function ReportsPage() {
 
   useEffect(() => {
     if (user && employees) {
-      // Try to find matching employee by name (case insensitive)
-      // We check both name (from auth) and fullname (if available)
-      const searchTerm = (user.name || user.fullname || '').toLowerCase()
-      
-      const matched = employees.find(e => 
-        (e.fullname || '').toLowerCase() === searchTerm
-      )
+      // Try to find matching employee by name (case-insensitive, trimmed)
+      const userName = (user.name || '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+      const matched = employees.find(e => {
+        const empName = (e.fullname || '').trim().toLowerCase().replace(/\s+/g, ' ')
+        return empName === userName
+      })
 
       if (matched) {
         setResolvedUser({
@@ -215,11 +211,11 @@ function ReportsPage() {
           branch: matched.branch
         })
       } else {
-        // Fallback with what we have
+        // Fallback with what we have from auth context
         setResolvedUser({
           ...user,
-          fullname: user.name || user.fullname || 'Admin User',
-          position: user.position || { title: '' }
+          fullname: user.name || 'Admin User',
+          position: { title: 'Administrator' }
         })
       }
     }
@@ -326,12 +322,6 @@ function ReportsPage() {
         bottom: { style: 'thin', color: { rgb: '3949AB' } },
         left: { style: 'thin', color: { rgb: '3949AB' } },
         right: { style: 'thin', color: { rgb: '3949AB' } },
-      }
-      const cellBorder = {
-        top: { style: 'thin', color: { rgb: 'CBD5E1' } },
-        bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
-        left: { style: 'thin', color: { rgb: 'CBD5E1' } },
-        right: { style: 'thin', color: { rgb: 'CBD5E1' } },
       }
       const groupBorder = {
         top: { style: 'medium', color: { rgb: '818CF8' } },

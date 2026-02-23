@@ -35,7 +35,11 @@ const AssetsPivotView = lazy(() => import('./AssetsPivotView'))
 const AdvancedAssetTracker = lazy(() => import('./AdvancedAssetTracker'))
 
 const normalizeArrayResponse = (data) => {
+  // Handle Laravel pagination: { success: true, data: { data: [...], current_page: ... } }
+  if (data?.data?.data && Array.isArray(data.data.data)) return data.data.data
+  // Handle simple array response: { success: true, data: [...] }
   if (Array.isArray(data?.data)) return data.data
+  // Handle direct array
   if (Array.isArray(data)) return data
   return []
 }

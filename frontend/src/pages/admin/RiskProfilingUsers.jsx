@@ -11,8 +11,6 @@ import {
   Eye,
   EyeOff,
   AtSign,
-  Mail,
-  Lock,
   Shield,
   CheckCircle,
   Users,
@@ -23,15 +21,15 @@ import {
   ChevronRight,
   KeyRound,
   Building2,
+  Mail,
+  Lock,
   WifiOff,
-  Settings,
-  Link,
+  ChevronDown,
+  ChevronUp,
+  Filter,
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import {
-  isRPConfigured,
-  saveRPCredentials,
-  clearRPCredentials,
   listRPUsers,
   createRPUser,
   updateRPUser,
@@ -489,155 +487,35 @@ function UserFormModal({ user, discoveredRoles, discoveredBranches, onClose, onS
   )
 }
 
-// ─── Setup Form ───────────────────────────────────────────────────────
-
-function SetupForm({ onSaved }) {
-  const [apiUrl,   setApiUrl]   = useState('')
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [showPw,   setShowPw]   = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState(null)
-
-  const handleSave = async (e) => {
-    e.preventDefault()
-    if (!apiUrl.trim() || !email.trim() || !password.trim()) {
-      setError('All fields are required.')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      // Verify credentials before saving
-      const origin   = new URL(apiUrl.trim()).origin
-      const res      = await fetch(`${origin}/api/v1/auth/login`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body:    JSON.stringify({ email: email.trim(), password }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok || !body.success) {
-        throw new Error(body.message || 'Authentication failed. Check your credentials.')
-      }
-      saveRPCredentials(apiUrl.trim(), email.trim(), password)
-      onSaved()
-    } catch (err) {
-      setError(err.message || 'Could not connect. Check the API URL and credentials.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="flex items-start justify-center pt-6">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Header */}
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
-              <Link className="w-5 h-5 text-violet-600" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">Connect Risk Profiling API</h3>
-              <p className="text-xs text-slate-500 mt-0.5">One-time setup — saved for this browser</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleSave} className="p-6 space-y-4">
-            {error && (
-              <div className="flex items-start gap-2.5 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <WifiOff className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">API Base URL</label>
-              <input
-                type="url"
-                value={apiUrl}
-                onChange={(e) => setApiUrl(e.target.value)}
-                placeholder="https://risk-profiling.example.com/api/risk-profiling/v1"
-                className="w-full px-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              />
-              <p className="text-xs text-slate-400 mt-1">Include the full path up to /v1</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">Admin Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type={showPw ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Admin password"
-                  className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-                <button type="button" onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-violet-700 rounded-lg hover:from-violet-700 hover:to-violet-800 shadow-lg shadow-violet-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Connecting...</> : <><Link className="w-4 h-4" /> Save & Connect</>}
-            </button>
-          </form>
-        </div>
-        <p className="text-center text-xs text-slate-400 mt-3">
-          Credentials are saved locally. You won't need to enter them again.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────
 
 function RiskProfilingUsers() {
-  const [configured,   setConfigured]   = useState(isRPConfigured)
   const [searchQuery,  setSearchQuery]  = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [roleFilter,   setRoleFilter]   = useState('')
+  const [branchFilter, setBranchFilter] = useState('')
+  const [sortField,    setSortField]    = useState('created_at')
+  const [sortOrder,    setSortOrder]    = useState('desc')
   const [currentPage,  setCurrentPage]  = useState(1)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingUser,  setEditingUser]  = useState(null)
   const [tempPassword, setTempPassword] = useState(null)
   const queryClient = useQueryClient()
 
-  if (!configured) {
-    return <SetupForm onSaved={() => setConfigured(true)} />
-  }
-
-  const queryKey = ['rp-users', searchQuery, statusFilter, currentPage]
+  const queryKey = ['rp-users', searchQuery, statusFilter, roleFilter, branchFilter, sortField, sortOrder, currentPage]
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey,
     queryFn: () =>
       listRPUsers({
-        search:   searchQuery  || undefined,
-        status:   statusFilter || undefined,
-        per_page: 20,
-        page:     currentPage,
+        search:     searchQuery  || undefined,
+        status:     statusFilter || undefined,
+        role:       roleFilter   || undefined,
+        branch_id:  branchFilter || undefined,
+        sort_by:    sortField    || undefined,
+        sort_order: sortOrder    || undefined,
+        per_page:   20,
+        page:       currentPage,
       }),
     staleTime: 30_000,
     retry: 1,
@@ -785,13 +663,40 @@ function RiskProfilingUsers() {
     setCurrentPage(1)
   }
 
+  const handleRoleFilter = (val) => {
+    setRoleFilter(val)
+    setCurrentPage(1)
+  }
+
+  const handleBranchFilter = (val) => {
+    setBranchFilter(val)
+    setCurrentPage(1)
+  }
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortOrder('asc')
+    }
+    setCurrentPage(1)
+  }
+
+  const clearFilters = () => {
+    setSearchQuery('')
+    setStatusFilter('')
+    setRoleFilter('')
+    setBranchFilter('')
+    setCurrentPage(1)
+  }
+
+  const hasActiveFilters = searchQuery || statusFilter || roleFilter || branchFilter
+
   const isMutating =
     statusMutation.isPending ||
     resetPwMutation.isPending ||
     deleteMutation.isPending
-
-  const activeCount   = users.filter((u) => u.status === 'active').length
-  const inactiveCount = users.filter((u) => u.status !== 'active').length
 
   // ── Render ──
 
@@ -806,27 +711,8 @@ function RiskProfilingUsers() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => {
-              clearRPCredentials()
-              queryClient.removeQueries({ queryKey: ['rp-users'] })
-              setConfigured(false)
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-            title="Change API credentials"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            Reconfigure
-          </button>
-          <button
-            onClick={() => invalidate()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh
-          </button>
-          <button
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-violet-700 text-white rounded-lg hover:from-violet-700 hover:to-violet-800 shadow-lg shadow-violet-500/25 transition-all font-semibold text-sm"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:from-violet-700 hover:to-violet-800 shadow-lg shadow-violet-500/25 transition-all font-semibold text-sm"
           >
             <UserPlus className="w-4 h-4" />
             Add User
@@ -834,40 +720,9 @@ function RiskProfilingUsers() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-lg bg-violet-50 flex items-center justify-center">
-            <Users className="w-5 h-5 text-violet-600" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Total</p>
-            <p className="text-2xl font-bold text-slate-900">{meta.total ?? users.length}</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-lg bg-green-50 flex items-center justify-center">
-            <UserCheck className="w-5 h-5 text-green-600" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Active</p>
-            <p className="text-2xl font-bold text-green-600">{activeCount}</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-lg bg-red-50 flex items-center justify-center">
-            <UserX className="w-5 h-5 text-red-500" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Inactive</p>
-            <p className="text-2xl font-bold text-red-500">{inactiveCount}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Search + Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <div className="flex items-center gap-3 flex-1">
+      {/* Search Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
+        <div className="flex items-center gap-3">
           <Search className="w-5 h-5 text-slate-400 flex-shrink-0" />
           <input
             type="text"
@@ -885,24 +740,71 @@ function RiskProfilingUsers() {
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2 sm:border-l sm:pl-3 sm:border-slate-200">
-          {[
-            { label: 'All',      value: '' },
-            { label: 'Active',   value: 'active' },
-            { label: 'Inactive', value: 'inactive' },
-          ].map((f) => (
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="w-4 h-4 text-slate-600" />
+          <h3 className="text-sm font-semibold text-slate-700">Filters</h3>
+          {hasActiveFilters && (
             <button
-              key={f.value}
-              onClick={() => handleStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                statusFilter === f.value
-                  ? 'bg-violet-600 text-white shadow-sm'
-                  : 'text-slate-500 hover:bg-slate-100'
-              }`}
+              onClick={clearFilters}
+              className="ml-auto text-xs text-violet-600 hover:text-violet-700 font-medium"
             >
-              {f.label}
+              Clear all
             </button>
-          ))}
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Status Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => handleStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          {/* Role Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">Role</label>
+            <select
+              value={roleFilter}
+              onChange={(e) => handleRoleFilter(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+            >
+              <option value="">All Roles</option>
+              {discoveredRoles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Branch Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">Branch</label>
+            <select
+              value={branchFilter}
+              onChange={(e) => handleBranchFilter(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+            >
+              <option value="">All Branches</option>
+              {discoveredBranches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -912,12 +814,52 @@ function RiskProfilingUsers() {
           <table className="w-full">
             <thead className="bg-slate-800">
               <tr>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">User</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider hidden md:table-cell">Username</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider hidden lg:table-cell">Email</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                  <button
+                    onClick={() => handleSort('first_name')}
+                    className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    Name
+                    {sortField === 'first_name' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider hidden md:table-cell">
+                  <button
+                    onClick={() => handleSort('username')}
+                    className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    Username
+                    {sortField === 'username' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider hidden lg:table-cell">
+                  <button
+                    onClick={() => handleSort('email')}
+                    className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    Email
+                    {sortField === 'email' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </button>
+                </th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider hidden lg:table-cell">Branch</th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">Roles</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">Status</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                  <button
+                    onClick={() => handleSort('status')}
+                    className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    Status
+                    {sortField === 'status' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                    )}
+                  </button>
+                </th>
                 <th className="px-5 py-3.5 text-center text-xs font-semibold text-slate-200 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -970,14 +912,14 @@ function RiskProfilingUsers() {
                           <p className="font-semibold text-sm text-slate-900 truncate">
                             {user.full_name || `${user.first_name} ${user.last_name}`}
                           </p>
-                          <p className="text-xs text-slate-400 md:hidden">@{user.username}</p>
+                          <p className="text-xs text-slate-400 md:hidden">{user.username}</p>
                         </div>
                       </div>
                     </td>
 
                     {/* Username */}
                     <td className="px-5 py-3.5 text-sm text-slate-600 hidden md:table-cell">
-                      <span className="text-slate-400">@</span>{user.username}
+                      {user.username}
                     </td>
 
                     {/* Email */}

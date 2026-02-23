@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+
+const STORAGE_KEY = 'employee-list-filters'
 import { useQuery } from '@tanstack/react-query'
 import { Users, MapPin, Briefcase, Mail, Search, Filter, ArrowLeft } from 'lucide-react'
 import { fetchEmployeesRequest } from '../../services/employeeService'
@@ -7,8 +9,38 @@ import { fetchBranchesRequest } from '../../services/branchService'
 
 function EmployeeListPage() {
   const navigate = useNavigate()
-  const [selectedBranch, setSelectedBranch] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedBranch, setSelectedBranch] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        return parsed.branch ?? ''
+      }
+    } catch {
+      return ''
+    }
+    return ''
+  })
+  const [searchQuery, setSearchQuery] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        return parsed.search ?? ''
+      }
+    } catch {
+      return ''
+    }
+    return ''
+  })
+
+  // Persist filters to sessionStorage when they change
+  useEffect(() => {
+    sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ branch: selectedBranch, search: searchQuery })
+    )
+  }, [selectedBranch, searchQuery])
 
   // Fetch employees
   const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({

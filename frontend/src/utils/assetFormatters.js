@@ -56,7 +56,12 @@ export const formatCompactCurrency = (amount) => {
  * @returns {array} Normalized array
  */
 export const normalizeArrayResponse = (payload) => {
+  // Handle deeply nested paginated array (e.g. payload.data.data.data)
+  if (payload?.data?.data && Array.isArray(payload.data.data.data)) return payload.data.data.data
+  // Handle standard wrapped array (e.g. payload.data) or lightly nested pagination (payload.data.data)
+  if (payload?.data && Array.isArray(payload.data.data)) return payload.data.data
   if (Array.isArray(payload?.data)) return payload.data
+  // Handle direct array
   if (Array.isArray(payload)) return payload
   return []
 }
