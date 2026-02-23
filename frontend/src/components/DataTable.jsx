@@ -140,7 +140,7 @@ function DataTable({ columns, data, pageSize = 10, showGlobalFilter = true, load
             onChange={(e) => table.setPageSize(Number(e.target.value))}
             className="px-3 py-1 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            {[10, 20, 30, 40, 50].map((size) => (
+            {[10, 20, 30, 40, 50, 100].map((size) => (
               <option key={size} value={size}>
                 {size} per page
               </option>

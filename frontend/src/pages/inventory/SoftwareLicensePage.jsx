@@ -42,7 +42,7 @@ function SoftwareLicensePage() {
   const { data: licenses = [], isLoading: loading } = useQuery({
     queryKey: ['software-licenses'],
     queryFn: async () => {
-      const response = await apiClient.get('/software-licenses')
+      const response = await apiClient.get('/software-licenses?all=true')
       return response.data?.data ?? []
     },
   })
@@ -51,7 +51,8 @@ function SoftwareLicensePage() {
     queryKey: ['employees'],
     queryFn: async () => {
       const response = await apiClient.get('/employees')
-      return response.data?.data ?? []
+      // Laravel pagination returns data inside data.data
+      return response.data?.data?.data || response.data?.data || []
     },
   })
 
@@ -59,7 +60,8 @@ function SoftwareLicensePage() {
     queryKey: ['positions'],
     queryFn: async () => {
       const response = await apiClient.get('/positions')
-      return response.data?.data ?? []
+      // Handle potential pagination
+      return response.data?.data?.data || response.data?.data || []
     },
   })
 
@@ -67,7 +69,7 @@ function SoftwareLicensePage() {
     queryKey: ['sections'],
     queryFn: async () => {
       const response = await apiClient.get('/sections')
-      return response.data?.data ?? []
+      return response.data?.data?.data || response.data?.data || []
     },
   })
 
@@ -75,7 +77,7 @@ function SoftwareLicensePage() {
     queryKey: ['branches'],
     queryFn: async () => {
       const response = await apiClient.get('/branches')
-      return response.data?.data ?? []
+      return response.data?.data?.data || response.data?.data || []
     },
   })
 
@@ -491,7 +493,7 @@ function SoftwareLicensePage() {
                 onChange={(e) => mobileTable.setPageSize(Number(e.target.value))}
                 className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                {[10, 20, 30, 40, 50].map((size) => (
+                {[10, 20, 30, 40, 50, 100].map((size) => (
                   <option key={size} value={size}>
                     {size} per page
                   </option>
