@@ -9,6 +9,7 @@ import AssetTableRow from './AssetTableRow'
 import AssetEmptyState from './AssetEmptyState'
 
 const AssetTableView = ({
+  highlightedAssetId,
   assets,
   statuses,
   statusColorMap,
@@ -82,6 +83,7 @@ const AssetTableView = ({
               {assets.map((asset) => (
                 <AssetTableRow
                   key={asset.id}
+                  isHighlighted={asset.id === highlightedAssetId}
                   asset={asset}
                   statusColorMap={statusColorMap}
                   showStatusPicker={statusPickerFor === asset.id}

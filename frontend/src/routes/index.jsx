@@ -8,7 +8,6 @@ import ErrorPage from '../components/ErrorPage'
 // Lazy load auth and portal pages
 const AuthLayout = lazy(() => import('../layouts/AuthLayout'))
 const Login = lazy(() => import('../pages/auth/Login'))
-const Register = lazy(() => import('../pages/auth/Register'))
 const Portal = lazy(() => import('../pages/Portal'))
 
 const router = createBrowserRouter([
@@ -32,10 +31,6 @@ const router = createBrowserRouter([
       {
         path: 'login',
         element: <Login />,
-      },
-      {
-        path: 'register',
-        element: <Register />,
       },
     ],
   },

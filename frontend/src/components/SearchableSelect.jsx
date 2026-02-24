@@ -31,9 +31,9 @@ function SearchableSelect({
   // Filter options based on search term
   const filteredOptions = safeOptions.filter(option => {
     const searchLower = searchTerm.toLowerCase()
-    const primaryMatch = option[displayField]?.toLowerCase().includes(searchLower)
-    const secondaryMatch = secondaryField && option[secondaryField]?.toLowerCase().includes(searchLower)
-    const tertiaryMatch = tertiaryField && option[tertiaryField]?.toLowerCase().includes(searchLower)
+    const primaryMatch = option[displayField] && String(option[displayField]).toLowerCase().includes(searchLower)
+    const secondaryMatch = secondaryField && option[secondaryField] && String(option[secondaryField]).toLowerCase().includes(searchLower)
+    const tertiaryMatch = tertiaryField && option[tertiaryField] && String(option[tertiaryField]).toLowerCase().includes(searchLower)
     return primaryMatch || secondaryMatch || tertiaryMatch
   })
 

@@ -22,7 +22,7 @@ function OfficeToolsTab() {
   const { data: officeTools = [], isLoading: loading } = useQuery({
     queryKey: ['office-tools'],
     queryFn: async () => {
-      const response = await apiClient.get('/office-tools')
+      const response = await apiClient.get('/office-tools?all=true')
       return response.data.data ?? []
     },
   })

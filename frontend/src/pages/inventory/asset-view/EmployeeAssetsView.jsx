@@ -7,6 +7,7 @@ import EmployeeAssetHistory from '../../../components/employee/EmployeeAssetHist
 import AssetDetailModal from '../assets/AssetDetailModal'
 
 function EmployeeAssetsView({
+  highlightedAssetId,
   employee,
   employeeAssets,
   totalEmployeeAcqCost,
@@ -175,6 +176,7 @@ function EmployeeAssetsView({
 
                   {viewMode === 'cards' && (
                     <AssetCardsView
+                      highlightedAssetId={highlightedAssetId}
                       assets={employeeAssets}
                       editingAssetId={editingAssetId}
                       editFormData={editFormData}

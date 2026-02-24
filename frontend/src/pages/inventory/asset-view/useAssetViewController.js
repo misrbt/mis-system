@@ -48,6 +48,8 @@ export default function useAssetViewController({ id, employeeId }) {
     remarks: "",
     specifications: {},
     assigned_to_employee_id: "",
+    workstation_branch_id: "",
+    workstation_position_id: "",
   });
   const [components, setComponents] = useState([]);
   const [editComponents, setEditComponents] = useState([]);
@@ -221,15 +223,45 @@ export default function useAssetViewController({ id, employeeId }) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch branches and positions (for workstation selectors)
+  const { data: branchesData } = useQuery({
+    queryKey: ["branches"],
+    queryFn: async () => {
+      const response = await apiClient.get("/branches");
+      const d = response.data;
+      if (d?.data?.data && Array.isArray(d.data.data)) return d.data.data;
+      if (Array.isArray(d?.data)) return d.data;
+      if (Array.isArray(d)) return d;
+      return [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: positionsData } = useQuery({
+    queryKey: ["positions"],
+    queryFn: async () => {
+      const response = await apiClient.get("/positions");
+      const d = response.data;
+      if (d?.data?.data && Array.isArray(d.data.data)) return d.data.data;
+      if (Array.isArray(d?.data)) return d.data;
+      if (Array.isArray(d)) return d;
+      return [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const branchOptions = Array.isArray(branchesData) ? branchesData : [];
+  const positionOptions = Array.isArray(positionsData) ? positionsData : [];
+
   const employees = useMemo(
     () =>
       Array.isArray(employeesData?.data?.data)
         ? employeesData.data.data
         : Array.isArray(employeesData?.data)
-        ? employeesData.data
-        : Array.isArray(employeesData)
-        ? employeesData
-        : [],
+          ? employeesData.data
+          : Array.isArray(employeesData)
+            ? employeesData
+            : [],
     [employeesData]
   );
 
@@ -421,6 +453,8 @@ export default function useAssetViewController({ id, employeeId }) {
         remarks: "",
         specifications: {},
         assigned_to_employee_id: "",
+        workstation_branch_id: "",
+        workstation_position_id: "",
       });
     },
     onError: (error) => {
@@ -596,6 +630,8 @@ export default function useAssetViewController({ id, employeeId }) {
         remarks: empAsset.remarks || "",
         specifications: empAsset.specifications || {},
         assigned_to_employee_id: empAsset.assigned_to_employee_id || "",
+        workstation_branch_id: empAsset.workstation_branch_id || "",
+        workstation_position_id: empAsset.workstation_position_id || "",
       });
       setShowEditModal(true);
     } else {
@@ -619,6 +655,8 @@ export default function useAssetViewController({ id, employeeId }) {
         remarks: empAsset.remarks || "",
         specifications: empAsset.specifications || {},
         assigned_to_employee_id: empAsset.assigned_to_employee_id || "",
+        workstation_branch_id: empAsset.workstation_branch_id || "",
+        workstation_position_id: empAsset.workstation_position_id || "",
       });
     }
   };
@@ -1299,5 +1337,7 @@ export default function useAssetViewController({ id, employeeId }) {
     vendorPending: createVendorMutation.isPending,
     updateAssetPending: updateAssetMutation.isPending,
     deleteAssetPending: deleteAssetMutation.isPending,
+    branchOptions,
+    positionOptions,
   };
 }

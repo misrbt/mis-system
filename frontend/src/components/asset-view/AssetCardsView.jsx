@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Package,
@@ -283,7 +283,20 @@ const AssetCard = ({
   onEditComponentRemove,
   onEditComponentChange,
   onGenerateEditComponentSerial,
+  isHighlighted,
+  excludeOS,
 }) => {
+  // Reference for scrolling into view
+  const cardRef = useRef(null)
+
+  useEffect(() => {
+    if (isHighlighted && cardRef.current) {
+      setTimeout(() => {
+        cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 300)
+    }
+  }, [isHighlighted])
+
   // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
@@ -341,9 +354,10 @@ const AssetCard = ({
     categoryLabel,
   }))
 
-  // Check if asset is Desktop PC (based on original category)
-  const isDesktopPC = asset.category?.name?.toLowerCase().includes('desktop') ||
-                      asset.category?.name?.toLowerCase().includes('pc')
+  // Check if asset is Desktop PC (based on original category or via categories prop)
+  const assetCatMatch = asset.category || categories.find(c => String(c.id) === String(asset.asset_category_id))
+  const isDesktopPC = assetCatMatch?.name?.toLowerCase().includes('desktop') ||
+                      assetCatMatch?.name?.toLowerCase().includes('pc')
 
   // Check if the SELECTED category in edit form is Desktop PC
   const editSelectedCategory = categories.find(
@@ -476,10 +490,15 @@ const AssetCard = ({
 
   return (
     <div
+      ref={cardRef}
       className={`group relative bg-white rounded-xl shadow-sm border transition-all duration-300 flex flex-col box-border ${
-        isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200 border'
+        isHighlighted
+          ? 'ring-4 ring-yellow-400 border-yellow-400 shadow-xl scale-[1.02] z-10 bg-yellow-50/10'
+          : isSelected 
+            ? 'border-blue-500 border-2 shadow-lg' 
+            : 'border-slate-200 border'
       } ${
-        !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1' : ''
+        !isEditing && !isHighlighted ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1' : ''
       } ${isEditing ? 'h-auto' : isDetailsExpanded ? 'min-h-[260px] h-auto' : 'h-[260px]'}`}
     >
       {/* Selection Checkbox */}
@@ -1141,6 +1160,10 @@ const AssetCard = ({
                   // Fields to skip (already displayed elsewhere or composite)
                   const skipFields = ['capacity_unit', 'ram_unit', 'storage_unit', 'storage_type']
                   
+                  if (excludeOS || !isDesktopPC) {
+                    skipFields.push('os')
+                  }
+                  
                   // Get all spec entries that have values
                   const specEntries = Object.entries(asset.specifications)
                     .filter(([key, value]) => {
@@ -1262,6 +1285,8 @@ const AssetCard = ({
 }
 
 const AssetCardsView = ({
+  highlightedAssetId,
+  excludeOS = false,
   assets,
   editingAssetId,
   editFormData,
@@ -1300,6 +1325,8 @@ const AssetCardsView = ({
       {assets.map((asset) => (
         <AssetCard
           key={asset.id}
+          excludeOS={excludeOS}
+          isHighlighted={asset.id === highlightedAssetId}
           asset={asset}
           isEditing={editingAssetId === asset.id}
           editFormData={editFormData}

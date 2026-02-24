@@ -233,13 +233,13 @@ export const getAssetColumns = ({
     },
     size: 120,
   },
+
   {
     accessorKey: 'category',
     header: 'Category',
     cell: ({ row }) => {
       const isEditing = editingCell === `${row.id}-category`
       const currentCategoryId = row.original.asset_category_id || row.original.category?.id || ''
-
       if (isEditing) {
         const inputId = `category-${row.id}`
         return (
@@ -461,7 +461,7 @@ export const getAssetColumns = ({
           <button
             onClick={() => {
               if (hasEmployee) {
-                navigate(`/inventory/employees/${assignedEmployeeId}/assets`)
+                navigate(`/inventory/employees/${assignedEmployeeId}/assets?highlight=${row.original.id}`)
               } else {
                 Swal.fire({
                   icon: 'info',

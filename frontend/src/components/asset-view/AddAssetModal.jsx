@@ -580,7 +580,7 @@ const AddAssetModal = ({
           )}
 
           {/* Category-Specific Specifications */}
-          {!isDesktopPCCategory() && (
+          {formData.asset_category_id && (
             <SpecificationFields
               categoryName={categories?.find(c => c.id === parseInt(formData.asset_category_id))?.name}
               subcategoryName={subcategories?.find(s => s.id === parseInt(formData.subcategory_id))?.name}

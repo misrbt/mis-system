@@ -71,6 +71,7 @@ function RepairsPage() {
       Object.entries(filters).forEach(([key, value]) => {
         if (value) params[key] = value
       })
+      params.all = true // Bypass backend pagination
       const response = await fetchRepairs(params)
       return response.data
     },
@@ -537,8 +538,14 @@ function RepairsPage() {
                     <div className="text-sm font-semibold text-slate-900 truncate">
                       {repair.asset?.asset_name || 'N/A'}
                     </div>
-                    <div className="text-xs text-slate-500 mt-1 truncate">
-                      {repair.asset?.category?.name || 'N/A'}
+                    <div className="text-xs text-slate-500 mt-1 truncate flex items-center gap-1.5">
+                      <span>{repair.asset?.category?.name || 'N/A'}</span>
+                      {repair.asset?.status && (
+                        <>
+                          <span>•</span>
+                          <span className="font-medium">{repair.asset.status.name}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <span

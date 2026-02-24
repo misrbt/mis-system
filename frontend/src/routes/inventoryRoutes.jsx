@@ -10,6 +10,7 @@ const SectionPage = lazy(() => import('../pages/inventory/SectionPage'))
 const PositionPage = lazy(() => import('../pages/inventory/PositionPage'))
 const EmployeePage = lazy(() => import('../pages/inventory/EmployeePage'))
 const EmployeeListPage = lazy(() => import('../pages/inventory/EmployeeListPage'))
+const EmployeeTransitionsPage = lazy(() => import('../pages/inventory/EmployeeTransitionsPage'))
 const StatusPage = lazy(() => import('../pages/inventory/StatusPage'))
 const VendorsPage = lazy(() => import('../pages/inventory/VendorsPage'))
 const EquipmentPage = lazy(() => import('../pages/inventory/EquipmentPage'))
@@ -62,6 +63,10 @@ const inventoryRoutes = {
     {
       path: 'employee-list',
       element: <EmployeeListPage />,
+    },
+    {
+      path: 'employee-transitions',
+      element: <EmployeeTransitionsPage />,
     },
     {
       path: 'statuses',

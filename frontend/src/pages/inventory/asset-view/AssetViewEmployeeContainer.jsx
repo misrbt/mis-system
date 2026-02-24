@@ -1,6 +1,10 @@
 import EmployeeAssetsView from "./EmployeeAssetsView";
+import { useSearchParams } from "react-router-dom";
 
 function AssetViewEmployeeContainer({ controller }) {
+  const [searchParams] = useSearchParams();
+  const highlightedAssetId = searchParams.get("highlight") ? Number(searchParams.get("highlight")) : null;
+
   const {
     employee,
     employeeAssets,
@@ -81,6 +85,7 @@ function AssetViewEmployeeContainer({ controller }) {
 
   return (
     <EmployeeAssetsView
+      highlightedAssetId={highlightedAssetId}
       employee={employee}
       employeeAssets={employeeAssets}
       totalEmployeeAcqCost={totalEmployeeAcqCost}

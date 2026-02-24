@@ -139,6 +139,7 @@ function ReplenishmentPage() {
       Object.entries(queryFilters).forEach(([key, value]) => {
         if (value) params.append(key, value)
       })
+      params.append('all', 'true')
       const response = await apiClient.get(`/replenishments?${params.toString()}`)
       return response.data
     },

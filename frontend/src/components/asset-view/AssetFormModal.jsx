@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Modal from '../../../components/Modal'
-import SearchableSelect from '../../../components/SearchableSelect'
-import SpecificationFields from '../../../components/specifications/SpecificationFields'
+import Modal from '../Modal'
+import SearchableSelect from '../SearchableSelect'
+import SpecificationFields from '../specifications/SpecificationFields'
 import { RefreshCw, Plus, X, Package, Sparkles } from 'lucide-react'
-import { generateAssetName, shouldAutoGenerateName } from '../../../utils/assetNameGenerator'
-import apiClient from '../../../services/apiClient'
+import { generateAssetName, shouldAutoGenerateName } from '../../utils/assetNameGenerator'
+import apiClient from '../../services/apiClient'
 
 const AssetFormModal = ({
   isOpen,
@@ -22,6 +22,8 @@ const AssetFormModal = ({
   vendorOptions,
   employeeOptions,
   statusOptions,
+  branchOptions = [],
+  positionOptions = [],
   showStatus = false,
   showBookValue = false,
   assignmentTitle,
@@ -136,10 +138,8 @@ const AssetFormModal = ({
       }
     : {}
 
-  const assignmentGridClass = showStatus
-    ? 'grid grid-cols-1 md:grid-cols-2 gap-4'
-    : 'grid grid-cols-1 gap-4'
-  const remarksWrapperClass = showStatus ? 'md:col-span-2' : ''
+  const assignmentGridClass = 'grid grid-cols-1 md:grid-cols-2 gap-4'
+  const remarksWrapperClass = 'md:col-span-2'
 
   // Helper to check if selected category is Desktop PC
   const isDesktopPCCategory = () => {
@@ -296,8 +296,7 @@ const AssetFormModal = ({
             )}
 
             {/* Category-Specific Specifications - placed after subcategory */}
-            {!isDesktopPCCategory() &&
-              formData.asset_category_id &&
+            {formData.asset_category_id &&
               (!hasSubcategories || formData.subcategory_id) && (
               <div className="md:col-span-2">
                 <SpecificationFields
@@ -832,7 +831,7 @@ const AssetFormModal = ({
               </div>
             )}
 
-            <div>
+            <div className={showStatus ? '' : 'md:col-span-2'}>
               <SearchableSelect
                 label="Assigned To Employee"
                 options={employeeOptions}
@@ -843,6 +842,34 @@ const AssetFormModal = ({
                 tertiaryField="branch"
                 placeholder="Select employee or search..."
                 emptyMessage="No employees found"
+                required
+              />
+            </div>
+
+            {/* Workstation Branch */}
+            <div>
+              <SearchableSelect
+                label="Workstation Branch"
+                options={(branchOptions || []).map((b) => ({ id: b.id, name: b.branch_name ?? b.name }))}
+                value={formData.workstation_branch_id ?? ''}
+                onChange={(value) => onInputChange({ target: { name: 'workstation_branch_id', value } })}
+                displayField="name"
+                placeholder="Select workstation branch..."
+                emptyMessage="No branches found"
+                required
+              />
+            </div>
+
+            {/* Workstation Position */}
+            <div>
+              <SearchableSelect
+                label="Workstation Position"
+                options={(positionOptions || []).map((p) => ({ id: p.id, name: p.title ?? p.name }))}
+                value={formData.workstation_position_id ?? ''}
+                onChange={(value) => onInputChange({ target: { name: 'workstation_position_id', value } })}
+                displayField="name"
+                placeholder="Select workstation position..."
+                emptyMessage="No positions found"
                 required
               />
             </div>

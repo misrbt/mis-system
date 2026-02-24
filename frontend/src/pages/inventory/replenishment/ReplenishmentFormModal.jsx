@@ -281,9 +281,8 @@ const ReplenishmentFormModal = ({
               </div>
             )}
 
-            {/* Category-Specific Specifications - only show if NOT Desktop PC */}
-            {!isDesktopPCCategory() &&
-              formData.asset_category_id &&
+            {/* Category-Specific Specifications */}
+            {formData.asset_category_id &&
               (!hasSubcategories || formData.subcategory_id) && (
               <div className="md:col-span-2">
                 <SpecificationFields

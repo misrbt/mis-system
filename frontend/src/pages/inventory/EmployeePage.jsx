@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowLeftRight } from 'lucide-react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -8,6 +8,7 @@ import {
   getSortedRowModel,
   getPaginationRowModel,
 } from '@tanstack/react-table'
+import { useNavigate } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import Modal from '../../components/Modal'
 import DataTable from '../../components/DataTable'
@@ -31,6 +32,7 @@ const initialForm = {
 }
 
 function EmployeePage() {
+  const navigate = useNavigate()
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState(null)
@@ -47,7 +49,11 @@ function EmployeePage() {
     queryKey: ['employees'],
     queryFn: async () => {
       const response = await fetchEmployeesRequest()
-      return response.data?.data?.data ?? []
+      const resData = response.data
+      if (Array.isArray(resData?.data?.data)) return resData.data.data
+      if (Array.isArray(resData?.data)) return resData.data
+      if (Array.isArray(resData)) return resData
+      return []
     },
   })
 
@@ -224,13 +230,22 @@ function EmployeePage() {
             <h1 className="text-3xl font-bold text-slate-900">Employee Management</h1>
             <p className="text-sm text-slate-600 mt-1.5">Manage employees and their assignments</p>
           </div>
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add New Employee</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/inventory/employee-transitions')}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              <ArrowLeftRight className="w-5 h-5" />
+              <span>Manage Transitions</span>
+            </button>
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add New Employee</span>
+            </button>
+          </div>
         </div>
 
         {/* Branch Filter */}
@@ -465,6 +480,7 @@ function EmployeePage() {
           submitLabel="Update Employee"
         />
       </Modal>
+
     </div>
   )
 }

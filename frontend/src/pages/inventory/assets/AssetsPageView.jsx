@@ -22,7 +22,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import apiClient from '../../../services/apiClient'
-import AssetFormModal from './AssetFormModal'
+import AssetFormModal from '../../../components/asset-view/AssetFormModal'
 import { getAssetColumns } from './assetColumns'
 import Modal from '../../../components/Modal'
 import Swal from 'sweetalert2'
@@ -109,6 +109,8 @@ const buildFormData = (asset = {}) => ({
   remarks: asset.remarks || '',
   specifications: asset.specifications || {},
   assigned_to_employee_id: asset.assigned_to_employee_id || '',
+  workstation_branch_id: asset.workstation_branch_id || '',
+  workstation_position_id: asset.workstation_position_id || '',
 })
 
 const notifySuccess = (title, text) => {
@@ -264,7 +266,7 @@ function AssetsPage() {
   const { data: assetsData, isLoading, refetch } = useQuery({
     queryKey: ['assets', deferredFilters],
     queryFn: async () => {
-      const params = buildQueryParams(deferredFilters)
+      const params = buildQueryParams(deferredFilters, { all: 'true' })
       const response = await apiClient.get(`/assets?${params}`)
       return response.data
     },
@@ -362,6 +364,16 @@ function AssetsPage() {
     staleTime: 5 * 60 * 1000,
   })
 
+  // Fetch positions (for workstation selector)
+  const { data: positionsList } = useQuery({
+    queryKey: ['positions'],
+    queryFn: async () => {
+      const response = await apiClient.get('/positions')
+      return normalizeArrayResponse(response.data)
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
   const employeeAcqTotals = useMemo(() => {
     const totals = {}
     const rows = assetsTotalsData?.data || []
@@ -418,6 +430,16 @@ function AssetsPage() {
         subcategory_name: eq.subcategory?.name,
       })),
     [equipmentList]
+  )
+
+  const branchOptions = useMemo(
+    () => (Array.isArray(branches) ? branches : []),
+    [branches]
+  )
+
+  const positionOptions = useMemo(
+    () => (Array.isArray(positionsList) ? positionsList : []),
+    [positionsList]
   )
 
   const resolveEquipmentId = useCallback(
@@ -1567,7 +1589,7 @@ function AssetsPage() {
                       <button
                         onClick={() => {
                           if (hasEmployee) {
-                            navigate(`/inventory/employees/${assignedEmployeeId}/assets`)
+                            navigate(`/inventory/employees/${assignedEmployeeId}/assets?highlight=${asset.id}`)
                           } else {
                             Swal.fire({
                               icon: 'info',
@@ -1749,6 +1771,8 @@ function AssetsPage() {
           vendorOptions={vendorOptions}
           employeeOptions={employeeOptions}
           statusOptions={statusOptions}
+          branchOptions={branchOptions}
+          positionOptions={positionOptions}
           assignmentTitle="Assignment & Remarks"
           assignmentSubtitle="Employee assignment and additional notes"
           usePlaceholders
@@ -1781,6 +1805,8 @@ function AssetsPage() {
           vendorOptions={vendorOptions}
           employeeOptions={employeeOptions}
           statusOptions={statusOptions}
+          branchOptions={branchOptions}
+          positionOptions={positionOptions}
           showStatus
           showBookValue
           assignmentTitle="Assignment & Status"

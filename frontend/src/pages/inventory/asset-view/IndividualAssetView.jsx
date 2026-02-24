@@ -22,6 +22,7 @@ import {
   Download,
   Printer,
   Loader2,
+  Shield,
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import CodeDisplayModal from '../../../components/CodeDisplayModal'
@@ -719,6 +720,48 @@ function IndividualAssetView({
                 )}
               </div>
             </div>
+
+            {/* Specifications Section */}
+            {asset.specifications && Object.keys(asset.specifications).length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 mt-4 sm:mt-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-indigo-600" />
+                  Specifications
+                </h3>
+                <div className="space-y-3">
+                  {Object.entries(asset.specifications).map(([key, value]) => {
+                    // Skip empty values and unit helpers
+                    if (value === null || value === undefined || value === '') return null
+                    if (key.includes('_unit')) return null
+                    
+                    // Format label nicely
+                    let label = key.replace(/_/g, ' ')
+                    label = label.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+                    
+                    // Special label cases
+                    if (key === 'os') label = 'Operating System'
+                    if (key === 'gpu') label = 'Graphics Processing Unit'
+
+                    // Format values with units if they exist
+                    let displayValue = value
+                    if (key === 'capacity' && asset.specifications.capacity_unit) displayValue = `${value} ${asset.specifications.capacity_unit}`
+                    if (key === 'ram' && asset.specifications.ram_unit) displayValue = `${value} ${asset.specifications.ram_unit}`
+                    if (key === 'storage_capacity' && asset.specifications.storage_unit) {
+                      displayValue = `${value} ${asset.specifications.storage_unit}`
+                      if (asset.specifications.storage_type) displayValue += ` ${asset.specifications.storage_type}`
+                    }
+                    if (key === 'storage_type') return null // Handled in storage_capacity
+
+                    return (
+                      <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100 last:border-0">
+                        <span className="text-sm text-gray-600">{label}</span>
+                        <span className="font-medium text-gray-900 text-right">{String(displayValue)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* QR Code & Barcode Section */}
             <QRCodeSection asset={asset} />
