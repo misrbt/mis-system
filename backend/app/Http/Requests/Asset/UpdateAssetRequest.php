@@ -25,6 +25,8 @@ class UpdateAssetRequest extends FormRequest
             'status_id' => 'sometimes|required|exists:statuses,id',
             'assigned_to_employee_id' => 'nullable|exists:employee,id',
             'branch_id' => 'nullable|exists:branches,id',
+            'workstation_branch_id' => 'sometimes|required|exists:branches,id',
+            'workstation_position_id' => 'sometimes|required|exists:positions,id',
             'equipment_id' => 'nullable|exists:equipment,id',
             'location' => 'nullable|string|max:255',
             'remarks' => 'nullable|string',

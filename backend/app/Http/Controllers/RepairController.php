@@ -23,6 +23,7 @@ class RepairController extends Controller
         try {
             $query = Repair::with([
                 'asset.category',
+                'asset.status',
                 'asset.assignedEmployee',
                 'vendor',
             ]);
@@ -81,6 +82,16 @@ class RepairController extends Controller
             );
 
             $query->orderBy($sortBy, $sortOrder);
+
+            // Check for 'all' parameter to return non-paginated data
+            if ($request->boolean('all', false)) {
+                $repairs = $query->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $repairs,
+                ], 200);
+            }
 
             $perPage = $request->input('per_page', 50);
             $repairs = $query->paginate($perPage);
@@ -277,15 +288,24 @@ class RepairController extends Controller
                         default => throw new \InvalidArgumentException('Invalid file type')
                     };
 
-                    $filename = 'job_order_' . $repair->id . '_' . time() . '.' . $extension;
+                    $filename = 'job_order_'.$repair->id.'_'.time().'.'.$extension;
                     $path = $file->storeAs('job_orders', $filename, 'public');
                     $repair->job_order_path = $path;
                 }
             }
 
             // Auto-set actual return date when status becomes "Returned"
-            if ($request->status === 'Returned' && ! $repair->actual_return_date) {
-                $repair->actual_return_date = $request->actual_return_date ?? now();
+            if ($request->status === 'Returned') {
+                if (! $repair->actual_return_date) {
+                    $repair->actual_return_date = $request->actual_return_date ?? now();
+                }
+
+                // Automatically set the asset status back to Functional
+                $functionalStatus = \App\Models\Status::where('name', 'Functional')->first();
+                if ($functionalStatus && $repair->asset) {
+                    $repair->asset->status_id = $functionalStatus->id;
+                    $repair->asset->save();
+                }
             }
 
             $repair->save();
@@ -361,7 +381,7 @@ class RepairController extends Controller
                 ], 404);
             }
 
-            $filePath = storage_path('app/public/' . $repair->job_order_path);
+            $filePath = storage_path('app/public/'.$repair->job_order_path);
 
             if (! file_exists($filePath)) {
                 return response()->json([
@@ -610,7 +630,7 @@ class RepairController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Repair reminders error: ' . $e->getMessage(), [
+            Log::error('Repair reminders error: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'line' => $e->getLine(),
             ]);

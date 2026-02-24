@@ -61,6 +61,28 @@ class AssetController extends Controller
 
             $query->orderBy($sortBy, $sortOrder);
 
+            // Check for 'all' parameter to return non-paginated data (must come before pagination)
+            if ($request->boolean('all', false)) {
+                $assets = $query->get();
+                // We still need to deduplicate by assigned employee if required
+                $hasEmployeeFilter = $request->has('assigned_to_employee_id') && $request->assigned_to_employee_id;
+                if (! $hasEmployeeFilter && ! $request->boolean('all', false)) {
+                    $assets = $assets->unique(fn ($asset) => (int) ($asset->assigned_to_employee_id ?: 0))->values();
+                }
+
+                $assets->each(function ($asset) use ($hasEmployeeFilter) {
+                    if (! $hasEmployeeFilter) {
+                        $asset->makeHidden(['qr_code', 'barcode']);
+                    }
+                    $asset->setAppends([]);
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $assets,
+                ], 200);
+            }
+
             // Pagination - limit results per page (max 100)
             $perPage = min($request->get('per_page', 50), 100);
             $paginated = $query->paginate($perPage);

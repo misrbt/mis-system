@@ -53,6 +53,8 @@ class Asset extends Model
         'remarks',
         'specifications',
         'assigned_to_employee_id',
+        'workstation_branch_id',
+        'workstation_position_id',
         'qr_code',
         'barcode',
     ];
@@ -96,6 +98,16 @@ class Asset extends Model
     public function assignedEmployee()
     {
         return $this->belongsTo(Employee::class, 'assigned_to_employee_id');
+    }
+
+    public function workstationBranch()
+    {
+        return $this->belongsTo(Branch::class, 'workstation_branch_id');
+    }
+
+    public function workstationPosition()
+    {
+        return $this->belongsTo(Position::class, 'workstation_position_id');
     }
 
     public function repairs()

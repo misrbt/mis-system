@@ -72,6 +72,15 @@ class ReplenishmentController extends Controller
                 }
             }
 
+            if ($request->boolean('all', false)) {
+                $replenishments = $query->orderBy('created_at', 'desc')->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $replenishments,
+                ], 200);
+            }
+
             $perPage = min((int) $request->input('per_page', 50), 100);
             $replenishments = $query->orderBy('created_at', 'desc')->paginate($perPage);
 

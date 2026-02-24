@@ -64,7 +64,7 @@ class AuditLogController extends Controller
                 $search = $request->search;
                 $query->whereHas('asset', function ($q) use ($search) {
                     $q->where('asset_name', 'like', "%{$search}%")
-                      ->orWhere('serial_number', 'like', "%{$search}%");
+                        ->orWhere('serial_number', 'like', "%{$search}%");
                 });
             }
 
@@ -89,10 +89,13 @@ class AuditLogController extends Controller
 
             // Enhance each movement with description, icon, and color
             $movements->getCollection()->transform(function ($movement) {
-                return array_merge($movement->toArray(), [
-                    'description' => $movement->getMovementDescription(),
-                    'icon' => $movement->getIconClass(),
-                    'color' => $movement->getColorClass(),
+                $isModel = $movement instanceof \Illuminate\Database\Eloquent\Model;
+                $data = $isModel ? $movement->toArray() : (array) $movement;
+
+                return array_merge($data, [
+                    'description' => $isModel ? $movement->getMovementDescription() : ($data['remarks'] ?? 'Movement action'),
+                    'icon' => $isModel ? $movement->getIconClass() : 'Activity',
+                    'color' => $isModel ? $movement->getColorClass() : 'slate',
                 ]);
             });
 
@@ -135,16 +138,19 @@ class AuditLogController extends Controller
                 'repair.vendor',
                 'performedBy',
             ])
-            ->where('asset_id', $assetId)
-            ->orderBy('movement_date', 'desc')
-            ->get()
-            ->map(function ($movement) {
-                return array_merge($movement->toArray(), [
-                    'description' => $movement->getMovementDescription(),
-                    'icon' => $movement->getIconClass(),
-                    'color' => $movement->getColorClass(),
-                ]);
-            });
+                ->where('asset_id', $assetId)
+                ->orderBy('movement_date', 'desc')
+                ->get()
+                ->map(function ($movement) {
+                    $isModel = $movement instanceof \Illuminate\Database\Eloquent\Model;
+                    $data = $isModel ? $movement->toArray() : (array) $movement;
+
+                    return array_merge($data, [
+                        'description' => $isModel ? $movement->getMovementDescription() : ($data['remarks'] ?? 'Movement action'),
+                        'icon' => $isModel ? $movement->getIconClass() : 'Activity',
+                        'color' => $isModel ? $movement->getColorClass() : 'slate',
+                    ]);
+                });
 
             return response()->json([
                 'success' => true,
@@ -177,15 +183,18 @@ class AuditLogController extends Controller
                 'toStatus',
                 'repair.vendor',
             ])
-            ->where('performed_by_user_id', $userId)
-            ->orderBy('movement_date', 'desc')
-            ->paginate(50);
+                ->where('performed_by_user_id', $userId)
+                ->orderBy('movement_date', 'desc')
+                ->paginate(50);
 
             $movements->getCollection()->transform(function ($movement) {
-                return array_merge($movement->toArray(), [
-                    'description' => $movement->getMovementDescription(),
-                    'icon' => $movement->getIconClass(),
-                    'color' => $movement->getColorClass(),
+                $isModel = $movement instanceof \Illuminate\Database\Eloquent\Model;
+                $data = $isModel ? $movement->toArray() : (array) $movement;
+
+                return array_merge($data, [
+                    'description' => $isModel ? $movement->getMovementDescription() : ($data['remarks'] ?? 'Movement action'),
+                    'icon' => $isModel ? $movement->getIconClass() : 'Activity',
+                    'color' => $isModel ? $movement->getColorClass() : 'slate',
                 ]);
             });
 
@@ -318,13 +327,13 @@ class AuditLogController extends Controller
                 $search = $request->search;
                 $query->whereHas('asset', function ($q) use ($search) {
                     $q->where('asset_name', 'like', "%{$search}%")
-                      ->orWhere('serial_number', 'like', "%{$search}%");
+                        ->orWhere('serial_number', 'like', "%{$search}%");
                 });
             }
 
             // Sort by movement_date and created_at to ensure newest first
             $query->orderBy('movement_date', 'desc')
-                  ->orderBy('created_at', 'desc');
+                ->orderBy('created_at', 'desc');
 
             $movements = $query->get();
 
@@ -361,7 +370,7 @@ class AuditLogController extends Controller
      */
     private function getFromValue($movement)
     {
-        return match($movement->movement_type) {
+        return match ($movement->movement_type) {
             'assigned', 'transferred', 'returned' => $movement->fromEmployee?->fullname,
             'status_changed' => $movement->fromStatus?->name,
             default => null,
@@ -373,7 +382,7 @@ class AuditLogController extends Controller
      */
     private function getToValue($movement)
     {
-        return match($movement->movement_type) {
+        return match ($movement->movement_type) {
             'assigned', 'transferred' => $movement->toEmployee?->fullname,
             'status_changed' => $movement->toStatus?->name,
             'returned' => 'Unassigned',

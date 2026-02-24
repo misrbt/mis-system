@@ -25,6 +25,8 @@ class StoreAssetRequest extends FormRequest
             'status_id' => 'required|exists:statuses,id',
             'assigned_to_employee_id' => 'nullable|exists:employee,id',
             'branch_id' => 'nullable|exists:branches,id',
+            'workstation_branch_id' => 'required|exists:branches,id',
+            'workstation_position_id' => 'required|exists:positions,id',
             'equipment_id' => 'nullable|exists:equipment,id',
             'location' => 'nullable|string|max:255',
             'remarks' => 'nullable|string',

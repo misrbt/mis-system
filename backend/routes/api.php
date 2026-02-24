@@ -143,6 +143,8 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::apiResource('asset-subcategories', AssetSubcategoryController::class);
 
     // Employee routes
+    Route::post('employees/branch-transition', [EmployeeController::class, 'branchTransition']);
+    Route::post('employees/employee-transition', [EmployeeController::class, 'employeeTransition']);
     Route::get('employees/{id}/asset-history', [EmployeeController::class, 'getAssetHistory']);
     Route::apiResource('employees', EmployeeController::class);
 

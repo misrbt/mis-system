@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Employee\BranchTransitionRequest;
+use App\Http\Requests\Employee\EmployeeTransitionRequest;
 use App\Http\Requests\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Employee\UpdateEmployeeRequest;
 use App\Models\AssetMovement;
 use App\Models\Employee;
+use App\Services\BranchTransitionService;
+use App\Services\EmployeeTransitionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -19,9 +23,25 @@ class EmployeeController extends Controller
         try {
             $perPage = $request->input('per_page', 50);
 
-            $employees = Employee::with(['branch', 'position', 'department'])
-                ->orderBy('fullname', 'asc')
-                ->paginate($perPage);
+            $relations = ['branch', 'position', 'department'];
+
+            if ($request->boolean('with_assets', false)) {
+                $relations[] = 'assignedAssets';
+            }
+
+            $query = Employee::with($relations)
+                ->orderBy('fullname', 'asc');
+
+            if ($request->boolean('all', false)) {
+                $employees = $query->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $employees,
+                ], 200);
+            }
+
+            $employees = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
@@ -239,6 +259,54 @@ class EmployeeController extends Controller
             ], 200);
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to fetch employee asset history');
+        }
+    }
+
+    /**
+     * Execute a branch transition for multiple employees.
+     * Assets stay at their branch workstation; only employee assignments rotate.
+     */
+    public function branchTransition(BranchTransitionRequest $request, BranchTransitionService $service)
+    {
+        try {
+            $result = $service->execute(
+                $request->validated('transitions'),
+                $request->validated('remarks'),
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Branch transition completed successfully. '
+                    .count($result['employees']).' employees moved, '
+                    .$result['assets_reassigned'].' assets reassigned.',
+                'data' => $result,
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to execute branch transition');
+        }
+    }
+
+    /**
+     * Execute an employee transition where only employees move.
+     * Individual employee moves without exchange requirements.
+     * Assets remain at their workstations.
+     */
+    public function employeeTransition(EmployeeTransitionRequest $request, EmployeeTransitionService $service): \Illuminate\Http\JsonResponse
+    {
+        try {
+            $result = $service->execute(
+                $request->validated('transitions'),
+                $request->validated('remarks'),
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Employee transition completed successfully. '
+                    .count($result['employees']).' employees moved.',
+                'data' => $result,
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to execute employee transition');
         }
     }
 }

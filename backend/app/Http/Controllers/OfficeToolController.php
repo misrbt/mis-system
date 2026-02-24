@@ -42,6 +42,16 @@ class OfficeToolController extends Controller
 
             $query->orderBy($sortBy, $sortOrder);
 
+            // Check for 'all' parameter to return non-paginated data
+            if ($request->boolean('all', false)) {
+                $officeTools = $query->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $officeTools,
+                ], 200);
+            }
+
             // Pagination - limit results per page (max 100)
             $perPage = min($request->get('per_page', 50), 100);
             $paginated = $query->paginate($perPage);
@@ -179,7 +189,7 @@ class OfficeToolController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => count($request->ids) . ' office tool(s) deleted successfully',
+                'message' => count($request->ids).' office tool(s) deleted successfully',
             ], 200);
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to delete office tools');
