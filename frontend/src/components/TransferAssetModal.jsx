@@ -18,16 +18,27 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
 
   // Fetch employees
   const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => (await fetchEmployeesRequest()).data,
+    queryKey: ['employees', 'all'],
+    queryFn: async () => {
+      const response = await fetchEmployeesRequest({ all: true })
+      return response.data
+    },
     enabled: isOpen,
   })
 
-  const employees = Array.isArray(employeesData?.data)
-    ? employeesData.data
-    : Array.isArray(employeesData)
-    ? employeesData
-    : []
+  const employees = (() => {
+    if (!employeesData) return []
+    if (employeesData.success && Array.isArray(employeesData.data)) {
+      return employeesData.data
+    }
+    if (Array.isArray(employeesData?.data)) {
+      return employeesData.data
+    }
+    if (Array.isArray(employeesData)) {
+      return employeesData
+    }
+    return []
+  })()
 
   // Format employees for SearchableSelect
   const formattedEmployees = employees.map(emp => ({
