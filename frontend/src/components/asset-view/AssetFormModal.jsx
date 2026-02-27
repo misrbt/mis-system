@@ -26,6 +26,8 @@ const AssetFormModal = ({
   positionOptions = [],
   showStatus = false,
   showBookValue = false,
+  hideWorkstationFields = false,
+  hideAssignedEmployee = false,
   assignmentTitle,
   assignmentSubtitle,
   usePlaceholders = false,
@@ -214,7 +216,7 @@ const AssetFormModal = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl">
-      <form onSubmit={onSubmit} className="space-y-6">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(e); }} className="space-y-6">
         <div className="border-b border-slate-200 pb-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -239,8 +241,8 @@ const AssetFormModal = ({
               <input
                 type="text"
                 name="asset_name"
-                value={formData.asset_name}
-                onChange={onInputChange}
+                value={formData.asset_name || ''}
+                onChange={(e) => onInputChange('asset_name', e.target.value)}
                 required
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder={placeholders.asset_name}
@@ -258,8 +260,8 @@ const AssetFormModal = ({
               </label>
               <select
                 name="asset_category_id"
-                value={formData.asset_category_id}
-                onChange={onInputChange}
+                value={formData.asset_category_id || ''}
+                onChange={(e) => onInputChange('asset_category_id', e.target.value)}
                 required
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
@@ -281,7 +283,7 @@ const AssetFormModal = ({
                 <select
                   name="subcategory_id"
                   value={formData.subcategory_id || ''}
-                  onChange={onInputChange}
+                  onChange={(e) => onInputChange('subcategory_id', e.target.value)}
                   required={!isEditMode}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -656,8 +658,8 @@ const AssetFormModal = ({
                 <input
                   type="text"
                   name="serial_number"
-                  value={formData.serial_number}
-                  onChange={onInputChange}
+                  value={formData.serial_number || ''}
+                  onChange={(e) => onInputChange('serial_number', e.target.value)}
                   className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder={isDesktopPCCategory() ? "Enter Desktop PC unit serial number or generate" : (placeholders.serial_number || 'Enter serial number or generate')}
                 />
@@ -705,8 +707,8 @@ const AssetFormModal = ({
               <input
                 type="date"
                 name="purchase_date"
-                value={formData.purchase_date}
-                onChange={onInputChange}
+                value={formData.purchase_date || ''}
+                onChange={(e) => onInputChange('purchase_date', e.target.value)}
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
@@ -772,12 +774,12 @@ const AssetFormModal = ({
               <label className="block text-sm font-semibold text-slate-700 mb-2">Vendor</label>
               <select
                 name="vendor_id"
-                value={formData.vendor_id}
+                value={formData.vendor_id || ''}
                 onChange={(e) => {
                   if (e.target.value === 'ADD_NEW') {
                     onAddVendor?.()
                   } else {
-                    onVendorChange(e.target.value)
+                    onVendorChange?.(e.target.value)
                   }
                 }}
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -788,9 +790,9 @@ const AssetFormModal = ({
                     + Add New Vendor
                   </option>
                 )}
-                {vendorOptions?.map((vendor) => (
+                {(vendorOptions || []).map((vendor) => (
                   <option key={vendor.id} value={vendor.id}>
-                    {vendor.name}
+                    {vendor.name || vendor.company_name}
                   </option>
                 ))}
               </select>
@@ -816,8 +818,8 @@ const AssetFormModal = ({
                 </label>
                 <select
                   name="status_id"
-                  value={formData.status_id}
-                  onChange={onInputChange}
+                  value={formData.status_id || ''}
+                  onChange={(e) => onInputChange('status_id', e.target.value)}
                   required
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -831,48 +833,55 @@ const AssetFormModal = ({
               </div>
             )}
 
-            <div className={showStatus ? '' : 'md:col-span-2'}>
-              <SearchableSelect
-                label="Assigned To Employee"
-                options={employeeOptions}
-                value={formData.assigned_to_employee_id}
-                onChange={onEmployeeChange}
-                displayField="name"
-                secondaryField="position"
-                tertiaryField="branch"
-                placeholder="Select employee or search..."
-                emptyMessage="No employees found"
-                required
-              />
-            </div>
+            {/* Assigned Employee - Hidden in employee view */}
+            {hideAssignedEmployee !== true && (
+              <div className={showStatus ? '' : 'md:col-span-2'}>
+                <SearchableSelect
+                  label="Assigned To Employee"
+                  options={employeeOptions || []}
+                  value={formData.assigned_to_employee_id || ''}
+                  onChange={onEmployeeChange}
+                  displayField="name"
+                  secondaryField="position"
+                  tertiaryField="branch"
+                  placeholder="Select employee or search..."
+                  emptyMessage="No employees found"
+                  required
+                />
+              </div>
+            )}
 
-            {/* Workstation Branch */}
-            <div>
-              <SearchableSelect
-                label="Workstation Branch"
-                options={(branchOptions || []).map((b) => ({ id: b.id, name: b.branch_name ?? b.name }))}
-                value={formData.workstation_branch_id ?? ''}
-                onChange={(value) => onInputChange({ target: { name: 'workstation_branch_id', value } })}
-                displayField="name"
-                placeholder="Select workstation branch..."
-                emptyMessage="No branches found"
-                required
-              />
-            </div>
+            {/* Workstation Branch - Hidden in employee view */}
+            {hideWorkstationFields !== true && (
+              <div>
+                <SearchableSelect
+                  label="Workstation Branch"
+                  options={(branchOptions || []).map((b) => ({ id: b.id, name: b.branch_name ?? b.name }))}
+                  value={formData.workstation_branch_id ?? ''}
+                  onChange={(value) => onInputChange({ target: { name: 'workstation_branch_id', value } })}
+                  displayField="name"
+                  placeholder="Select workstation branch..."
+                  emptyMessage="No branches found"
+                  required
+                />
+              </div>
+            )}
 
-            {/* Workstation Position */}
-            <div>
-              <SearchableSelect
-                label="Workstation Position"
-                options={(positionOptions || []).map((p) => ({ id: p.id, name: p.title ?? p.name }))}
-                value={formData.workstation_position_id ?? ''}
-                onChange={(value) => onInputChange({ target: { name: 'workstation_position_id', value } })}
-                displayField="name"
-                placeholder="Select workstation position..."
-                emptyMessage="No positions found"
-                required
-              />
-            </div>
+            {/* Workstation Position - Hidden in employee view */}
+            {hideWorkstationFields !== true && (
+              <div>
+                <SearchableSelect
+                  label="Workstation Position"
+                  options={(positionOptions || []).map((p) => ({ id: p.id, name: p.title ?? p.name }))}
+                  value={formData.workstation_position_id ?? ''}
+                  onChange={(value) => onInputChange({ target: { name: 'workstation_position_id', value } })}
+                  displayField="name"
+                  placeholder="Select workstation position..."
+                  emptyMessage="No positions found"
+                  required
+                />
+              </div>
+            )}
 
             <div className={remarksWrapperClass}>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Remarks</label>

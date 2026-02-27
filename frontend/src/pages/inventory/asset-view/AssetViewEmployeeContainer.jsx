@@ -45,7 +45,7 @@ function AssetViewEmployeeContainer({ controller }) {
     navigateToAsset,
     navigateToAssetComponents,
     navigateBack,
-    navigateToEmployeeList,
+    navigateToWorkstations,
     editComponents,
     handleEditComponentAdd,
     handleEditComponentRemove,
@@ -73,10 +73,10 @@ function AssetViewEmployeeContainer({ controller }) {
           <p className="text-slate-600 text-lg font-medium mb-2">Employee not found</p>
           <p className="text-slate-400 text-sm mb-4">The employee data could not be loaded.</p>
           <button
-            onClick={() => navigateToEmployeeList()}
+            onClick={() => navigateToWorkstations()}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Back to Employee List
+            Back to Workstations
           </button>
         </div>
       </div>
@@ -131,7 +131,7 @@ function AssetViewEmployeeContainer({ controller }) {
       onAddClick={openAddModal}
       isPending={isPending}
       isLoadingHistory={isLoadingHistory}
-      navigateBack={() => (window.history.length > 1 ? navigateBack() : navigateToEmployeeList())}
+      navigateBack={() => (window.history.length > 1 ? navigateBack() : navigateToWorkstations())}
       editComponents={editComponents}
       onEditComponentAdd={handleEditComponentAdd}
       onEditComponentRemove={handleEditComponentRemove}

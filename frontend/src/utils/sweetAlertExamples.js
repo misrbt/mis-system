@@ -1,11 +1,10 @@
+/* global api, someAsyncOperation */
 /**
  * SweetAlert Utility - Usage Examples
  * 
  * This file demonstrates how to use the reusable SweetAlert utility
  * Replace manual Swal.fire() calls with these helper functions
- */
-
-import {
+ */import {
     showSuccess,
     showError,
     showWarning,
@@ -116,6 +115,7 @@ const handleDelete = async (assetName) => {
             await deleteAsset()
             showSuccess('Deleted!', 'Asset has been deleted')
         } catch (error) {
+            console.error(error)
             showError('Failed', 'Could not delete asset')
         }
     }
@@ -174,7 +174,7 @@ const createAsset = async (assetData) => {
     try {
         showLoading('Creating asset...')
 
-        const response = await api.post('/assets', assetData)
+        await api.post('/assets', assetData)
 
         closeAlert()
         await showSuccess('Created!', 'Asset created successfully')
@@ -199,6 +199,7 @@ const deleteAsset = async (asset) => {
             showToast('Asset deleted successfully', 'success')
             // Refresh list
         } catch (error) {
+            console.error(error)
             closeAlert()
             showError('Delete Failed', 'Could not delete asset')
         }
@@ -253,6 +254,7 @@ const handleBulkDelete = async (selectedIds) => {
 
             showSuccess('Deleted!', `${selectedIds.length} items deleted`)
         } catch (error) {
+            console.error(error)
             closeAlert()
             showError('Failed', 'Could not delete some items')
         }
@@ -261,11 +263,20 @@ const handleBulkDelete = async (selectedIds) => {
 
 export {
     handleCreateSuccess,
+    handleSaveSuccess,
+    handleUpdateSuccess,
     handleError,
+    handleApiError,
+    showWarningExample,
+    showInfoExample,
     handleSubmit,
+    handleTransfer,
     handleDelete,
     handleProcess,
     handleQuickSave,
+    handleValidationError,
+    handleCopy,
+    handleWarningToast,
     createAsset,
     deleteAsset,
     updateAsset,

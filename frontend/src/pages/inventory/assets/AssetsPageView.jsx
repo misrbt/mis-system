@@ -1269,7 +1269,7 @@ function AssetsPage() {
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         onAddAsset={openAddModal}
-        onViewEmployees={() => navigate('/inventory/employee-list')}
+        onViewEmployees={() => navigate('/inventory/workstations')}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
@@ -1773,6 +1773,8 @@ function AssetsPage() {
           statusOptions={statusOptions}
           branchOptions={branchOptions}
           positionOptions={positionOptions}
+          hideAssignedEmployee={false}
+          hideWorkstationFields={false}
           assignmentTitle="Assignment & Remarks"
           assignmentSubtitle="Employee assignment and additional notes"
           usePlaceholders
@@ -1809,6 +1811,8 @@ function AssetsPage() {
           positionOptions={positionOptions}
           showStatus
           showBookValue
+          hideAssignedEmployee={false}
+          hideWorkstationFields={false}
           assignmentTitle="Assignment & Status"
           assignmentSubtitle="Employee assignment and asset status"
           equipmentOptions={equipmentOptions}

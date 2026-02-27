@@ -718,16 +718,31 @@ export default function useAssetViewController({ id, employeeId }) {
     }
   };
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (fieldOrEvent, value) => {
+    // Support both event object and (field, value) signature
+    let field, fieldValue;
+
+    if (typeof fieldOrEvent === 'string') {
+      // Called as (field, value)
+      field = fieldOrEvent;
+      fieldValue = value;
+    } else if (fieldOrEvent?.target) {
+      // Called with event object
+      field = fieldOrEvent.target.name;
+      fieldValue = fieldOrEvent.target.value;
+    } else {
+      return; // Invalid call
+    }
+
     setEditFormData((prev) => {
-      const newData = { ...prev, [field]: value };
+      const newData = { ...prev, [field]: fieldValue };
 
       // Clear subcategory when category changes
       if (field === 'asset_category_id') {
         newData.subcategory_id = '';
 
         // Check if changing to Desktop PC category
-        const category = categories?.find(cat => cat.id == value);
+        const category = categories?.find(cat => cat.id == fieldValue);
         const categoryName = category?.name?.toLowerCase() || '';
         const isDesktopPC = categoryName.includes('desktop') || (categoryName.includes('pc') && !categoryName.includes('laptop'));
 
@@ -796,9 +811,24 @@ export default function useAssetViewController({ id, employeeId }) {
     });
   };
 
-  const handleAddInputChange = (field, value) => {
+  const handleAddInputChange = (fieldOrEvent, value) => {
+    // Support both event object and (field, value) signature
+    let field, fieldValue;
+
+    if (typeof fieldOrEvent === 'string') {
+      // Called as (field, value)
+      field = fieldOrEvent;
+      fieldValue = value;
+    } else if (fieldOrEvent?.target) {
+      // Called with event object
+      field = fieldOrEvent.target.name;
+      fieldValue = fieldOrEvent.target.value;
+    } else {
+      return; // Invalid call
+    }
+
     setAddFormData((prev) => {
-      const newData = { ...prev, [field]: value };
+      const newData = { ...prev, [field]: fieldValue };
 
       // Clear subcategory when category changes
       if (field === 'asset_category_id') {
@@ -1020,10 +1050,12 @@ export default function useAssetViewController({ id, employeeId }) {
     }
 
     // Do not reset form data to allow persistence if accidentally closed
-    // Just ensure the employee ID is correct
+    // Just ensure the employee ID is correct and auto-populate workstation fields
     setAddFormData(prev => ({
       ...prev,
-      assigned_to_employee_id: actualEmployeeId
+      assigned_to_employee_id: actualEmployeeId,
+      workstation_branch_id: employee?.branch_id || prev.workstation_branch_id || "",
+      workstation_position_id: employee?.position_id || prev.workstation_position_id || "",
     }));
     setShowAddModal(true);
   };
@@ -1189,7 +1221,7 @@ export default function useAssetViewController({ id, employeeId }) {
 
   const navigateBack = () => navigate(-1);
   const navigateToAssets = () => navigate(assetsReturnPath());
-  const navigateToEmployeeList = () => navigate("/inventory/employee-list");
+  const navigateToWorkstations = () => navigate("/inventory/workstations");
   const navigateToAsset = (assetId) => navigate(`/inventory/assets/${assetId}`);
   const navigateToEmployeeAssets = (empId) =>
     navigate(`/inventory/employees/${empId}/assets`);
@@ -1319,7 +1351,7 @@ export default function useAssetViewController({ id, employeeId }) {
     handlePrintCode,
     navigateBack,
     navigateToAssets,
-    navigateToEmployeeList,
+    navigateToWorkstations,
     navigateToAsset,
     navigateToEmployeeAssets,
     navigateToAssetComponents,

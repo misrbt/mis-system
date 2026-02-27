@@ -98,6 +98,8 @@ function AssetViewModals({ controller, isEmployeeView }) {
             submitLabel="Create Asset"
             formData={addFormData}
             onInputChange={handleAddInputChange}
+            onVendorChange={(value) => handleAddInputChange('vendor_id', value)}
+            onEmployeeChange={(value) => handleAddInputChange('assigned_to_employee_id', value)}
             categories={categories}
             subcategories={addSubcategories}
             equipmentOptions={equipmentOptions}
@@ -106,10 +108,12 @@ function AssetViewModals({ controller, isEmployeeView }) {
             statusOptions={statuses}
             branchOptions={branchOptions}
             positionOptions={positionOptions}
-            showStatus={true}
+            showStatus={false}
             showBookValue={false}
-            assignmentTitle="Assigned Employee"
-            assignmentSubtitle="Initial Employee Assignment"
+            hideWorkstationFields={true}
+            hideAssignedEmployee={true}
+            assignmentTitle="Remarks & Notes"
+            assignmentSubtitle="Additional information about the asset"
             usePlaceholders={true}
             onGenerateSerial={generateSerialNumber}
             onGenerateComponentSerial={generateComponentSerialNumber}
@@ -177,11 +181,15 @@ function AssetViewModals({ controller, isEmployeeView }) {
             formData={editFormData}
             onClose={handleCancelEdit}
             onInputChange={(field, value) => handleInputChange(field, value)}
+            onVendorChange={(value) => handleInputChange('vendor_id', value)}
+            onEmployeeChange={(value) => handleInputChange('assigned_to_employee_id', value)}
             usePlaceholders={false}
-            showStatus={true}
+            showStatus={false}
             showBookValue={true}
-            assignmentTitle="Assigned Employee"
-            assignmentSubtitle="Current employee holding this asset"
+            hideWorkstationFields={true}
+            hideAssignedEmployee={true}
+            assignmentTitle="Remarks & Notes"
+            assignmentSubtitle="Additional information about the asset"
             onSubmit={handleSaveEdit}
             isSubmitting={updateAssetPending}
             components={editComponents}
