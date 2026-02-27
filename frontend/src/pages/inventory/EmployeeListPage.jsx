@@ -71,13 +71,30 @@ function EmployeeListPage() {
     queryFn: async () => (await fetchBranchesRequest()).data,
   })
 
-  const employees = Array.isArray(employeesData?.data?.data)
-    ? employeesData.data.data
-    : Array.isArray(employeesData?.data)
-    ? employeesData.data
-    : Array.isArray(employeesData)
-    ? employeesData
-    : []
+  // Parse paginated response from backend
+  const employees = (() => {
+    if (!employeesData) return []
+
+    // Paginated response: { success: true, data: { data: [...], total: X, ... } }
+    if (employeesData.success && employeesData.data?.data) {
+      return Array.isArray(employeesData.data.data) ? employeesData.data.data : []
+    }
+
+    // Non-paginated response: { success: true, data: [...] }
+    if (employeesData.success && Array.isArray(employeesData.data)) {
+      return employeesData.data
+    }
+
+    // Fallback parsing
+    if (Array.isArray(employeesData.data?.data)) {
+      return employeesData.data.data
+    }
+    if (Array.isArray(employeesData.data)) {
+      return employeesData.data
+    }
+
+    return []
+  })()
 
   const branches = Array.isArray(branchesData?.data)
     ? branchesData.data

@@ -37,7 +37,7 @@ class EmployeeController extends Controller
                 $query->where(function ($q) use ($search) {
                     $q->where('fullname', 'ILIKE', "%{$search}%")
                         ->orWhereHas('position', function ($query) use ($search) {
-                            $query->where('position_name', 'ILIKE', "%{$search}%");
+                            $query->where('title', 'ILIKE', "%{$search}%");
                         });
                 });
             }

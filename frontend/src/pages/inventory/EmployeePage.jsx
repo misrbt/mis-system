@@ -46,13 +46,23 @@ function EmployeePage() {
   const queryClient = useQueryClient()
 
   const { data: employees = [], isLoading: loading } = useQuery({
-    queryKey: ['employees'],
+    queryKey: ['employees', 'all'],
     queryFn: async () => {
-      const response = await fetchEmployeesRequest()
+      const response = await fetchEmployeesRequest({ all: true })
       const resData = response.data
-      if (Array.isArray(resData?.data?.data)) return resData.data.data
-      if (Array.isArray(resData?.data)) return resData.data
-      if (Array.isArray(resData)) return resData
+      // Handle both paginated and non-paginated responses
+      if (resData?.success && Array.isArray(resData?.data)) {
+        return resData.data
+      }
+      if (Array.isArray(resData?.data?.data)) {
+        return resData.data.data
+      }
+      if (Array.isArray(resData?.data)) {
+        return resData.data
+      }
+      if (Array.isArray(resData)) {
+        return resData
+      }
       return []
     },
   })
@@ -84,6 +94,7 @@ function EmployeePage() {
   const createMutation = useMutation({
     mutationFn: (data) => createEmployeeRequest(data),
     onSuccess: () => {
+      // Invalidate all employee queries (both 'all' and 'filtered' variants)
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       setIsAddModalOpen(false)
       resetForm()
