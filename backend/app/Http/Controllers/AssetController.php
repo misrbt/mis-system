@@ -33,6 +33,8 @@ class AssetController extends Controller
                 'assignedEmployee.position',
                 'assignedEmployee.department',
                 'equipment',
+                'workstationBranch',
+                'workstationPosition',
             ]);
 
             // Apply all filters using centralized method
@@ -194,6 +196,8 @@ class AssetController extends Controller
             'vendor_id' => 'nullable|exists:vendors,id',
             'remarks' => 'nullable|string',
             'assigned_to_employee_id' => 'nullable|exists:employee,id',
+            'workstation_branch_id' => 'nullable|exists:branch,id',
+            'workstation_position_id' => 'nullable|exists:position,id',
         ]);
 
         if ($validator->fails()) {
@@ -263,6 +267,8 @@ class AssetController extends Controller
                 'remarks',
                 'specifications',
                 'assigned_to_employee_id',
+                'workstation_branch_id',
+                'workstation_position_id',
                 'warranty_duration_value',
                 'warranty_duration_unit',
             ]);
@@ -379,6 +385,8 @@ class AssetController extends Controller
                 'assignedEmployee.position',
                 'assignedEmployee.department',
                 'equipment',
+                'workstationBranch',
+                'workstationPosition',
             ]);
 
             $response = [
@@ -420,6 +428,8 @@ class AssetController extends Controller
                 'assignedEmployee.position',
                 'assignedEmployee.department',
                 'equipment',
+                'workstationBranch',
+                'workstationPosition',
             ])->findOrFail($id);
 
             // Calculate depreciation information
@@ -469,9 +479,11 @@ class AssetController extends Controller
             'warranty_duration_unit' => 'nullable|in:months,weeks,years',
             'estimate_life' => 'nullable|integer|min:0',
             'vendor_id' => 'nullable|exists:vendors,id',
-            'status_id' => 'required|exists:status,id',
+            'status_id' => 'nullable|exists:status,id',
             'remarks' => 'nullable|string',
             'assigned_to_employee_id' => 'nullable|exists:employee,id',
+            'workstation_branch_id' => 'nullable|exists:branch,id',
+            'workstation_position_id' => 'nullable|exists:position,id',
         ]);
 
         if ($validator->fails()) {
@@ -506,17 +518,23 @@ class AssetController extends Controller
                 'remarks',
                 'specifications',
                 'assigned_to_employee_id',
+                'workstation_branch_id',
+                'workstation_position_id',
                 'warranty_duration_value',
                 'warranty_duration_unit',
             ]);
 
             // Auto-adjust status based on purchase date if:
-            // 1. Purchase date is being changed
+            // 1. No status_id provided (auto-assign mode) OR purchase date is being changed
             // 2. Current status is "New" or "Functional" (don't override manual statuses)
-            if ($request->has('purchase_date')) {
+            $shouldAutoAssignStatus = ! $request->has('status_id') || $request->has('purchase_date');
+
+            if ($shouldAutoAssignStatus) {
                 $currentStatus = $asset->status;
-                if ($currentStatus && in_array($currentStatus->name, ['New', 'Functional'])) {
-                    $purchaseDate = Carbon::parse($request->purchase_date);
+                $canAutoAssign = ! $currentStatus || in_array($currentStatus->name, ['New', 'Functional']);
+
+                if ($canAutoAssign) {
+                    $purchaseDate = Carbon::parse($request->purchase_date ?? $asset->purchase_date);
                     $today = Carbon::today();
                     $oneMonthAgo = $today->copy()->subMonth();
 
@@ -527,8 +545,8 @@ class AssetController extends Controller
                         $statusName = 'New';
                     }
 
-                    // Only update if different from current
-                    if ($currentStatus->name !== $statusName) {
+                    // Only update if different from current or if no status provided
+                    if (! $request->has('status_id') || ($currentStatus && $currentStatus->name !== $statusName)) {
                         $newStatus = Status::where('name', $statusName)->first();
                         if ($newStatus) {
                             $data['status_id'] = $newStatus->id;
@@ -568,6 +586,8 @@ class AssetController extends Controller
                 'assignedEmployee.position',
                 'assignedEmployee.department',
                 'equipment',
+                'workstationBranch',
+                'workstationPosition',
             ]);
 
             $response = [
@@ -753,6 +773,8 @@ class AssetController extends Controller
                 'remarks',
                 'status_id',
                 'assigned_to_employee_id',
+                'workstation_branch_id',
+                'workstation_position_id',
             ];
 
             if (! in_array($request->field, $allowedFields)) {
@@ -786,6 +808,8 @@ class AssetController extends Controller
                 'assignedEmployee.position',
                 'assignedEmployee.department',
                 'equipment',
+                'workstationBranch',
+                'workstationPosition',
             ]);
 
             $response = [
@@ -839,6 +863,9 @@ class AssetController extends Controller
                 'assignedEmployee.branch',
                 'assignedEmployee.position',
                 'assignedEmployee.department',
+                'equipment',
+                'workstationBranch',
+                'workstationPosition',
             ]);
 
             return response()->json([
@@ -968,6 +995,8 @@ class AssetController extends Controller
                 'assignedEmployee.position',
                 'assignedEmployee.department',
                 'equipment',
+                'workstationBranch',
+                'workstationPosition',
             ]);
 
             // Apply all filters using centralized method

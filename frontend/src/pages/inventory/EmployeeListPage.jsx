@@ -42,10 +42,27 @@ function EmployeeListPage() {
     )
   }, [selectedBranch, searchQuery])
 
-  // Fetch employees
+  // Fetch employees with server-side filtering
   const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => (await fetchEmployeesRequest()).data,
+    queryKey: ['employees', 'filtered', searchQuery, selectedBranch],
+    queryFn: async () => {
+      const params = {
+        per_page: 100, // Increased page size for better UX
+      }
+
+      // Add search parameter if provided
+      if (searchQuery) {
+        params.search = searchQuery
+      }
+
+      // Add branch filter if selected
+      if (selectedBranch) {
+        params.branch_id = selectedBranch
+      }
+
+      const response = await fetchEmployeesRequest(params)
+      return response.data
+    },
   })
 
   // Fetch branches
@@ -68,19 +85,11 @@ function EmployeeListPage() {
     ? branchesData
     : []
 
-  // Filter employees by branch and search query
-  const filteredEmployees = employees.filter((employee) => {
-    const matchesBranch = !selectedBranch || employee.branch?.id === parseInt(selectedBranch)
-    const searchLower = searchQuery.toLowerCase()
-    const matchesSearch = !searchQuery ||
-      employee.fullname?.toLowerCase().includes(searchLower) ||
-      employee.firstname?.toLowerCase().includes(searchLower) ||
-      employee.lastname?.toLowerCase().includes(searchLower) ||
-      employee.email?.toLowerCase().includes(searchLower) ||
-      employee.position?.position_name?.toLowerCase().includes(searchLower)
+  // Get total count from pagination metadata
+  const totalEmployees = employeesData?.data?.total || employees.length
 
-    return matchesBranch && matchesSearch
-  })
+  // No need for client-side filtering anymore - backend handles it
+  const filteredEmployees = employees
 
   const handleEmployeeClick = (employeeId) => {
     navigate(`/inventory/employees/${employeeId}/assets`)
@@ -170,8 +179,10 @@ function EmployeeListPage() {
           {/* Results count */}
           <div className="mt-4 pt-4 border-t border-slate-200">
             <p className="text-sm text-slate-600">
-              Showing <span className="font-semibold text-slate-900">{filteredEmployees.length}</span> of{' '}
-              <span className="font-semibold text-slate-900">{employees.length}</span> employees
+              Showing <span className="font-semibold text-slate-900">{filteredEmployees.length}</span>
+              {totalEmployees > filteredEmployees.length && (
+                <> of <span className="font-semibold text-slate-900">{totalEmployees}</span></>
+              )} employee{totalEmployees !== 1 ? 's' : ''}
             </p>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import apiClient from './apiClient'
 
-export const fetchEmployeesRequest = (params = {}) => apiClient.get('/employees', { params: { ...params, all: true } })
+export const fetchEmployeesRequest = (params = {}) => apiClient.get('/employees', { params })
 
 export const createEmployeeRequest = (payload) => apiClient.post('/employees', payload)
 

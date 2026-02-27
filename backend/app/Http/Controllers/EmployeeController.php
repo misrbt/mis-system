@@ -21,7 +21,7 @@ class EmployeeController extends Controller
     public function index(Request $request)
     {
         try {
-            $perPage = $request->input('per_page', 50);
+            $perPage = min($request->input('per_page', 50), 100);
 
             $relations = ['branch', 'position', 'department'];
 
@@ -29,11 +29,49 @@ class EmployeeController extends Controller
                 $relations[] = 'assignedAssets';
             }
 
-            $query = Employee::with($relations)
-                ->orderBy('fullname', 'asc');
+            $query = Employee::with($relations);
 
+            // Search filter - searches fullname and related position
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('fullname', 'ILIKE', "%{$search}%")
+                        ->orWhereHas('position', function ($query) use ($search) {
+                            $query->where('position_name', 'ILIKE', "%{$search}%");
+                        });
+                });
+            }
+
+            // Branch filter
+            if ($request->filled('branch_id')) {
+                $query->where('branch_id', $request->input('branch_id'));
+            }
+
+            // Position filter
+            if ($request->filled('position_id')) {
+                $query->where('position_id', $request->input('position_id'));
+            }
+
+            // Department filter
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->input('department_id'));
+            }
+
+            // Sorting
+            $sortBy = $request->input('sort_by', 'fullname');
+            $sortOrder = $request->input('sort_order', 'asc');
+
+            // Whitelist sortable columns
+            $allowedSortColumns = ['fullname', 'created_at', 'updated_at'];
+            if (in_array($sortBy, $allowedSortColumns)) {
+                $query->orderBy($sortBy, $sortOrder);
+            } else {
+                $query->orderBy('fullname', 'asc');
+            }
+
+            // Handle "all" parameter with caution - limit to 1000 records max
             if ($request->boolean('all', false)) {
-                $employees = $query->get();
+                $employees = $query->limit(1000)->get();
 
                 return response()->json([
                     'success' => true,
@@ -277,8 +315,8 @@ class EmployeeController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Branch transition completed successfully. '
-                    .count($result['employees']).' employees moved, '
-                    .$result['assets_reassigned'].' assets reassigned.',
+                    .count($result['employees']).' employee'.(count($result['employees']) !== 1 ? 's' : '').' moved, '
+                    .$result['assets_reassigned'].' workstation asset'.(($result['assets_reassigned'] !== 1) ? 's' : '').' reassigned. Portable assets stay with their employees.',
                 'data' => $result,
             ], 200);
         } catch (\Exception $e) {

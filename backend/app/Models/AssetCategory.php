@@ -14,6 +14,11 @@ class AssetCategory extends Model
     protected $fillable = [
         'name',
         'code',
+        'is_workstation_asset',
+    ];
+
+    protected $casts = [
+        'is_workstation_asset' => 'boolean',
     ];
 
     public function assets()

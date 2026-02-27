@@ -12,10 +12,15 @@ use Illuminate\Support\Str;
 class BranchTransitionService
 {
     /**
-     * Execute a workstation-based branch transition.
+     * Execute a branch transition with workstation-based asset management.
      *
-     * Assets belong to workstations (branch + position), not employees.
-     * Employees rotate between workstations, inheriting the assets at each workstation.
+     * WORKSTATION CONCEPT:
+     * - Workstation assets (those with workstation_branch_id + workstation_position_id set)
+     *   stay at their physical desk but their assigned_to_employee_id changes.
+     * - When an employee moves to a new workstation, they inherit the assets at that desk.
+     * - When an employee leaves a workstation and no one replaces them, their old
+     *   workstation assets become unassigned (assigned_to_employee_id = null).
+     * - Portable assets (no workstation fields set) follow the employee — they are NOT unassigned.
      *
      * @param  array<int, array{employee_id: int, to_branch_id: int, to_position_id: int}>  $transitions
      * @return array{employees: array, assets_reassigned: int, batch_id: string}
@@ -24,10 +29,9 @@ class BranchTransitionService
     {
         return DB::transaction(function () use ($transitions, $remarks) {
             $batchId = (string) Str::uuid();
-            $request = request();
-            $performedByUserId = Auth::id();
+            $userId = Auth::id();
 
-            // 1. Load all employees with their current workstation
+            // 1. Load all employees with their current assignments
             $employeeIds = array_column($transitions, 'employee_id');
             $employees = Employee::with(['branch', 'position'])
                 ->whereIn('id', $employeeIds)
@@ -35,136 +39,193 @@ class BranchTransitionService
                 ->get()
                 ->keyBy('id');
 
-            // 2. Build workstation mapping: (branchId:positionId) => assets at that workstation
-            $workstationAssets = [];
+            // 2. Build destination map: [branch_id][position_id] = employee_id
+            //    Used to check if someone is replacing a vacated workstation
+            $destinationMap = [];
+            foreach ($transitions as $transition) {
+                $branchId   = $transition['to_branch_id'];
+                $positionId = $transition['to_position_id'];
+                $employeeId = $transition['employee_id'];
+
+                $destinationMap[$branchId][$positionId] = $employeeId;
+            }
+
+            // 3. Collect all relevant workstation locations
+            //    (destinations + old locations of all transitioning employees)
+            $locationPairs = [];
             foreach ($transitions as $transition) {
                 $employee = $employees->get($transition['employee_id']);
-                $fromKey = "{$employee->branch_id}:{$employee->position_id}";
+                if (! $employee) {
+                    continue;
+                }
 
-                // Get all assets at this workstation
-                if (! isset($workstationAssets[$fromKey])) {
-                    $workstationAssets[$fromKey] = Asset::where('workstation_branch_id', $employee->branch_id)
-                        ->where('workstation_position_id', $employee->position_id)
-                        ->get()
-                        ->all();
+                // Destination workstation
+                $locationPairs[] = [
+                    'branch_id'   => $transition['to_branch_id'],
+                    'position_id' => $transition['to_position_id'],
+                ];
+
+                // Old workstation
+                if ($employee->branch_id && $employee->position_id) {
+                    $locationPairs[] = [
+                        'branch_id'   => $employee->branch_id,
+                        'position_id' => $employee->position_id,
+                    ];
                 }
             }
 
-            // 3. Build mapping: which employee is moving to which workstation
-            //    "branchId:positionId" => employee_id
-            $workstationIncomingEmployee = [];
-            foreach ($transitions as $transition) {
-                $toBranchId = $transition['to_branch_id'];
-                $toPositionId = $transition['to_position_id'];
-                $key = "{$toBranchId}:{$toPositionId}";
-                $workstationIncomingEmployee[$key] = $transition['employee_id'];
+            // 4. Load all workstation assets at those locations in one query
+            //    Only assets that have BOTH workstation fields set are workstation assets.
+            //    Portable assets (null workstation fields) are ignored here.
+            $workstationAssets = collect();
+            if (! empty($locationPairs)) {
+                $workstationAssets = Asset::query()
+                    ->whereNotNull('workstation_branch_id')
+                    ->whereNotNull('workstation_position_id')
+                    ->where(function ($query) use ($locationPairs) {
+                        foreach ($locationPairs as $pair) {
+                            $query->orWhere(function ($q) use ($pair) {
+                                $q->where('workstation_branch_id', $pair['branch_id'])
+                                    ->where('workstation_position_id', $pair['position_id']);
+                            });
+                        }
+                    })
+                    ->with(['category'])
+                    ->lockForUpdate()
+                    ->get();
             }
 
-            // 4. Update each employee's branch and position
-            $employeeResults = [];
+            // Group assets by their workstation location key
+            $assetsByWorkstation = [];
+            foreach ($workstationAssets as $asset) {
+                $key = $asset->workstation_branch_id . '_' . $asset->workstation_position_id;
+                $assetsByWorkstation[$key][] = $asset;
+            }
+
+            $employeeResults      = [];
+            $assetsReassignedCount = 0;
+
+            // 5. Process each employee transition
             foreach ($transitions as $transition) {
                 $employee = $employees->get($transition['employee_id']);
-                $fromBranchName = $employee->branch?->branch_name ?? 'Unknown';
-                $fromPositionTitle = $employee->position?->title ?? 'Unknown';
 
-                // Store original IDs
-                $originalBranchId = $employee->branch_id;
-                $originalPositionId = $employee->position_id;
+                if (! $employee) {
+                    continue;
+                }
 
-                // Update employee's workstation
-                $employee->branch_id = $transition['to_branch_id'];
-                $employee->position_id = $transition['to_position_id'];
+                $fromBranchId       = $employee->branch_id;
+                $fromBranchName     = $employee->branch?->branch_name ?? 'Unknown';
+                $fromPositionId     = $employee->position_id;
+                $fromPositionTitle  = $employee->position?->title ?? 'Unknown';
+
+                $toBranchId   = $transition['to_branch_id'];
+                $toPositionId = $transition['to_position_id'];
+
+                // Update employee's branch and position
+                $employee->branch_id    = $toBranchId;
+                $employee->position_id  = $toPositionId;
                 $employee->save();
 
                 // Reload to get new names
                 $employee->load(['branch', 'position']);
 
+                // ── Step A: Assign workstation assets at the destination to this employee ──
+                $destKey            = $toBranchId . '_' . $toPositionId;
+                $assetsAtDestination = $assetsByWorkstation[$destKey] ?? [];
+
+                foreach ($assetsAtDestination as $asset) {
+                    $previousEmployeeId = $asset->assigned_to_employee_id;
+
+                    // Only reassign if not already assigned to this employee
+                    if ($previousEmployeeId !== $employee->id) {
+                        $asset->assigned_to_employee_id = $employee->id;
+                        $asset->save();
+
+                        // Audit: asset movement record
+                        AssetMovement::create([
+                            'asset_id'             => $asset->id,
+                            'movement_type'        => 'branch_transition',
+                            'from_employee_id'     => $previousEmployeeId,
+                            'to_employee_id'       => $employee->id,
+                            'from_branch_id'       => $fromBranchId,
+                            'to_branch_id'         => $toBranchId,
+                            'performed_by_user_id' => $userId,
+                            'reason'               => 'Branch transition — workstation takeover',
+                            'remarks'              => $remarks,
+                            'metadata'             => [
+                                'batch_id'               => $batchId,
+                                'transition_type'        => 'workstation_based',
+                                'asset_category'         => $asset->category?->name,
+                                'workstation_branch_id'  => $asset->workstation_branch_id,
+                                'workstation_position_id' => $asset->workstation_position_id,
+                            ],
+                            'movement_date'        => now(),
+                            'ip_address'           => request()->ip(),
+                            'user_agent'           => request()->userAgent(),
+                        ]);
+
+                        $assetsReassignedCount++;
+                    }
+                }
+
+                // ── Step B: Unassign old workstation assets if no one is moving there ──
+                if ($fromBranchId && $fromPositionId) {
+                    $oldKey              = $fromBranchId . '_' . $fromPositionId;
+                    $replacementUserId   = $destinationMap[$fromBranchId][$fromPositionId] ?? null;
+
+                    if (! $replacementUserId) {
+                        // No one is moving to the old workstation — unassign its assets
+                        $oldAssets = $assetsByWorkstation[$oldKey] ?? [];
+
+                        foreach ($oldAssets as $oldAsset) {
+                            // Only unassign assets that were assigned to THIS employee
+                            if ($oldAsset->assigned_to_employee_id === $employee->id) {
+                                $oldAsset->assigned_to_employee_id = null;
+                                $oldAsset->save();
+
+                                AssetMovement::create([
+                                    'asset_id'             => $oldAsset->id,
+                                    'movement_type'        => 'returned',
+                                    'from_employee_id'     => $employee->id,
+                                    'to_employee_id'       => null,
+                                    'from_branch_id'       => $fromBranchId,
+                                    'to_branch_id'         => null,
+                                    'performed_by_user_id' => $userId,
+                                    'reason'               => 'Employee left workstation (branch transition)',
+                                    'remarks'              => $remarks,
+                                    'metadata'             => [
+                                        'batch_id'        => $batchId,
+                                        'transition_type' => 'workstation_vacated',
+                                    ],
+                                    'movement_date' => now(),
+                                    'ip_address'    => request()->ip(),
+                                    'user_agent'    => request()->userAgent(),
+                                ]);
+
+                                $assetsReassignedCount++;
+                            }
+                        }
+                    }
+                }
+
                 $employeeResults[] = [
-                    'employee_id' => $employee->id,
-                    'employee_name' => $employee->fullname,
-                    'from_branch_id' => $originalBranchId,
-                    'from_branch_name' => $fromBranchName,
-                    'from_position_id' => $originalPositionId,
+                    'employee_id'        => $employee->id,
+                    'employee_name'      => $employee->fullname,
+                    'from_branch_id'     => $fromBranchId,
+                    'from_branch_name'   => $fromBranchName,
+                    'from_position_id'   => $fromPositionId,
                     'from_position_title' => $fromPositionTitle,
-                    'to_branch_id' => $transition['to_branch_id'],
-                    'to_branch_name' => $employee->branch?->branch_name ?? 'Unknown',
-                    'to_position_id' => $transition['to_position_id'],
-                    'to_position_title' => $employee->position?->title ?? 'Unknown',
+                    'to_branch_id'       => $toBranchId,
+                    'to_branch_name'     => $employee->branch?->branch_name ?? 'Unknown',
+                    'to_position_id'     => $toPositionId,
+                    'to_position_title'  => $employee->position?->title ?? 'Unknown',
                 ];
             }
 
-            // 5. Reassign assets based on workstations
-            $totalAssetsReassigned = 0;
-
-            Asset::withoutEvents(function () use (
-                $workstationAssets,
-                $workstationIncomingEmployee,
-                $batchId,
-                $remarks,
-                $performedByUserId,
-                $request,
-                $employees,
-                &$totalAssetsReassigned,
-            ) {
-                foreach ($workstationIncomingEmployee as $workstationKey => $incomingEmployeeId) {
-                    // Get assets at this workstation
-                    $assets = $workstationAssets[$workstationKey] ?? [];
-
-                    foreach ($assets as $asset) {
-                        $fromEmployeeId = $asset->assigned_to_employee_id;
-                        $fromEmployee = $fromEmployeeId ? Employee::find($fromEmployeeId) : null;
-
-                        // Reassign asset to the incoming employee
-                        $asset->assigned_to_employee_id = $incomingEmployeeId;
-                        $asset->save();
-
-                        $incomingEmployee = $employees->get($incomingEmployeeId);
-
-                        // Create movement record
-                        AssetMovement::create([
-                            'asset_id' => $asset->id,
-                            'movement_type' => 'branch_transition',
-                            'from_employee_id' => $fromEmployeeId,
-                            'to_employee_id' => $incomingEmployeeId,
-                            'from_branch_id' => $asset->workstation_branch_id,
-                            'to_branch_id' => $asset->workstation_branch_id, // Workstation stays same
-                            'performed_by_user_id' => $performedByUserId,
-                            'movement_date' => now(),
-                            'reason' => 'Workstation rotation - asset stays at workstation',
-                            'remarks' => $remarks,
-                            'metadata' => [
-                                'transition_batch_id' => $batchId,
-                                'transition_type' => 'workstation_rotation',
-                                'workstation' => [
-                                    'branch_id' => $asset->workstation_branch_id,
-                                    'branch_name' => $asset->workstationBranch?->branch_name,
-                                    'position_id' => $asset->workstation_position_id,
-                                    'position_title' => $asset->workstationPosition?->title,
-                                ],
-                                'changed_fields' => [
-                                    [
-                                        'field' => 'assigned_to_employee_id',
-                                        'label' => 'Workstation Employee',
-                                        'type' => 'relation',
-                                        'old_value' => $fromEmployee?->fullname ?? 'Unassigned',
-                                        'new_value' => $incomingEmployee->fullname ?? 'Unknown',
-                                    ],
-                                ],
-                                'change_count' => 1,
-                            ],
-                            'ip_address' => $request?->ip(),
-                            'user_agent' => $request?->userAgent(),
-                        ]);
-
-                        $totalAssetsReassigned++;
-                    }
-                }
-            });
-
             return [
-                'employees' => $employeeResults,
-                'assets_reassigned' => $totalAssetsReassigned,
-                'batch_id' => $batchId,
+                'employees'       => $employeeResults,
+                'assets_reassigned' => $assetsReassignedCount,
+                'batch_id'        => $batchId,
             ];
         });
     }
