@@ -5,109 +5,62 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Branch\StoreBranchRequest;
 use App\Http\Requests\Branch\UpdateBranchRequest;
 use App\Models\Branch;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class BranchController extends Controller
+class BranchController extends BaseCatalogController
 {
-    /**
-     * Display a listing of branches.
-     */
-    public function index()
-    {
-        try {
-            // Cache branches for 24 hours (86400 seconds)
-            $branches = \Illuminate\Support\Facades\Cache::remember('branches_all', 86400, function () {
-                return Branch::withCount('employees')
-                    ->orderBy('brcode', 'asc')
-                    ->get();
-            });
+    protected string $model = Branch::class;
 
-            return response()->json([
-                'success' => true,
-                'data' => $branches,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to fetch branches');
-        }
-    }
+    protected string $resourceName = 'Branch';
+
+    protected array $searchFields = ['branch_name', 'brak', 'brcode'];
+
+    protected string $orderByField = 'brcode';
+
+    protected ?string $cacheKey = 'branches_all';
+
+    protected array $withCounts = ['employees'];
 
     /**
      * Store a newly created branch.
      */
-    public function store(StoreBranchRequest $request)
+    public function store(Request $request): JsonResponse
     {
-        try {
-            $branch = Branch::create($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Branch created successfully',
-                'data' => $branch,
-            ], 201);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to create branch');
-        }
-    }
-
-    /**
-     * Display the specified branch.
-     */
-    public function show($id)
-    {
-        try {
-            $branch = Branch::withCount('employees')->findOrFail($id);
-
-            return response()->json([
-                'success' => true,
-                'data' => $branch,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Branch not found', 404);
-        }
+        return parent::store($request);
     }
 
     /**
      * Update the specified branch.
      */
-    public function update(UpdateBranchRequest $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
-        try {
-            $branch = Branch::findOrFail($id);
-            $branch->update($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Branch updated successfully',
-                'data' => $branch,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to update branch');
-        }
+        return parent::update($request, $id);
     }
 
     /**
-     * Remove the specified branch.
+     * Get validated data using the appropriate form request.
      */
-    public function destroy($id)
+    protected function getValidatedData(Request $request): array
     {
-        try {
-            $branch = Branch::findOrFail($id);
-
-            // Check if branch has employees
-            if ($branch->employees()->count() > 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot delete branch with assigned employees',
-                ], 409);
-            }
-
-            $branch->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Branch deleted successfully',
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to delete branch');
+        if ($request->isMethod('POST')) {
+            return $request->validate(app(StoreBranchRequest::class)->rules());
         }
+
+        return $request->validate(app(UpdateBranchRequest::class)->rules());
+    }
+
+    /**
+     * Check if branch has employees before deletion.
+     */
+    protected function checkDependencies(Model $record): ?string
+    {
+        /** @var Branch $record */
+        if ($record->employees()->count() > 0) {
+            return 'Cannot delete branch with assigned employees';
+        }
+
+        return null;
     }
 }

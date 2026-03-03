@@ -5,106 +5,60 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Section\StoreSectionRequest;
 use App\Http\Requests\Section\UpdateSectionRequest;
 use App\Models\Section;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class SectionController extends Controller
+class SectionController extends BaseCatalogController
 {
-    /**
-     * Display a listing of sections.
-     */
-    public function index()
-    {
-        try {
-            $sections = Section::withCount('employees')
-                ->orderBy('name', 'asc')
-                ->get();
+    protected string $model = Section::class;
 
-            return response()->json([
-                'success' => true,
-                'data' => $sections,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to fetch sections');
-        }
-    }
+    protected string $resourceName = 'Section';
+
+    protected array $searchFields = ['name'];
+
+    protected string $orderByField = 'name';
+
+    protected array $withCounts = ['employees'];
 
     /**
      * Store a newly created section.
      */
-    public function store(StoreSectionRequest $request)
+    public function store(Request $request): JsonResponse
     {
-        try {
-            $section = Section::create($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Section created successfully',
-                'data' => $section,
-            ], 201);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to create section');
-        }
-    }
-
-    /**
-     * Display the specified section.
-     */
-    public function show($id)
-    {
-        try {
-            $section = Section::withCount('employees')->findOrFail($id);
-
-            return response()->json([
-                'success' => true,
-                'data' => $section,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Section not found', 404);
-        }
+        return parent::store($request);
     }
 
     /**
      * Update the specified section.
      */
-    public function update(UpdateSectionRequest $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
-        try {
-            $section = Section::findOrFail($id);
-            $section->update($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Section updated successfully',
-                'data' => $section,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to update section');
-        }
+        return parent::update($request, $id);
     }
 
     /**
-     * Remove the specified section.
+     * Get validated data using the appropriate form request.
      */
-    public function destroy($id)
+    protected function getValidatedData(Request $request): array
     {
-        try {
-            $section = Section::findOrFail($id);
-
-            // Check if section has employees
-            if ($section->employees()->count() > 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot delete section with assigned employees',
-                ], 409);
-            }
-
-            $section->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Section deleted successfully',
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to delete section');
+        if ($request->isMethod('POST')) {
+            return $request->validate(app(StoreSectionRequest::class)->rules());
         }
+
+        return $request->validate(app(UpdateSectionRequest::class)->rules());
+    }
+
+    /**
+     * Check if section has employees before deletion.
+     */
+    protected function checkDependencies(Model $record): ?string
+    {
+        /** @var Section $record */
+        if ($record->employees()->count() > 0) {
+            return 'Cannot delete section with assigned employees';
+        }
+
+        return null;
     }
 }

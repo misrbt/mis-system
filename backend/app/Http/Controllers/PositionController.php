@@ -5,106 +5,60 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Position\StorePositionRequest;
 use App\Http\Requests\Position\UpdatePositionRequest;
 use App\Models\Position;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class PositionController extends Controller
+class PositionController extends BaseCatalogController
 {
-    /**
-     * Display a listing of positions.
-     */
-    public function index()
-    {
-        try {
-            $positions = Position::withCount('employees')
-                ->orderBy('title', 'asc')
-                ->get();
+    protected string $model = Position::class;
 
-            return response()->json([
-                'success' => true,
-                'data' => $positions,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to fetch positions');
-        }
-    }
+    protected string $resourceName = 'Position';
+
+    protected array $searchFields = ['title'];
+
+    protected string $orderByField = 'title';
+
+    protected array $withCounts = ['employees'];
 
     /**
      * Store a newly created position.
      */
-    public function store(StorePositionRequest $request)
+    public function store(Request $request): JsonResponse
     {
-        try {
-            $position = Position::create($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Position created successfully',
-                'data' => $position,
-            ], 201);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to create position');
-        }
-    }
-
-    /**
-     * Display the specified position.
-     */
-    public function show($id)
-    {
-        try {
-            $position = Position::withCount('employees')->findOrFail($id);
-
-            return response()->json([
-                'success' => true,
-                'data' => $position,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Position not found', 404);
-        }
+        return parent::store($request);
     }
 
     /**
      * Update the specified position.
      */
-    public function update(UpdatePositionRequest $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
-        try {
-            $position = Position::findOrFail($id);
-            $position->update($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Position updated successfully',
-                'data' => $position,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to update position');
-        }
+        return parent::update($request, $id);
     }
 
     /**
-     * Remove the specified position.
+     * Get validated data using the appropriate form request.
      */
-    public function destroy($id)
+    protected function getValidatedData(Request $request): array
     {
-        try {
-            $position = Position::findOrFail($id);
-
-            // Check if position has employees
-            if ($position->employees()->count() > 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot delete position with assigned employees',
-                ], 409);
-            }
-
-            $position->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Position deleted successfully',
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to delete position');
+        if ($request->isMethod('POST')) {
+            return $request->validate(app(StorePositionRequest::class)->rules());
         }
+
+        return $request->validate(app(UpdatePositionRequest::class)->rules());
+    }
+
+    /**
+     * Check if position has employees before deletion.
+     */
+    protected function checkDependencies(Model $record): ?string
+    {
+        /** @var Position $record */
+        if ($record->employees()->count() > 0) {
+            return 'Cannot delete position with assigned employees';
+        }
+
+        return null;
     }
 }

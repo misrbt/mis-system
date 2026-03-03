@@ -55,6 +55,7 @@ class Asset extends Model
         'assigned_to_employee_id',
         'workstation_branch_id',
         'workstation_position_id',
+        'workstation_id',
         'qr_code',
         'barcode',
     ];
@@ -108,6 +109,14 @@ class Asset extends Model
     public function workstationPosition()
     {
         return $this->belongsTo(Position::class, 'workstation_position_id');
+    }
+
+    /**
+     * Get the workstation this asset belongs to.
+     */
+    public function workstation()
+    {
+        return $this->belongsTo(Workstation::class);
     }
 
     public function repairs()
@@ -333,16 +342,27 @@ class Asset extends Model
     }
 
     /**
-     * Accessor for calculated book value (appends to JSON)
+     * Appends are disabled by default for performance.
+     * Use $asset->append(['calculated_book_value', 'depreciation_info']) when needed.
      */
-    protected $appends = ['calculated_book_value', 'depreciation_info'];
+    protected $appends = [];
 
-    public function getCalculatedBookValueAttribute()
+    /**
+     * Accessor for calculated book value.
+     * Not appended by default - call $asset->append('calculated_book_value') when needed.
+     */
+    public function getCalculatedBookValueAttribute(): float
     {
         return $this->calculateBookValue()['book_value'];
     }
 
-    public function getDepreciationInfoAttribute()
+    /**
+     * Accessor for full depreciation info.
+     * Not appended by default - call $asset->append('depreciation_info') when needed.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDepreciationInfoAttribute(): array
     {
         return $this->calculateBookValue();
     }

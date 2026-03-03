@@ -5,113 +5,84 @@ namespace App\Http\Controllers;
 use App\Http\Requests\AssetCategory\StoreAssetCategoryRequest;
 use App\Http\Requests\AssetCategory\UpdateAssetCategoryRequest;
 use App\Models\AssetCategory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class AssetCategoryController extends Controller
+class AssetCategoryController extends BaseCatalogController
 {
-    /**
-     * Display a listing of asset categories.
-     */
-    public function index()
-    {
-        try {
-            $categories = AssetCategory::orderBy('name', 'asc')->get();
+    protected string $model = AssetCategory::class;
 
-            return response()->json([
-                'success' => true,
-                'data' => $categories,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to fetch asset categories');
-        }
-    }
+    protected string $resourceName = 'Asset category';
+
+    protected array $searchFields = ['name', 'code'];
+
+    protected string $orderByField = 'name';
 
     /**
      * Store a newly created asset category.
      */
-    public function store(StoreAssetCategoryRequest $request)
+    public function store(Request $request): JsonResponse
     {
-        try {
-            $code = $this->generateCode($request->name);
-            $category = AssetCategory::create([
-                'name' => $request->name,
-                'code' => $code,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Asset category created successfully',
-                'data' => $category,
-            ], 201);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to create asset category');
-        }
-    }
-
-    /**
-     * Display the specified asset category.
-     */
-    public function show($id)
-    {
-        try {
-            $category = AssetCategory::findOrFail($id);
-
-            return response()->json([
-                'success' => true,
-                'data' => $category,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Asset category not found', 404);
-        }
+        return parent::store($request);
     }
 
     /**
      * Update the specified asset category.
      */
-    public function update(UpdateAssetCategoryRequest $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
-        try {
-            $category = AssetCategory::findOrFail($id);
-            // Preserve existing code; if missing, generate a new one based on the current name.
-            $category->update([
-                'name' => $request->name,
-                'code' => $category->code ?: $this->generateCode($request->name, (int) $id),
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Asset category updated successfully',
-                'data' => $category,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to update asset category');
-        }
+        return parent::update($request, $id);
     }
 
     /**
-     * Remove the specified asset category.
+     * Get validated data using the appropriate form request.
      */
-    public function destroy($id)
+    protected function getValidatedData(Request $request): array
     {
-        try {
-            $category = AssetCategory::findOrFail($id);
-
-            // Check if category has assets
-            if ($category->assets()->count() > 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot delete category with assigned assets',
-                ], 409);
-            }
-
-            $category->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Asset category deleted successfully',
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to delete asset category');
+        if ($request->isMethod('POST')) {
+            return $request->validate(app(StoreAssetCategoryRequest::class)->rules());
         }
+
+        return $request->validate(app(UpdateAssetCategoryRequest::class)->rules());
+    }
+
+    /**
+     * Custom store logic to auto-generate category code.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function performStore(array $data): Model
+    {
+        $data['code'] = $this->generateCode($data['name']);
+
+        return AssetCategory::create($data);
+    }
+
+    /**
+     * Custom update logic to preserve or generate category code.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function performUpdate(Model $record, array $data): void
+    {
+        /** @var AssetCategory $record */
+        $data['code'] = $record->code ?: $this->generateCode($data['name'], $record->id);
+
+        $record->update($data);
+    }
+
+    /**
+     * Check if category has assets before deletion.
+     */
+    protected function checkDependencies(Model $record): ?string
+    {
+        /** @var AssetCategory $record */
+        if ($record->assets()->count() > 0) {
+            return 'Cannot delete category with assigned assets';
+        }
+
+        return null;
     }
 
     /**

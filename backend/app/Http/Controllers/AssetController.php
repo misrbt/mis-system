@@ -24,17 +24,17 @@ class AssetController extends Controller
     public function index(Request $request)
     {
         try {
+            // Optimized eager loading - only essential relationships for list view
+            // Full relationships are loaded in show() for detail view
             $query = Asset::with([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedEmployee.department',
-                'equipment',
-                'workstationBranch',
-                'workstationPosition',
+                'category:id,name,code',
+                'subcategory:id,name',
+                'status:id,name',
+                'vendor:id,company_name',
+                'equipment:id,brand,model',
+                'workstation:id,name,branch_id',
+                'assignedEmployee:id,fullname,branch_id',
+                'assignedEmployee.branch:id,branch_name',
             ]);
 
             // Apply all filters using centralized method
@@ -196,6 +196,7 @@ class AssetController extends Controller
             'vendor_id' => 'nullable|exists:vendors,id',
             'remarks' => 'nullable|string',
             'assigned_to_employee_id' => 'nullable|exists:employee,id',
+            'workstation_id' => 'nullable|exists:workstations,id',
             'workstation_branch_id' => 'nullable|exists:branch,id',
             'workstation_position_id' => 'nullable|exists:position,id',
         ]);
@@ -267,6 +268,7 @@ class AssetController extends Controller
                 'remarks',
                 'specifications',
                 'assigned_to_employee_id',
+                'workstation_id',
                 'workstation_branch_id',
                 'workstation_position_id',
                 'warranty_duration_value',
@@ -295,14 +297,11 @@ class AssetController extends Controller
                 $statusName = 'New';
             }
 
-            $status = Status::where('name', $statusName)->first();
-            if (! $status) {
-                // If status doesn't exist, create it
-                $status = Status::firstOrCreate(
-                    ['name' => $statusName],
-                    ['description' => $statusName === 'New' ? 'Newly added asset' : 'Functional asset']
-                );
-            }
+            // Single query: find or create the status
+            $status = Status::firstOrCreate(
+                ['name' => $statusName],
+                ['description' => $statusName === 'New' ? 'Newly added asset' : 'Functional asset']
+            );
             $data['status_id'] = $status->id;
 
             // Create asset
@@ -338,9 +337,6 @@ class AssetController extends Controller
                 Log::warning("Failed to generate barcode for asset {$asset->id}: ".$e->getMessage());
             }
 
-            // Refresh the asset to get the generated QR code and barcode
-            $asset->refresh();
-
             // Create components if provided (for Desktop PC assets)
             $createdComponents = [];
             if ($request->has('components') && is_array($request->components)) {
@@ -375,18 +371,14 @@ class AssetController extends Controller
                 $asset->load('components');
             }
 
-            // Load relationships
+            // Load essential relationships for response (minimal set for creation confirmation)
             $asset->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedEmployee.department',
-                'equipment',
-                'workstationBranch',
-                'workstationPosition',
+                'category:id,name,code',
+                'subcategory:id,name',
+                'status:id,name',
+                'equipment:id,brand,model',
+                'assignedEmployee:id,fullname,branch_id',
+                'assignedEmployee.branch:id,branch_name',
             ]);
 
             $response = [
@@ -428,6 +420,8 @@ class AssetController extends Controller
                 'assignedEmployee.position',
                 'assignedEmployee.department',
                 'equipment',
+                'workstation.branch',
+                'workstation.position',
                 'workstationBranch',
                 'workstationPosition',
             ])->findOrFail($id);
@@ -482,6 +476,7 @@ class AssetController extends Controller
             'status_id' => 'nullable|exists:status,id',
             'remarks' => 'nullable|string',
             'assigned_to_employee_id' => 'nullable|exists:employee,id',
+            'workstation_id' => 'nullable|exists:workstations,id',
             'workstation_branch_id' => 'nullable|exists:branch,id',
             'workstation_position_id' => 'nullable|exists:position,id',
         ]);
@@ -518,6 +513,7 @@ class AssetController extends Controller
                 'remarks',
                 'specifications',
                 'assigned_to_employee_id',
+                'workstation_id',
                 'workstation_branch_id',
                 'workstation_position_id',
                 'warranty_duration_value',
@@ -576,18 +572,14 @@ class AssetController extends Controller
                 $asset->save();
             }
 
-            // Load relationships
+            // Load essential relationships for response
             $asset->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedEmployee.department',
-                'equipment',
-                'workstationBranch',
-                'workstationPosition',
+                'category:id,name,code',
+                'subcategory:id,name',
+                'status:id,name',
+                'equipment:id,brand,model',
+                'assignedEmployee:id,fullname,branch_id',
+                'assignedEmployee.branch:id,branch_name',
             ]);
 
             $response = [
@@ -773,6 +765,7 @@ class AssetController extends Controller
                 'remarks',
                 'status_id',
                 'assigned_to_employee_id',
+                'workstation_id',
                 'workstation_branch_id',
                 'workstation_position_id',
             ];
@@ -799,17 +792,14 @@ class AssetController extends Controller
                 $asset->save();
             }
 
+            // Load essential relationships for response
             $asset->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedEmployee.department',
-                'equipment',
-                'workstationBranch',
-                'workstationPosition',
+                'category:id,name,code',
+                'subcategory:id,name',
+                'status:id,name',
+                'equipment:id,brand,model',
+                'assignedEmployee:id,fullname,branch_id',
+                'assignedEmployee.branch:id,branch_name',
             ]);
 
             $response = [
@@ -855,17 +845,14 @@ class AssetController extends Controller
             $asset->status_id = (int) $request->status_id;
             $asset->save();
 
+            // Load essential relationships for response
             $asset->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedEmployee.department',
-                'equipment',
-                'workstationBranch',
-                'workstationPosition',
+                'category:id,name,code',
+                'subcategory:id,name',
+                'status:id,name',
+                'equipment:id,brand,model',
+                'assignedEmployee:id,fullname,branch_id',
+                'assignedEmployee.branch:id,branch_name',
             ]);
 
             return response()->json([
@@ -986,17 +973,16 @@ class AssetController extends Controller
     public function track(Request $request)
     {
         try {
+            // Optimized eager loading for tracking - essential relationships only
             $query = Asset::with([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedEmployee.department',
-                'equipment',
-                'workstationBranch',
-                'workstationPosition',
+                'category:id,name,code',
+                'subcategory:id,name',
+                'vendor:id,name',
+                'status:id,name',
+                'equipment:id,brand,model',
+                'assignedEmployee:id,fullname,branch_id,position_id',
+                'assignedEmployee.branch:id,branch_name',
+                'assignedEmployee.position:id,position_name',
             ]);
 
             // Apply all filters using centralized method
@@ -1118,6 +1104,11 @@ class AssetController extends Controller
             $query->whereHas('assignedEmployee', function ($q) use ($request) {
                 $q->where('branch_id', $request->branch_id);
             });
+        }
+
+        // Workstation filter
+        if ($request->has('workstation_id') && $request->workstation_id) {
+            $query->where('workstation_id', $request->workstation_id);
         }
 
         // Category filters

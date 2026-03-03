@@ -5,107 +5,46 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Status\StoreStatusRequest;
 use App\Http\Requests\Status\UpdateStatusRequest;
 use App\Models\Status;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class StatusController extends Controller
+class StatusController extends BaseCatalogController
 {
-    /**
-     * Display a listing of statuses.
-     */
-    public function index()
-    {
-        try {
-            // Cache statuses for 24 hours (86400 seconds)
-            $statuses = \Illuminate\Support\Facades\Cache::remember('statuses_all', 86400, function () {
-                return Status::orderBy('name', 'asc')->get();
-            });
+    protected string $model = Status::class;
 
-            return response()->json([
-                'success' => true,
-                'data' => $statuses,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to fetch statuses');
-        }
-    }
+    protected string $resourceName = 'Status';
+
+    protected array $searchFields = ['name'];
+
+    protected string $orderByField = 'name';
+
+    protected ?string $cacheKey = 'statuses_all';
 
     /**
      * Store a newly created status.
      */
-    public function store(StoreStatusRequest $request)
+    public function store(Request $request): JsonResponse
     {
-        try {
-            $status = Status::create($request->validated());
-
-            // Clear cache
-            \Illuminate\Support\Facades\Cache::forget('statuses_all');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Status created successfully',
-                'data' => $status,
-            ], 201);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to create status');
-        }
-    }
-
-    /**
-     * Display the specified status.
-     */
-    public function show($id)
-    {
-        try {
-            $status = Status::findOrFail($id);
-
-            return response()->json([
-                'success' => true,
-                'data' => $status,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Status not found', 404);
-        }
+        return parent::store($request);
     }
 
     /**
      * Update the specified status.
      */
-    public function update(UpdateStatusRequest $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
-        try {
-            $status = Status::findOrFail($id);
-            $status->update($request->validated());
-
-            // Clear cache
-            \Illuminate\Support\Facades\Cache::forget('statuses_all');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Status updated successfully',
-                'data' => $status,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to update status');
-        }
+        return parent::update($request, $id);
     }
 
     /**
-     * Remove the specified status.
+     * Get validated data using the appropriate form request.
      */
-    public function destroy($id)
+    protected function getValidatedData(Request $request): array
     {
-        try {
-            $status = Status::findOrFail($id);
-            $status->delete();
-
-            // Clear cache
-            \Illuminate\Support\Facades\Cache::forget('statuses_all');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Status deleted successfully',
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to delete status');
+        if ($request->isMethod('POST')) {
+            return $request->validate(app(StoreStatusRequest::class)->rules());
         }
+
+        return $request->validate(app(UpdateStatusRequest::class)->rules());
     }
 }

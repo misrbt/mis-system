@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -262,16 +262,26 @@ function AssetsPage() {
   const [formData, setFormData] = useState(() => buildFormData())
   const [components, setComponents] = useState([])
 
-  // Fetch assets with React Query
-  const { data: assetsData, isLoading, refetch } = useQuery({
-    queryKey: ['assets', deferredFilters],
+  // Debounced search for server-side filtering
+  const deferredTableSearch = useDeferredValue(tableGlobalFilter)
+
+  // Fetch assets with React Query - uses server-side filtering when search is provided
+  const { data: assetsData, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['assets', deferredFilters, deferredTableSearch],
     queryFn: async () => {
-      const params = buildQueryParams(deferredFilters, { all: 'true' })
+      const extraParams = { all: 'true' }
+      // Add server-side search if search term is >= 2 characters
+      if (deferredTableSearch && deferredTableSearch.length >= 2) {
+        extraParams.search = deferredTableSearch
+      }
+      const params = buildQueryParams(deferredFilters, extraParams)
       const response = await apiClient.get(`/assets?${params}`)
       return response.data
     },
     staleTime: 30 * 1000,
     refetchOnWindowFocus: false,
+    // Keep previous data while fetching to avoid UI flicker
+    placeholderData: (previousData) => previousData,
   })
 
   const { data: assetsTotalsData, isLoading: isLoadingTotals } = useQuery({

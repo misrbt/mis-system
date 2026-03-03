@@ -1,110 +1,59 @@
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import Modal from './Modal'
 import { User, MapPin, CornerUpLeft, AlertCircle } from 'lucide-react'
 import Swal from 'sweetalert2'
 import apiClient from '../services/apiClient'
+import { useFormModal } from '../hooks/useFormModal'
+import { useAssetQueryInvalidation } from '../hooks/useAssetQueryInvalidation'
 
 function ReturnAssetModal({ isOpen, onClose, asset }) {
-  const queryClient = useQueryClient()
-  const [formData, setFormData] = useState({
-    reason: '',
-    remarks: '',
-  })
-  const [errors, setErrors] = useState({})
+  const { invalidateAssetQueries } = useAssetQueryInvalidation()
 
-  // Return mutation
-  const returnMutation = useMutation({
+  const {
+    formData,
+    errors,
+    isLoading,
+    handleChange,
+    handleSubmit,
+    handleClose,
+    getCharCount,
+  } = useFormModal({
+    initialData: { reason: '', remarks: '' },
+    validationRules: {
+      reason: {
+        required: true,
+        minLength: 10,
+        label: 'Reason',
+      },
+    },
     mutationFn: (data) => apiClient.post(`/assets/${asset?.id}/movements/return`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['asset', asset?.id])
-      queryClient.invalidateQueries(['asset-movements', asset?.id])
-      queryClient.invalidateQueries(['asset-assignments', asset?.id])
-      queryClient.invalidateQueries(['asset-statistics', asset?.id])
-      queryClient.invalidateQueries(['assets'])
-
-      Swal.fire({
-        icon: 'success',
-        title: 'Asset Returned',
-        text: 'Asset has been successfully returned to inventory',
-        timer: 2000,
-        showConfirmButton: false,
-      })
-
-      handleClose()
+      invalidateAssetQueries(asset?.id)
     },
-    onError: (error) => {
-      const errorMessage = error.response?.data?.message || 'Failed to return asset'
-      const validationErrors = error.response?.data?.errors || {}
-
-      setErrors(validationErrors)
-
-      Swal.fire({
-        icon: 'error',
-        title: 'Return Failed',
-        text: errorMessage,
-      })
-    },
+    onClose,
+    successTitle: 'Asset Returned',
+    successMessage: 'Asset has been successfully returned to inventory',
+    errorTitle: 'Return Failed',
   })
-
-  const validateForm = () => {
-    const newErrors = {}
-
-    if (!formData.reason || formData.reason.trim() === '') {
-      newErrors.reason = 'Reason is required'
-    } else if (formData.reason.trim().length < 10) {
-      newErrors.reason = 'Reason must be at least 10 characters'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'Please fill in all required fields correctly',
-      })
-      return
-    }
-
-    returnMutation.mutate(formData)
-  }
-
-  const handleReasonChange = (e) => {
-    const value = e.target.value
-    setFormData(prev => ({ ...prev, reason: value }))
-
-    // Clear error when user starts typing
-    if (errors.reason) {
-      setErrors(prev => ({ ...prev, reason: undefined }))
-    }
-  }
-
-  const handleClose = () => {
-    setFormData({
-      reason: '',
-      remarks: '',
-    })
-    setErrors({})
-    onClose()
-  }
 
   const currentEmployee = asset?.assigned_employee
   const currentBranch = currentEmployee?.branch
+  const reasonCharCount = getCharCount('reason')
 
-  // Don't show modal if asset is not assigned
+  // Check if asset is assigned when modal opens
+  useEffect(() => {
+    if (isOpen && !currentEmployee) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Not Assigned',
+        text: 'This asset is not currently assigned to any employee',
+      })
+      handleClose()
+    }
+  }, [isOpen, currentEmployee, handleClose])
+
+  // Don't render if not assigned
   if (isOpen && !currentEmployee) {
-    Swal.fire({
-      icon: 'warning',
-      title: 'Not Assigned',
-      text: 'This asset is not currently assigned to any employee',
-    })
-    handleClose()
     return null
   }
 
@@ -113,7 +62,7 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
       <button
         type="button"
         onClick={handleClose}
-        disabled={returnMutation.isPending}
+        disabled={isLoading}
         className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         Cancel
@@ -121,10 +70,10 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
       <button
         type="submit"
         onClick={handleSubmit}
-        disabled={returnMutation.isPending}
+        disabled={isLoading}
         className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
       >
-        {returnMutation.isPending ? (
+        {isLoading ? (
           <>
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             Returning...
@@ -202,7 +151,7 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
           </label>
           <textarea
             value={formData.reason}
-            onChange={handleReasonChange}
+            onChange={handleChange('reason')}
             placeholder="Explain why this asset is being returned (minimum 10 characters)"
             rows={4}
             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none ${
@@ -218,10 +167,8 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
                 </div>
               )}
             </div>
-            <span className={`text-sm ${
-              formData.reason.length >= 10 ? 'text-green-600' : 'text-slate-500'
-            }`}>
-              {formData.reason.length} / 10 characters
+            <span className={`text-sm ${reasonCharCount.isValid ? 'text-green-600' : 'text-slate-500'}`}>
+              {reasonCharCount.current} / {reasonCharCount.min} characters
             </span>
           </div>
         </div>
@@ -233,7 +180,7 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
           </label>
           <textarea
             value={formData.remarks}
-            onChange={(e) => setFormData(prev => ({ ...prev, remarks: e.target.value }))}
+            onChange={handleChange('remarks')}
             placeholder="Any additional notes or comments (e.g., condition of asset, accessories returned, etc.)"
             rows={3}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
