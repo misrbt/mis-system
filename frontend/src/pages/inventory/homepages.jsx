@@ -106,68 +106,31 @@ function InventoryHome() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  // Fetch dashboard statistics
-  const { data: statsData, isLoading } = useQuery({
-    queryKey: ['dashboard-statistics'],
-    queryFn: async () => {
-      const response = await apiClient.get('/dashboard/statistics')
-      return response.data.data
-    },
-  })
-
-  // Fetch assets needing attention
-  const { data: attentionAssetsData } = useQuery({
-    queryKey: ['assets-needing-attention'],
-    queryFn: async () => {
-      const response = await apiClient.get('/dashboard/assets-needing-attention', {
-        params: { limit: 50 }
-      })
-      return response.data.data
-    },
-  })
-
-  // Fetch recent activity
-  const { data: recentActivityData } = useQuery({
-    queryKey: ['recent-activity'],
-    queryFn: async () => {
-      const response = await apiClient.get('/dashboard/recent-activity', {
-        params: { limit: 10 }
-      })
-      return response.data.data
-    },
-  })
-
-  // Fetch current month's expenses
+  // Get current year and month
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
 
-  const { data: currentMonthExpensesData } = useQuery({
-    queryKey: ['current-month-expenses', currentYear, currentMonth],
+  // Fetch unified dashboard data (all-in-one endpoint for performance)
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ['dashboard-initial', currentYear, currentMonth],
     queryFn: async () => {
-      const response = await apiClient.get('/dashboard/expense-trends', {
+      const response = await apiClient.get('/dashboard/initial', {
         params: { year: currentYear, month: currentMonth }
       })
       return response.data.data
     },
+    staleTime: 60000, // 1 minute - prevent unnecessary refetches
+    gcTime: 300000, // 5 minutes cache retention (renamed from cacheTime)
+    refetchOnWindowFocus: false, // Don't refetch on tab focus
   })
 
-  // Fetch monthly expenses
-  const { data: monthlyExpensesData } = useQuery({
-    queryKey: ['monthly-expenses'],
-    queryFn: async () => {
-      const response = await apiClient.get('/dashboard/monthly-expenses')
-      return response.data.data
-    },
-  })
-
-  // Fetch yearly expenses
-  const { data: yearlyExpensesData } = useQuery({
-    queryKey: ['yearly-expenses'],
-    queryFn: async () => {
-      const response = await apiClient.get('/dashboard/yearly-expenses')
-      return response.data.data
-    },
-  })
+  // Extract data from unified response
+  const statsData = dashboardData?.statistics
+  const attentionAssetsData = dashboardData?.assetsNeedingAttention
+  const recentActivityData = dashboardData?.recentActivity
+  const currentMonthExpensesData = dashboardData?.currentMonthExpenses
+  const monthlyExpensesData = dashboardData?.monthlyExpenses
+  const yearlyExpensesData = dashboardData?.yearlyExpenses
 
   // Fetch branches list for dashboard display
   const { data: branchesData, isLoading: branchesLoading } = useQuery({

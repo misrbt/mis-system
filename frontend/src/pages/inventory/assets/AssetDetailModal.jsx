@@ -120,33 +120,33 @@ const AssetDetailModal = ({ isOpen, onClose, asset, onEdit, onDelete, onViewHist
             </div>
 
             {/* Assignment Information */}
-            {asset.assigned_employee && (
+            {(asset.workstation?.employee || asset.assigned_employee) && (
               <div className="bg-white rounded-lg border border-slate-200 p-4">
                 <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <User className="w-4 h-4 text-green-600" />
                   Assignment
                 </h4>
                 <div className="space-y-0">
-                  <InfoRow 
-                    icon={User} 
-                    label="Employee" 
-                    value={asset.assigned_employee.fullname}
+                  <InfoRow
+                    icon={User}
+                    label="Employee"
+                    value={(asset.workstation?.employee || asset.assigned_employee)?.fullname}
                     valueClassName="font-semibold"
                   />
-                  <InfoRow 
-                    icon={Building} 
-                    label="Position" 
-                    value={asset.assigned_employee.position?.title}
+                  <InfoRow
+                    icon={Building}
+                    label="Position"
+                    value={(asset.workstation?.employee || asset.assigned_employee)?.position?.title}
                   />
-                  <InfoRow 
-                    icon={Building} 
-                    label="Branch" 
-                    value={asset.assigned_employee.branch?.branch_name}
+                  <InfoRow
+                    icon={Building}
+                    label="Branch"
+                    value={(asset.workstation?.employee || asset.assigned_employee)?.branch?.branch_name}
                   />
-                  <InfoRow 
-                    icon={Building} 
-                    label="Department" 
-                    value={asset.assigned_employee.department?.name}
+                  <InfoRow
+                    icon={Building}
+                    label="Department"
+                    value={(asset.workstation?.employee || asset.assigned_employee)?.department?.name}
                   />
                 </div>
               </div>

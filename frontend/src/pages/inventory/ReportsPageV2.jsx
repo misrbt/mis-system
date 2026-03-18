@@ -90,6 +90,7 @@ function ReportsPage() {
   })
 
   const signatories = {
+    prepared_by_id: signatoriesData?.prepared_by_id || null,
     checked_by_id: signatoriesData?.checked_by_id || null,
     noted_by_id: signatoriesData?.noted_by_id || null,
   }
@@ -114,7 +115,7 @@ function ReportsPage() {
   const { data: employees } = useQuery({
     queryKey: ['employees'],
     queryFn: async () => {
-      const response = await apiClient.get('/employees')
+      const response = await apiClient.get('/employees', { params: { all: true } })
       return normalizeArrayResponse(response.data)
     },
   })
@@ -415,7 +416,8 @@ function ReportsPage() {
       // ── Data Rows (grouped by employee, matching on-screen structure) ──
       groupedByEmployee.forEach(group => {
         const employeeName = group.employee?.fullname || 'Unassigned'
-        const positionTitle = group.employee?.position?.title || ''
+        const positionTitle = group.employee?.is_workstation ? 'Workstation' : (group.employee?.position?.title || '')
+        const branchName = group.employee?.branch?.branch_name || ''
         const assetCount = group.assets.length
         const groupStartRow = row
 
@@ -433,7 +435,8 @@ function ReportsPage() {
 
           // Column 0: Employee name (only set on first row, will be merged)
           if (isFirst) {
-            setCell(row, 0, employeeName + (positionTitle ? '\n' + positionTitle : ''), {
+            const nameLabel = [employeeName, positionTitle, branchName].filter(Boolean).join('\n')
+            setCell(row, 0, nameLabel, {
               font: { bold: true, sz: 10, color: { rgb: '0F172A' } },
               alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
               border: groupBorder,
@@ -707,6 +710,7 @@ function ReportsPage() {
       // ── Signatories Section ──
       row += 2 // spacing
 
+      const preparedByEmployee = employees?.find(e => e.id === signatories.prepared_by_id)
       const checkedByEmployee = employees?.find(e => e.id === signatories.checked_by_id)
       const notedByEmployee = employees?.find(e => e.id === signatories.noted_by_id)
 
@@ -735,7 +739,7 @@ function ReportsPage() {
       row++ // spacing for signature line
 
       // Names row
-      setCell(row, 0, resolvedUser?.fullname || 'Admin User', sigNameStyle)
+      setCell(row, 0, preparedByEmployee?.fullname || resolvedUser?.fullname || 'Admin User', sigNameStyle)
       merges.push({ s: { r: row, c: 0 }, e: { r: row, c: 2 } })
       setCell(row, 4, checkedByEmployee?.fullname || '__________________', sigNameStyle)
       merges.push({ s: { r: row, c: 4 }, e: { r: row, c: 6 } })
@@ -744,7 +748,7 @@ function ReportsPage() {
       row++
 
       // Positions row
-      setCell(row, 0, resolvedUser?.position?.title || '', sigPosStyle)
+      setCell(row, 0, preparedByEmployee?.position?.title || resolvedUser?.position?.title || '', sigPosStyle)
       merges.push({ s: { r: row, c: 0 }, e: { r: row, c: 2 } })
       setCell(row, 4, checkedByEmployee?.position?.title || 'Position', sigPosStyle)
       merges.push({ s: { r: row, c: 4 }, e: { r: row, c: 6 } })
@@ -863,8 +867,12 @@ function ReportsPage() {
 
       groupedByEmployee.forEach(group => {
          // Group Header row
+         const pdfEmployeeName = group.employee?.fullname || 'Unassigned'
+         const pdfPositionTitle = group.employee?.is_workstation ? 'Workstation' : (group.employee?.position?.title || 'No Position')
+         const pdfBranchName = group.employee?.branch?.branch_name || ''
+         const pdfGroupLabel = [pdfEmployeeName, pdfPositionTitle, pdfBranchName].filter(Boolean).join(' - ')
          tableRows.push([{
-             content: `${group.employee?.fullname || 'Unassigned'} - ${group.employee?.position?.title || 'No Position'}`,
+             content: pdfGroupLabel,
              colSpan: 11,
              styles: { fillColor: [241, 245, 249], fontStyle: 'bold' }
          }])
@@ -979,6 +987,7 @@ function ReportsPage() {
       doc.setTextColor(0, 0, 0)
 
       // Get employee details from IDs
+      const preparedByEmployee = employees?.find(e => e.id === signatories.prepared_by_id)
       const checkedByEmployee = employees?.find(e => e.id === signatories.checked_by_id)
       const notedByEmployee = employees?.find(e => e.id === signatories.noted_by_id)
 
@@ -991,9 +1000,8 @@ function ReportsPage() {
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(15, 23, 42)
-      doc.text(resolvedUser?.fullname || 'Admin User', 14, sigY + 12)
-      // Underline
-      const prepName = resolvedUser?.fullname || 'Admin User'
+      const prepName = preparedByEmployee?.fullname || resolvedUser?.fullname || 'Admin User'
+      doc.text(prepName, 14, sigY + 12)
       const prepWidth = doc.getTextWidth(prepName)
       doc.setDrawColor(51, 65, 85)
       doc.line(14, sigY + 13, 14 + prepWidth, sigY + 13)
@@ -1001,7 +1009,7 @@ function ReportsPage() {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
       doc.setTextColor(71, 85, 105)
-      doc.text(resolvedUser?.position?.title || '', 14, sigY + 18)
+      doc.text(preparedByEmployee?.position?.title || resolvedUser?.position?.title || '', 14, sigY + 18)
 
       // Checked By
       doc.setFontSize(10)
@@ -1327,8 +1335,20 @@ function ReportsPage() {
                                     <tr key={`${groupIndex}-${asset.id}`} className="hover:bg-slate-50">
                                         {isFirstAsset && (
                                             <td rowSpan={group.assets.length} className={`px-3 py-2 text-sm text-center align-middle border-r border-slate-200 ${groupHeaderBorderClass}`}>
-                                                <div className="font-semibold text-slate-900">{group.employee?.fullname || 'Unassigned'}</div>
-                                                <div className="text-xs text-slate-600">{group.employee?.position?.title || ''}</div>
+                                                {group.employee?.is_workstation ? (
+                                                  <>
+                                                    <div className="font-semibold text-indigo-700">{group.employee.fullname}</div>
+                                                    <div className="text-xs text-indigo-500 italic">Workstation</div>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <div className="font-semibold text-slate-900">{group.employee?.fullname || 'Unassigned'}</div>
+                                                    <div className="text-xs text-slate-600">{group.employee?.position?.title || ''}</div>
+                                                  </>
+                                                )}
+                                                {group.employee?.branch?.branch_name && (
+                                                  <div className="text-xs text-slate-500">{group.employee.branch.branch_name}</div>
+                                                )}
                                             </td>
                                         )}
                                         {/* Asset Cols */}
@@ -1453,14 +1473,15 @@ function ReportsPage() {
               {/* Add Signatories to On-Screen/Print View */}
               <div className="mt-12 print:mt-4 grid grid-cols-1 sm:grid-cols-3 gap-8 print:gap-4 px-8 pb-8 print:px-4 print:pb-2 print:grid">
                   {(() => {
+                    const preparedByEmployee = employees?.find(e => e.id === signatories.prepared_by_id)
                     const checkedByEmployee = employees?.find(e => e.id === signatories.checked_by_id)
                     const notedByEmployee = employees?.find(e => e.id === signatories.noted_by_id)
                     return (
                       <>
                         <div>
                           <p className="text-sm print:text-xs font-medium text-slate-600 mb-6 print:mb-3">Prepared by:</p>
-                          <p className="text-base print:text-sm font-bold text-slate-900 border-b border-slate-800 inline-block">{resolvedUser?.fullname || 'Admin User'}</p>
-                          <p className="text-sm print:text-xs text-slate-600">{resolvedUser?.position?.title || ''}</p>
+                          <p className="text-base print:text-sm font-bold text-slate-900 border-b border-slate-800 inline-block">{preparedByEmployee?.fullname || resolvedUser?.fullname || 'Admin User'}</p>
+                          <p className="text-sm print:text-xs text-slate-600">{preparedByEmployee?.position?.title || resolvedUser?.position?.title || ''}</p>
                         </div>
                         <div>
                           <p className="text-sm print:text-xs font-medium text-slate-600 mb-6 print:mb-3">Checked by:</p>
@@ -1498,7 +1519,7 @@ function ReportsPage() {
         signatories={signatories}
         onSave={handleSignatorySave}
         currentUser={resolvedUser}
-        employees={employees || []}
+        employees={(employees || []).filter(emp => emp.department_id === 1 || emp.department?.name === 'MIS')}
         isSaving={savingSignatories}
       />
     </div>

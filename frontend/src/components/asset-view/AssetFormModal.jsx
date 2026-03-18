@@ -17,10 +17,12 @@ const AssetFormModal = ({
   onInputChange,
   onVendorChange,
   onEmployeeChange,
+  onWorkstationChange,
   categories,
   subcategories = [],
   vendorOptions,
   employeeOptions,
+  workstationOptions = [],
   statusOptions,
   branchOptions = [],
   positionOptions = [],
@@ -242,7 +244,7 @@ const AssetFormModal = ({
                 type="text"
                 name="asset_name"
                 value={formData.asset_name || ''}
-                onChange={(e) => onInputChange('asset_name', e.target.value)}
+                onChange={onInputChange}
                 required
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder={placeholders.asset_name}
@@ -261,7 +263,7 @@ const AssetFormModal = ({
               <select
                 name="asset_category_id"
                 value={formData.asset_category_id || ''}
-                onChange={(e) => onInputChange('asset_category_id', e.target.value)}
+                onChange={onInputChange}
                 required
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
@@ -283,7 +285,7 @@ const AssetFormModal = ({
                 <select
                   name="subcategory_id"
                   value={formData.subcategory_id || ''}
-                  onChange={(e) => onInputChange('subcategory_id', e.target.value)}
+                  onChange={onInputChange}
                   required={!isEditMode}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -659,7 +661,7 @@ const AssetFormModal = ({
                   type="text"
                   name="serial_number"
                   value={formData.serial_number || ''}
-                  onChange={(e) => onInputChange('serial_number', e.target.value)}
+                  onChange={onInputChange}
                   className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder={isDesktopPCCategory() ? "Enter Desktop PC unit serial number or generate" : (placeholders.serial_number || 'Enter serial number or generate')}
                 />
@@ -708,7 +710,7 @@ const AssetFormModal = ({
                 type="date"
                 name="purchase_date"
                 value={formData.purchase_date || ''}
-                onChange={(e) => onInputChange('purchase_date', e.target.value)}
+                onChange={onInputChange}
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
@@ -819,7 +821,7 @@ const AssetFormModal = ({
                 <select
                   name="status_id"
                   value={formData.status_id || ''}
-                  onChange={(e) => onInputChange('status_id', e.target.value)}
+                  onChange={onInputChange}
                   required
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -833,53 +835,22 @@ const AssetFormModal = ({
               </div>
             )}
 
-            {/* Assigned Employee - Hidden in employee view */}
+            {/* Workstation Assignment */}
             {hideAssignedEmployee !== true && (
               <div className={showStatus ? '' : 'md:col-span-2'}>
                 <SearchableSelect
-                  label="Assigned To Employee"
-                  options={employeeOptions || []}
-                  value={formData.assigned_to_employee_id || ''}
-                  onChange={onEmployeeChange}
+                  label="Assign to Workstation"
+                  options={workstationOptions || []}
+                  value={formData.workstation_id || ''}
+                  onChange={onWorkstationChange}
                   displayField="name"
-                  secondaryField="position"
-                  tertiaryField="branch"
                   placeholder="Select employee or search..."
-                  emptyMessage="No employees found"
-                  required
+                  emptyMessage="No workstations found"
+                  required={false}
                 />
-              </div>
-            )}
-
-            {/* Workstation Branch - Hidden in employee view */}
-            {hideWorkstationFields !== true && (
-              <div>
-                <SearchableSelect
-                  label="Workstation Branch"
-                  options={(branchOptions || []).map((b) => ({ id: b.id, name: b.branch_name ?? b.name }))}
-                  value={formData.workstation_branch_id ?? ''}
-                  onChange={(value) => onInputChange({ target: { name: 'workstation_branch_id', value } })}
-                  displayField="name"
-                  placeholder="Select workstation branch..."
-                  emptyMessage="No branches found"
-                  required
-                />
-              </div>
-            )}
-
-            {/* Workstation Position - Hidden in employee view */}
-            {hideWorkstationFields !== true && (
-              <div>
-                <SearchableSelect
-                  label="Workstation Position"
-                  options={(positionOptions || []).map((p) => ({ id: p.id, name: p.title ?? p.name }))}
-                  value={formData.workstation_position_id ?? ''}
-                  onChange={(value) => onInputChange({ target: { name: 'workstation_position_id', value } })}
-                  displayField="name"
-                  placeholder="Select workstation position..."
-                  emptyMessage="No positions found"
-                  required
-                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Select employee - workstation ID will be stored
+                </p>
               </div>
             )}
 

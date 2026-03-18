@@ -229,14 +229,14 @@ class EmployeeControllerTest extends TestCase
             ->assertJsonPath('data.data.0.fullname', 'John Developer');
     }
 
-    public function test_all_parameter_limits_to_1000_records(): void
+    public function test_all_parameter_returns_all_records(): void
     {
         $branch = Branch::factory()->create();
         $position = Position::factory()->create();
         $section = Section::factory()->create();
 
-        // Create more than 1000 employees
-        Employee::factory()->count(1050)->create([
+        // Create employees
+        Employee::factory()->count(150)->create([
             'branch_id' => $branch->id,
             'position_id' => $position->id,
             'department_id' => $section->id,
@@ -245,7 +245,7 @@ class EmployeeControllerTest extends TestCase
         $response = $this->getJson('/api/employees?all=true');
 
         $response->assertStatus(200)
-            ->assertJsonCount(1000, 'data');
+            ->assertJsonCount(150, 'data');
     }
 
     public function test_respects_per_page_limit_of_100(): void

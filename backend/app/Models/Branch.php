@@ -21,4 +21,12 @@ class Branch extends Model
     {
         return $this->hasMany(Employee::class);
     }
+
+    /**
+     * Get the workstations at this branch.
+     */
+    public function workstations()
+    {
+        return $this->hasMany(Workstation::class);
+    }
 }

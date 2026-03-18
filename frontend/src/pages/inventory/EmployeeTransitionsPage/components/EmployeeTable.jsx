@@ -7,13 +7,16 @@ import { SortIcon } from './SortIcon'
 export function EmployeeTable({
   table,
   loadingEmployees,
+  employeesData,
   modifications,
   employeesInExchanges,
   transitionMode,
   branches,
   positions,
+  workstations,
   loadingBranches,
   loadingPositions,
+  loadingWorkstations,
   onModify,
   onClear,
 }) {
@@ -27,9 +30,9 @@ export function EmployeeTable({
     </div>
   )
 
-  const renderLoadingState = (colSpan) => (
+  const renderLoadingState = () => (
     <tr>
-      <td colSpan={colSpan} className="px-6 py-12 text-center text-sm text-slate-500">
+      <td colSpan="5" className="px-6 py-12 text-center text-sm text-slate-500">
         Loading employees...
       </td>
     </tr>
@@ -51,14 +54,11 @@ export function EmployeeTable({
                   onClick={header.column.getToggleSortingHandler()}
                 >
                   <span className="inline-flex items-center gap-1">
-                    {header.id === 'destBranch' && <ArrowRight className="w-3.5 h-3.5 text-slate-400" />}
-                    {header.id === 'destPosition' && <ArrowRight className="w-3.5 h-3.5 text-slate-400" />}
+                    {header.id === 'destWorkstation' && <ArrowRight className="w-3.5 h-3.5 text-slate-400" />}
                     {{
                       employee: 'Employee',
-                      currentBranch: 'Current Workstation Branch',
-                      currentPosition: 'Current Workstation Position',
-                      destBranch: 'New Workstation Branch',
-                      destPosition: 'New Workstation Position',
+                      currentWorkstation: 'Current Workstation',
+                      destWorkstation: 'New Workstation',
                       status: 'Status',
                       action: 'Action',
                     }[header.id]}
@@ -70,10 +70,10 @@ export function EmployeeTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loadingEmployees ? (
-              renderLoadingState(7)
+              renderLoadingState()
             ) : paginatedRows.length === 0 ? (
               <tr>
-                <td colSpan="7">{renderEmptyState()}</td>
+                <td colSpan="5">{renderEmptyState()}</td>
               </tr>
             ) : (
               paginatedRows.map(row => {
@@ -85,14 +85,17 @@ export function EmployeeTable({
                   <EmployeeTableRow
                     key={employee.id}
                     employee={employee}
+                    employeesData={employeesData}
                     isModified={isModified}
                     isInExchange={isInExchange}
                     modifications={modifications}
                     transitionMode={transitionMode}
                     branches={branches}
                     positions={positions}
+                    workstations={workstations}
                     loadingBranches={loadingBranches}
                     loadingPositions={loadingPositions}
+                    loadingWorkstations={loadingWorkstations}
                     onModify={onModify}
                     onClear={onClear}
                   />
@@ -121,14 +124,17 @@ export function EmployeeTable({
               <EmployeeTableCard
                 key={employee.id}
                 employee={employee}
+                employeesData={employeesData}
                 isModified={isModified}
                 isInExchange={isInExchange}
                 modifications={modifications}
                 transitionMode={transitionMode}
                 branches={branches}
                 positions={positions}
+                workstations={workstations}
                 loadingBranches={loadingBranches}
                 loadingPositions={loadingPositions}
+                loadingWorkstations={loadingWorkstations}
                 onModify={onModify}
                 onClear={onClear}
               />

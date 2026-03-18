@@ -22,6 +22,7 @@ export function useTransitionState() {
   const [transitionMode, setTransitionMode] = useState(null)
   const [remarks, setRemarks] = useState('')
   const [showExchangePanel, setShowExchangePanel] = useState(true)
+  const [showPendingPanel, setShowPendingPanel] = useState(true)
   const [modifications, setModifications] = useState({})
 
   // Table state
@@ -36,12 +37,15 @@ export function useTransitionState() {
 
     const parsedValue = parseInt(value)
     const { ws_branch_id, ws_position_id } = getWorkstation(employee)
+    const currentWorkstation = employee.workstations?.[0]
+    const currentWorkstationId = currentWorkstation?.id
 
     setModifications(prev => {
       // Initialise from the employee's WORKSTATION values (not their HR branch/position)
       const current = prev[employeeId] || {
         to_branch_id: ws_branch_id,
         to_position_id: ws_position_id,
+        to_workstation_id: currentWorkstationId,
       }
 
       const updated = { ...current, [field]: parsedValue }
@@ -51,20 +55,36 @@ export function useTransitionState() {
         employeeName: employee.fullname,
         field,
         newValue: parsedValue,
-        workstation: { ws_branch_id, ws_position_id },
+        workstation: { ws_branch_id, ws_position_id, currentWorkstationId },
         previousMod: current,
         newMod: updated,
       })
 
-      // If both values are back to the employee's WORKSTATION, remove modification
-      if (
-        updated.to_branch_id === ws_branch_id &&
-        updated.to_position_id === ws_position_id
-      ) {
-        const newMods = { ...prev }
-        delete newMods[employeeId]
-        console.log('✅ Modification removed - back to original workstation')
-        return newMods
+      // Only remove modification if employee is going back to their EXACT original state
+      // For unassigned employees (no current workstation), ANY workstation assignment is a change
+
+      // If employee has a current workstation
+      if (currentWorkstationId) {
+        const isSameBranch = updated.to_branch_id === ws_branch_id
+        const isSamePosition = updated.to_position_id === ws_position_id
+        const isSameWorkstation = updated.to_workstation_id === currentWorkstationId
+
+        if (isSameBranch && isSamePosition && isSameWorkstation) {
+          const newMods = { ...prev }
+          delete newMods[employeeId]
+          console.log('✅ Modification removed - back to original workstation')
+          return newMods
+        }
+      } else {
+        // Employee has NO current workstation
+        // If they clear the selection (back to unassigned), remove modification
+        if (!updated.to_workstation_id) {
+          const newMods = { ...prev }
+          delete newMods[employeeId]
+          console.log('✅ Modification removed - employee still unassigned')
+          return newMods
+        }
+        // Otherwise, keep the modification (they're being assigned for the first time)
       }
 
       return { ...prev, [employeeId]: updated }
@@ -118,6 +138,8 @@ export function useTransitionState() {
     // UI state
     showExchangePanel,
     setShowExchangePanel,
+    showPendingPanel,
+    setShowPendingPanel,
 
     // Filters
     globalFilter,

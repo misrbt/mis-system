@@ -22,6 +22,7 @@ import {
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 import RiskProfilingUsers from './RiskProfilingUsers'
+import AmlaUsers from './AmlaUsers'
 
 function UserManagement() {
   const [activeTab, setActiveTab] = useState('mis')
@@ -161,10 +162,24 @@ function UserManagement() {
           <BarChart2 className="w-4 h-4" />
           Risk Profiling
         </button>
+        <button
+          onClick={() => setActiveTab('amla')}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'amla'
+              ? 'bg-white text-emerald-700 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Shield className="w-4 h-4" />
+          AMLA System
+        </button>
       </div>
 
       {/* Risk Profiling tab */}
       {activeTab === 'rp' && <RiskProfilingUsers />}
+
+      {/* AMLA System tab */}
+      {activeTab === 'amla' && <AmlaUsers />}
 
       {/* MIS System tab — hidden when RP tab is active */}
       {activeTab === 'mis' && <>

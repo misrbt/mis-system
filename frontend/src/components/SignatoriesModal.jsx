@@ -26,8 +26,26 @@ const SignatoriesModal = ({
     onSave(localSignatories)
   }
 
+  const renderSelectedEmployee = (employeeId, colorScheme) => {
+    if (!employeeId) return null
+    const selected = employees.find(e => e.id === parseInt(employeeId))
+    if (!selected) return null
+
+    const colors = {
+      green: { bg: 'bg-green-50', border: 'border-green-200', name: 'text-green-900', pos: 'text-green-700' },
+      blue: { bg: 'bg-blue-50', border: 'border-blue-200', name: 'text-blue-900', pos: 'text-blue-700' },
+      purple: { bg: 'bg-purple-50', border: 'border-purple-200', name: 'text-purple-900', pos: 'text-purple-700' },
+    }[colorScheme] || { bg: 'bg-slate-50', border: 'border-slate-200', name: 'text-slate-900', pos: 'text-slate-700' }
+
+    return (
+      <div className={`${colors.bg} border ${colors.border} rounded-lg p-3`}>
+        <p className={`text-sm font-medium ${colors.name}`}>{selected.fullname}</p>
+        <p className={`text-xs ${colors.pos}`}>{selected.position?.title || 'Position not set'}</p>
+      </div>
+    )
+  }
+
   return (
-    // Overlay changed from backdrop-blur-sm to simple bg-black/50
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
@@ -56,24 +74,28 @@ const SignatoriesModal = ({
           {/* Info Alert */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
-              <strong>Note:</strong> The "Prepared by" field is automatically set to your account. 
-              Select employees for "Checked by" and "Noted by" from the dropdowns below.
+              <strong>Note:</strong> Only MIS department employees are shown below.
+              Select the appropriate personnel for each signatory role.
             </p>
           </div>
 
-          {/* Prepared By - Read Only */}
-          <div className="bg-slate-50 border-2 border-slate-200 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+          {/* Prepared By */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
               <Check className="w-4 h-4 text-green-600" />
-              Prepared By (Auto-filled)
+              Prepared By
             </h3>
-            <div className="bg-white border border-slate-200 rounded-lg p-4">
-              <p className="font-bold text-slate-900 text-lg">{currentUser?.fullname || 'Current User'}</p>
-              <p className="text-sm text-slate-600 mt-1">{currentUser?.position?.title || 'Position not set'}</p>
-              {currentUser?.branch && (
-                <p className="text-xs text-slate-500 mt-1">{currentUser.branch.branch_name}</p>
-              )}
-            </div>
+            <SearchableSelect
+              label=""
+              options={employees}
+              value={localSignatories.prepared_by_id || ''}
+              onChange={(value) => setLocalSignatories(prev => ({ ...prev, prepared_by_id: value }))}
+              displayField="fullname"
+              secondaryField="position_title"
+              placeholder="Select MIS employee..."
+              emptyMessage="No MIS employees found"
+            />
+            {renderSelectedEmployee(localSignatories.prepared_by_id, 'green')}
           </div>
 
           {/* Checked By */}
@@ -86,18 +108,10 @@ const SignatoriesModal = ({
               onChange={(value) => setLocalSignatories(prev => ({ ...prev, checked_by_id: value }))}
               displayField="fullname"
               secondaryField="position_title"
-              placeholder="Select employee to check the report..."
-              emptyMessage="No employees found"
+              placeholder="Select MIS employee..."
+              emptyMessage="No MIS employees found"
             />
-            {localSignatories.checked_by_id && (() => {
-              const selected = employees.find(e => e.id === parseInt(localSignatories.checked_by_id))
-              return selected ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm font-medium text-green-900">{selected.fullname}</p>
-                  <p className="text-xs text-green-700">{selected.position?.title || 'Position not set'}</p>
-                </div>
-              ) : null
-            })()}
+            {renderSelectedEmployee(localSignatories.checked_by_id, 'blue')}
           </div>
 
           {/* Noted By */}
@@ -110,18 +124,10 @@ const SignatoriesModal = ({
               onChange={(value) => setLocalSignatories(prev => ({ ...prev, noted_by_id: value }))}
               displayField="fullname"
               secondaryField="position_title"
-              placeholder="Select employee to note the report..."
-              emptyMessage="No employees found"
+              placeholder="Select MIS employee..."
+              emptyMessage="No MIS employees found"
             />
-            {localSignatories.noted_by_id && (() => {
-              const selected = employees.find(e => e.id === parseInt(localSignatories.noted_by_id))
-              return selected ? (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                  <p className="text-sm font-medium text-purple-900">{selected.fullname}</p>
-                  <p className="text-xs text-purple-700">{selected.position?.title || 'Position not set'}</p>
-                </div>
-              ) : null
-            })()}
+            {renderSelectedEmployee(localSignatories.noted_by_id, 'purple')}
           </div>
         </div>
 

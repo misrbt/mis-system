@@ -1,56 +1,102 @@
-import { Building2, UserCog } from 'lucide-react'
+import { Building2, UserCog, LayoutGrid, GitBranch, Columns, Table2 } from 'lucide-react'
 
 export const TRANSITION_MODES = {
   BRANCH: 'branch',
   EMPLOYEE: 'employee',
 }
 
+export const VIEW_TYPES = {
+  VISUAL_GRID: 'visual_grid',
+  FLOW_BUILDER: 'flow_builder',
+  SPLIT_PANEL: 'split_panel',
+  ENHANCED_TABLE: 'enhanced_table',
+}
+
+export const VIEW_TYPE_CONFIG = {
+  [VIEW_TYPES.VISUAL_GRID]: {
+    id: VIEW_TYPES.VISUAL_GRID,
+    title: 'Visual Grid',
+    description: 'Drag employees between workstations on a visual canvas',
+    icon: LayoutGrid,
+    shortcut: '1',
+  },
+  [VIEW_TYPES.FLOW_BUILDER]: {
+    id: VIEW_TYPES.FLOW_BUILDER,
+    title: 'Flow Builder',
+    description: 'Step-by-step wizard for guided transitions',
+    icon: GitBranch,
+    shortcut: '2',
+  },
+  [VIEW_TYPES.SPLIT_PANEL]: {
+    id: VIEW_TYPES.SPLIT_PANEL,
+    title: 'Split Panel',
+    description: 'Side-by-side before/after comparison view',
+    icon: Columns,
+    shortcut: '3',
+  },
+  [VIEW_TYPES.ENHANCED_TABLE]: {
+    id: VIEW_TYPES.ENHANCED_TABLE,
+    title: 'Table View',
+    description: 'Traditional table with inline editing',
+    icon: Table2,
+    shortcut: '4',
+  },
+}
+
 export const TRANSITION_MODE_CONFIG = {
   [TRANSITION_MODES.BRANCH]: {
     title: 'Branch Transition',
-    description: 'Move employees between branches/positions - assets do not move',
+    description: 'Transfer employees to different branches with workstation assignment',
     color: 'teal',
     icon: Building2,
     features: [
       {
+        label: 'Cross-Branch Transfer',
+        desc: 'Move employees to different branch locations with new workstation assignment',
+      },
+      {
         label: 'Exchange Detection',
-        desc: 'Automatically suggests swaps when positions are occupied',
+        desc: 'Automatically detects swaps when multiple employees exchange workstations',
       },
       {
-        label: 'Circular Rotations',
-        desc: 'Supports 3-way, 4-way, and complex rotation chains',
+        label: 'Smart Workstation Matching',
+        desc: 'System suggests workstations matching employee position in new branch',
       },
       {
-        label: 'Workstation Assets',
-        desc: 'Fixed equipment stays at desk, portable items follow employees',
+        label: 'Occupation Warnings',
+        desc: 'Alerts when workstation is occupied and recommends creating exchanges',
       },
     ],
     infoBannerTitle: 'How Branch Transition Works',
-    infoBannerDescriptionText: 'Change the Destination Branch or Destination Position for any employee. When multiple employees swap positions, they\'ll be automatically detected as exchanges and marked with purple badges. Assets do NOT move - they stay at their original location.',
-    headerSubtitle: 'Modify employees below, exchanges detected automatically',
+    infoBannerDescriptionText: 'Transfer employees to different branches. Select new branch, then choose workstation in that branch. When multiple employees swap positions, they\'ll be automatically detected as exchanges and marked with purple badges. Assets do NOT move - they stay at their original location.',
+    headerSubtitle: 'Transfer employees between branches with workstation assignment',
   },
   [TRANSITION_MODES.EMPLOYEE]: {
     title: 'Employee Transition',
-    description: 'Move employees freely without restrictions - assets do not move',
+    description: 'Reassign workstations within same branch - no branch change allowed',
     color: 'blue',
     icon: UserCog,
     features: [
       {
-        label: 'No Restrictions',
-        desc: 'Move employees freely without exchange validation',
+        label: 'Same Branch Only',
+        desc: 'Employee stays in current branch - reassign to different workstation only',
       },
       {
-        label: 'Quick Reassignments',
-        desc: 'Perfect for promotions, transfers, and role changes',
+        label: 'Workstation Reassignment',
+        desc: 'Move employee to another desk/position within same location',
       },
       {
-        label: 'Workstation Assets',
-        desc: 'Fixed equipment stays at desk, portable items follow employees',
+        label: 'Quick Desk Changes',
+        desc: 'Perfect for internal reorganizations and desk swaps',
+      },
+      {
+        label: 'Occupation Warnings',
+        desc: 'Alerts when workstation is occupied and suggests creating exchanges',
       },
     ],
     infoBannerTitle: 'How Employee Transition Works',
-    infoBannerDescriptionText: 'Change the Destination Branch or Destination Position for any employee. No validation or exchange requirements - perfect for promotions, transfers, or reassignments. Assets do NOT move - they stay at their original location.',
-    headerSubtitle: 'Modify employees freely without restrictions',
+    infoBannerDescriptionText: 'Reassign employees to different workstations within their current branch. Branch selection is locked - only workstation reassignment is allowed. Perfect for internal desk changes and reorganizations. Assets do NOT move - they stay at their original location.',
+    headerSubtitle: 'Reassign workstations within current branch',
   },
 }
 
@@ -64,25 +110,14 @@ export const TABLE_COLUMNS = [
     enableSorting: true,
   },
   {
-    id: 'currentBranch',
-    header: 'Current Branch',
-    accessorFn: row => row.branch?.branch_name ?? '',
+    id: 'currentWorkstation',
+    header: 'Current Workstation',
+    accessorFn: row => row.workstations?.[0]?.position?.title ?? '',
     enableSorting: true,
   },
   {
-    id: 'currentPosition',
-    header: 'Current Position',
-    accessorFn: row => row.position?.title ?? '',
-    enableSorting: true,
-  },
-  {
-    id: 'destBranch',
-    header: 'Destination Branch',
-    enableSorting: false,
-  },
-  {
-    id: 'destPosition',
-    header: 'Destination Position',
+    id: 'destWorkstation',
+    header: 'New Workstation',
     enableSorting: false,
   },
   {

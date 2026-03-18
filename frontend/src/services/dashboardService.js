@@ -15,6 +15,18 @@ const fetchWithFallback = async (primaryUrl, fallbackUrl, config = {}) => {
 
 const dashboardService = {
   /**
+   * Get unified initial dashboard data (all-in-one endpoint)
+   * @param {number} year - Year
+   * @param {number} month - Month
+   */
+  fetchInitialData: async (year, month) => {
+    const response = await apiClient.get('/dashboard/initial', {
+      params: { year, month },
+    })
+    return response.data
+  },
+
+  /**
    * Get monthly expenses for the last 12 months
    */
   fetchMonthlyExpenses: async () => {

@@ -416,8 +416,10 @@ class Asset extends Model
         $qrData .= 'Serial: '.($this->serial_number ?? '-')."\n";
         $qrData .= 'Category: '.($this->category?->name ?? '-')."\n";
         $qrData .= 'Status: '.($this->status?->name ?? '-')."\n";
-        $qrData .= 'Assigned Personnel: '.($this->assignedEmployee?->fullname ?? 'Unassigned')."\n";
-        $qrData .= 'Branch: '.($this->assignedEmployee?->branch?->branch_name ?? '-')."\n";
+        $personnel = $this->workstation?->employee?->fullname ?? $this->assignedEmployee?->fullname ?? 'Unassigned';
+        $branch = $this->workstation?->branch?->branch_name ?? $this->assignedEmployee?->branch?->branch_name ?? '-';
+        $qrData .= 'Assigned To: '.$personnel."\n";
+        $qrData .= 'Branch: '.$branch."\n";
         $qrData .= 'Purchase: '.$purchaseDate."\n";
         $qrData .= 'Warranty: '.$warrantyDate."\n";
         $qrData .= 'Cost: '.$acqCost."\n";

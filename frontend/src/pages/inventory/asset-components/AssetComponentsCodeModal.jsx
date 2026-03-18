@@ -1,12 +1,36 @@
-import React from 'react'
-import { X, QrCode, Barcode } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, QrCode, Barcode, RefreshCw } from 'lucide-react'
+import apiClient from '../../../services/apiClient'
 
 const AssetComponentsCodeModal = ({
   showCodeModal,
   onClose,
   onDownload,
+  onCodeGenerated,
 }) => {
+  const [generating, setGenerating] = useState(false)
+
   if (!showCodeModal) return null
+
+  const codeData = showCodeModal.type === 'qr'
+    ? showCodeModal.component.qr_code
+    : showCodeModal.component.barcode
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+    try {
+      const response = await apiClient.post(
+        `/asset-components/${showCodeModal.component.id}/generate-codes`
+      )
+      if (response.data?.success && onCodeGenerated) {
+        onCodeGenerated(showCodeModal.component.id, response.data.data)
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -28,34 +52,30 @@ const AssetComponentsCodeModal = ({
         <div className="p-6">
           {/* Display the code */}
           <div className="flex justify-center items-center bg-gray-50 rounded-lg p-8 mb-6">
-            {showCodeModal.type === 'qr' ? (
-              showCodeModal.component.qr_code ? (
-                <img
-                  src={showCodeModal.component.qr_code}
-                  alt="QR Code"
-                  className="max-w-full h-auto"
-                  style={{ maxHeight: '400px' }}
-                />
-              ) : (
-                <div className="text-center py-12">
-                  <QrCode className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-500">No QR code available</p>
-                </div>
-              )
+            {codeData ? (
+              <img
+                src={codeData}
+                alt={showCodeModal.type === 'qr' ? 'QR Code' : 'Barcode'}
+                className="max-w-full h-auto"
+                style={{ maxHeight: showCodeModal.type === 'qr' ? '400px' : '200px' }}
+              />
             ) : (
-              showCodeModal.component.barcode ? (
-                <img
-                  src={showCodeModal.component.barcode}
-                  alt="Barcode"
-                  className="max-w-full h-auto"
-                  style={{ maxHeight: '200px' }}
-                />
-              ) : (
-                <div className="text-center py-12">
+              <div className="text-center py-8">
+                {showCodeModal.type === 'qr' ? (
+                  <QrCode className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                ) : (
                   <Barcode className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-500">No barcode available</p>
-                </div>
-              )
+                )}
+                <p className="text-gray-500 mb-4">No {showCodeModal.type === 'qr' ? 'QR code' : 'barcode'} available</p>
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
+                  {generating ? 'Generating...' : 'Generate Codes'}
+                </button>
+              </div>
             )}
           </div>
 
@@ -83,12 +103,23 @@ const AssetComponentsCodeModal = ({
 
           {/* Actions */}
           <div className="flex gap-3">
-            <button
-              onClick={() => onDownload(showCodeModal)}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Download {showCodeModal.type === 'qr' ? 'QR Code' : 'Barcode'}
-            </button>
+            {codeData ? (
+              <button
+                onClick={() => onDownload(showCodeModal)}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Download {showCodeModal.type === 'qr' ? 'QR Code' : 'Barcode'}
+              </button>
+            ) : (
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
+                {generating ? 'Generating...' : 'Generate Codes'}
+              </button>
+            )}
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"

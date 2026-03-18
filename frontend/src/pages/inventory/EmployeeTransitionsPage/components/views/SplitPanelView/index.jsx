@@ -1,0 +1,5 @@
+export { SplitPanelView } from './SplitPanelView'
+export { BeforePanel } from './BeforePanel'
+export { AfterPanel } from './AfterPanel'
+export { DiffIndicator } from './DiffIndicator'
+export { default } from './SplitPanelView'

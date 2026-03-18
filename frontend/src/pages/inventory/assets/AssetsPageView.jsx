@@ -53,6 +53,7 @@ const INITIAL_FILTERS = {
   subcategory_id: '',
   status_id: '',
   vendor_id: '',
+  workstation_id: '',
   purchase_date_from: '',
   purchase_date_to: '',
 }
@@ -108,6 +109,7 @@ const buildFormData = (asset = {}) => ({
   status_id: asset.status_id || '',
   remarks: asset.remarks || '',
   specifications: asset.specifications || {},
+  workstation_id: asset.workstation_id || '',
   assigned_to_employee_id: asset.assigned_to_employee_id || '',
   workstation_branch_id: asset.workstation_branch_id || '',
   workstation_position_id: asset.workstation_position_id || '',
@@ -354,7 +356,7 @@ function AssetsPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data: employees } = useQuery({
+  const { data: employeesRaw } = useQuery({
     queryKey: ['employees'],
     queryFn: async () => {
       const response = await apiClient.get('/employees')
@@ -363,6 +365,7 @@ function AssetsPage() {
     staleTime: 5 * 60 * 1000,
     enabled: hydrated,
   })
+  const employees = Array.isArray(employeesRaw) ? employeesRaw : []
 
   // Fetch equipment list
   const { data: equipmentList } = useQuery({
@@ -379,6 +382,16 @@ function AssetsPage() {
     queryKey: ['positions'],
     queryFn: async () => {
       const response = await apiClient.get('/positions')
+      return normalizeArrayResponse(response.data)
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Fetch workstations
+  const { data: workstationsList } = useQuery({
+    queryKey: ['workstations'],
+    queryFn: async () => {
+      const response = await apiClient.get('/workstations')
       return normalizeArrayResponse(response.data)
     },
     staleTime: 5 * 60 * 1000,
@@ -425,6 +438,25 @@ function AssetsPage() {
         branch: emp.branch?.branch_name,
       })),
     [employees]
+  )
+
+  const workstationOptions = useMemo(
+    () =>
+      (Array.isArray(workstationsList) ? workstationsList : []).map((ws) => {
+        const employeeName = ws.employee?.fullname || 'Unassigned'
+        const positionTitle = ws.position?.title || ''
+        const displayName = positionTitle
+          ? `${employeeName} - ${positionTitle}`
+          : employeeName
+
+        return {
+          id: ws.id,
+          name: displayName,
+          workstation_name: ws.name,
+          branch_name: ws.branch?.branch_name,
+        }
+      }),
+    [workstationsList]
   )
 
   const equipmentOptions = useMemo(
@@ -614,6 +646,18 @@ function AssetsPage() {
   const handleEmployeeChange = useCallback((value) => {
     setFormData((prev) => ({ ...prev, assigned_to_employee_id: value }))
   }, [])
+
+  const handleWorkstationChange = useCallback((value) => {
+    // Find the selected workstation to get branch and position
+    const selectedWorkstation = workstationsList?.find(ws => ws.id === parseInt(value))
+    setFormData((prev) => ({
+      ...prev,
+      workstation_id: value,
+      // Do NOT auto-populate employee - assets stay with workstations, not employees!
+      workstation_branch_id: selectedWorkstation?.branch_id || prev.workstation_branch_id,
+      workstation_position_id: selectedWorkstation?.position_id || prev.workstation_position_id,
+    }))
+  }, [workstationsList])
 
   const generateSerialNumber = useCallback(() => {
     // Get selected category
@@ -876,7 +920,10 @@ function AssetsPage() {
       subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
       vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
       status_id: formData.status_id ? Number(formData.status_id) : null,
+      workstation_id: formData.workstation_id ? Number(formData.workstation_id) : null,
       assigned_to_employee_id: formData.assigned_to_employee_id ? Number(formData.assigned_to_employee_id) : null,
+      workstation_branch_id: formData.workstation_branch_id ? Number(formData.workstation_branch_id) : null,
+      workstation_position_id: formData.workstation_position_id ? Number(formData.workstation_position_id) : null,
       equipment_id: equipmentId,
       components: components.filter(c => c.component_name.trim() !== '')
     }
@@ -896,7 +943,10 @@ function AssetsPage() {
         subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
         vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
         status_id: formData.status_id ? Number(formData.status_id) : null,
+        workstation_id: formData.workstation_id ? Number(formData.workstation_id) : null,
         assigned_to_employee_id: formData.assigned_to_employee_id ? Number(formData.assigned_to_employee_id) : null,
+        workstation_branch_id: formData.workstation_branch_id ? Number(formData.workstation_branch_id) : null,
+        workstation_position_id: formData.workstation_position_id ? Number(formData.workstation_position_id) : null,
         equipment_id: equipmentId,
       },
     })
@@ -996,7 +1046,7 @@ function AssetsPage() {
       {
         id: 'employee',
         header: 'Employee',
-        accessorFn: (row) => row.assigned_employee?.fullname || row.assignedEmployee?.fullname || '',
+        accessorFn: (row) => row.workstation?.employee?.fullname || row.assigned_employee?.fullname || row.assignedEmployee?.fullname || '',
       },
       {
         id: 'category',
@@ -1029,7 +1079,7 @@ function AssetsPage() {
   const globalFilterFn = useCallback((row, _columnId, filterValue) => {
     if (!filterValue) return true
     const search = filterValue.toLowerCase()
-    const employee = row.original.assigned_employee
+    const employee = row.original.workstation?.employee || row.original.assigned_employee
     const employeeName = (employee?.fullname || '').toLowerCase()
     const assetName = (row.original.asset_name || '').toLowerCase()
     const serialNumber = (row.original.serial_number || '').toLowerCase()
@@ -1098,15 +1148,17 @@ function AssetsPage() {
     const getDimensionKey = (asset, dimension) => {
       switch (dimension) {
         case 'category':
-          return asset.category?.category_name || 'Uncategorized'
+          return asset.category?.category_name || asset.category?.name || 'Uncategorized'
         case 'status':
           return asset.status?.name || 'Unknown'
         case 'branch':
-          return asset.assigned_employee?.branch?.branch_name || 'Unassigned'
+          return asset.workstation?.branch?.branch_name || asset.assigned_employee?.branch?.branch_name || 'Unassigned'
         case 'vendor':
           return asset.vendor?.company_name || 'No Vendor'
+        case 'workstation':
+          return asset.workstation?.name || 'No Workstation'
         case 'employee':
-          return asset.assigned_employee?.fullname || 'Unassigned'
+          return asset.workstation?.employee?.fullname || asset.assigned_employee?.fullname || 'Unassigned'
         default:
           return 'Unknown'
       }
@@ -1297,6 +1349,7 @@ function AssetsPage() {
         filterSubcategories={filterSubcategories}
         statusOptions={statusOptions}
         vendors={vendors}
+        workstations={workstationsList}
         onClearFilters={clearFilters}
       />
 
@@ -1521,8 +1574,10 @@ function AssetsPage() {
             <div className="grid grid-cols-1 gap-3">
               {mobileTable.getRowModel().rows.map((row) => {
                 const asset = row.original
-                const assignedEmployeeId =
-                  asset.assigned_to_employee_id ?? asset.assigned_employee?.id
+                // Get employee ID from workstation or direct assignment
+                const workstationEmployeeId = asset.workstation?.employee?.id
+                const directEmployeeId = asset.assigned_to_employee_id || asset.assigned_employee?.id
+                const assignedEmployeeId = workstationEmployeeId || directEmployeeId
                 const hasEmployee = Boolean(assignedEmployeeId)
                 const statusId = asset.status_id ?? asset.status?.id
                 const statusColor = statusColorMap[statusId] || '#e2e8f0'
@@ -1756,6 +1811,7 @@ function AssetsPage() {
             statuses={statuses}
             vendors={vendors}
             employees={employees}
+            workstations={workstationsList}
           />
         </Suspense>
       )}
@@ -1773,6 +1829,7 @@ function AssetsPage() {
           onInputChange={handleInputChange}
           onVendorChange={handleVendorChange}
           onEmployeeChange={handleEmployeeChange}
+          onWorkstationChange={handleWorkstationChange}
           onGenerateSerial={generateSerialNumber}
           onGenerateComponentSerial={generateComponentSerialNumber}
           onAddVendor={openVendorModal}
@@ -1780,6 +1837,7 @@ function AssetsPage() {
           subcategories={subcategories || []}
           vendorOptions={vendorOptions}
           employeeOptions={employeeOptions}
+          workstationOptions={workstationOptions}
           statusOptions={statusOptions}
           branchOptions={branchOptions}
           positionOptions={positionOptions}
@@ -1810,12 +1868,14 @@ function AssetsPage() {
           onInputChange={handleInputChange}
           onVendorChange={handleVendorChange}
           onEmployeeChange={handleEmployeeChange}
+          onWorkstationChange={handleWorkstationChange}
           onAddVendor={openVendorModal}
           onGenerateSerial={generateSerialNumber}
           categories={categories}
           subcategories={subcategories || []}
           vendorOptions={vendorOptions}
           employeeOptions={employeeOptions}
+          workstationOptions={workstationOptions}
           statusOptions={statusOptions}
           branchOptions={branchOptions}
           positionOptions={positionOptions}

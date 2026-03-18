@@ -224,11 +224,11 @@ function ReplenishmentPage() {
     gcTime: 10 * 60 * 1000,
   })
 
-  // Employees and equipment only needed inside the form modal
-  const { data: employees } = useQuery({
-    queryKey: ['employees'],
+  // Workstations — needed for assign modal and forms
+  const { data: workstations } = useQuery({
+    queryKey: ['workstations'],
     queryFn: async () => {
-      const response = await apiClient.get('/employees')
+      const response = await apiClient.get('/workstations')
       return normalizeArrayResponse(response.data)
     },
     enabled: hydrated && (modalOpen || isAssignModalOpen),
@@ -277,15 +277,18 @@ function ReplenishmentPage() {
     [vendors]
   )
 
-  const employeeOptions = useMemo(
+  const workstationOptions = useMemo(
     () =>
-      normalizeArrayResponse(employees).map((emp) => ({
-        id: emp.id,
-        name: emp.fullname,
-        position: emp.position?.title,
-        branch: emp.branch?.branch_name,
+      normalizeArrayResponse(workstations).map((ws) => ({
+        id: ws.id,
+        name: ws.employee?.fullname
+          ? `${ws.employee.fullname}`
+          : ws.name,
+        branch: ws.branch?.branch_name,
+        employee: ws.employee?.fullname,
+        workstation_name: ws.name,
       })),
-    [employees]
+    [workstations]
   )
 
   const branchOptions = useMemo(
@@ -351,12 +354,14 @@ function ReplenishmentPage() {
     },
   })
 
-  const assignEmployeeMutation = useMutation({
-    mutationFn: ({ id, employeeId }) =>
-      apiClient.post(`/replenishments/${id}/assign-employee`, { employee_id: employeeId }),
+  const assignWorkstationMutation = useMutation({
+    mutationFn: ({ id, workstationId }) =>
+      apiClient.post(`/replenishments/${id}/assign-workstation`, { workstation_id: workstationId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['replenishments'] })
-      notifySuccess('Success', 'Asset assigned to employee successfully')
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      queryClient.invalidateQueries({ queryKey: ['workstations'] })
+      notifySuccess('Success', 'Asset deployed to workstation successfully')
       setIsAssignModalOpen(false)
     },
     onError: (error) => {
@@ -602,9 +607,9 @@ function ReplenishmentPage() {
     }
   }, [deleteMutation])
 
-  const handleAssignEmployee = useCallback((id, employeeId) => {
-    assignEmployeeMutation.mutate({ id, employeeId })
-  }, [assignEmployeeMutation])
+  const handleAssignWorkstation = useCallback((id, workstationId) => {
+    assignWorkstationMutation.mutate({ id, workstationId })
+  }, [assignWorkstationMutation])
 
   const handleRemoveAssignment = useCallback((id) => {
     removeAssignmentMutation.mutate(id)
@@ -868,11 +873,11 @@ function ReplenishmentPage() {
           isOpen={true}
           onClose={() => setIsAssignModalOpen(false)}
           replenishment={selectedReplenishment}
-          employeeOptions={employeeOptions}
-          onAssignEmployee={handleAssignEmployee}
+          workstationOptions={workstationOptions}
+          onAssignWorkstation={handleAssignWorkstation}
           onRemoveAssignment={handleRemoveAssignment}
           isAssigning={
-            assignEmployeeMutation.isPending ||
+            assignWorkstationMutation.isPending ||
             removeAssignmentMutation.isPending
           }
         />

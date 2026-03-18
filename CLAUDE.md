@@ -42,6 +42,7 @@ This installs dependencies, copies `.env`, generates app key, runs migrations, a
 
 ## Architecture
 
+
 ### Backend (`backend/`)
 
 **Framework:** Laravel 12, PHP 8.2+, PostgreSQL

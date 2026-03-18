@@ -651,6 +651,22 @@ function AssetComponentsPage() {
             handleDownloadBarcode(payload.component)
           }
         }}
+        onCodeGenerated={(componentId, codeData) => {
+          // Update the modal with the newly generated code
+          setShowCodeModal((prev) => {
+            if (!prev || prev.component.id !== componentId) return prev
+            return {
+              ...prev,
+              component: {
+                ...prev.component,
+                qr_code: codeData.qr_code ?? prev.component.qr_code,
+                barcode: codeData.barcode ?? prev.component.barcode,
+              },
+            }
+          })
+          // Refresh the components list
+          queryClient.invalidateQueries({ queryKey: ['asset-components', id] })
+        }}
       />
     </div>
   )

@@ -182,12 +182,15 @@ class RepairController extends Controller
         try {
             $repair = Repair::findOrFail($id);
 
-            // Delete associated remarks first to prevent foreign key constraint violations
+            // Nullify repair_id on movements first to avoid FK constraint
+            // when the observer creates a deletion audit movement
+            \App\Models\AssetMovement::where('repair_id', $repair->id)
+                ->update(['repair_id' => null]);
+
+            // Delete associated remarks (cascade handles this, but be explicit)
             $repair->remarks()->delete();
 
-            // Delete associated asset movements
-            \App\Models\AssetMovement::where('repair_id', $repair->id)->delete();
-
+            // Delete the repair — observer will log a deletion movement
             $repair->delete();
 
             return response()->json([
@@ -195,11 +198,7 @@ class RepairController extends Controller
                 'message' => 'Repair record deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete repair record',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete repair record');
         }
     }
 

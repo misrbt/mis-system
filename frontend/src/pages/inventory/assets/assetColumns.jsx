@@ -43,9 +43,9 @@ export const getAssetColumns = ({
     accessorKey: 'assigned_employee',
     header: 'Employee Info',
     cell: ({ row }) => {
-      const employee = row.original.assigned_employee
+      const employee = row.original.workstation?.employee || row.original.assigned_employee
       const isEditing = editingCell === `${row.id}-assigned_employee`
-      const currentEmployeeId = row.original.assigned_to_employee_id || employee?.id || ''
+      const currentEmployeeId = employee?.id || row.original.workstation?.employee_id || row.original.assigned_to_employee_id || ''
 
       if (isEditing) {
         return (
@@ -289,8 +289,9 @@ export const getAssetColumns = ({
     cell: ({ row, getValue }) => {
       const isEditing = editingCell === `${row.id}-acq_cost`
       const value = getValue()
+      const employee = row.original.workstation?.employee || row.original.assigned_employee
       const employeeKey =
-        row.original.assigned_to_employee_id ?? row.original.assigned_employee?.id ?? 'unassigned'
+        employee?.id ?? row.original.workstation?.employee_id ?? row.original.assigned_to_employee_id ?? 'unassigned'
       const totalValue = employeeAcqTotals[employeeKey]
 
       if (isEditing) {
@@ -453,7 +454,8 @@ export const getAssetColumns = ({
     id: 'actions',
     header: 'Actions',
     cell: ({ row }) => {
-      const assignedEmployeeId = row.original.assigned_to_employee_id
+      const employee = row.original.workstation?.employee || row.original.assigned_employee
+      const assignedEmployeeId = employee?.id || row.original.workstation?.employee_id || row.original.assigned_to_employee_id
       const hasEmployee = Boolean(assignedEmployeeId)
 
       return (

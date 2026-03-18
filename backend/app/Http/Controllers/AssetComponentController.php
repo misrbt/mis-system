@@ -339,6 +339,66 @@ class AssetComponentController extends Controller
     }
 
     /**
+     * Regenerate barcode for component
+     */
+    public function generateBarcode($id)
+    {
+        try {
+            $component = AssetComponent::findOrFail($id);
+            $barcode = $component->generateAndSaveBarcode();
+
+            if (! $barcode) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to generate barcode. Ensure the component has a serial number.',
+                ], 400);
+            }
+
+            InventoryAuditLogService::logCodeGeneration(
+                $component->parent_asset_id,
+                'component_barcode',
+                $component->component_name
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Barcode generated successfully',
+                'data' => [
+                    'id' => $component->id,
+                    'barcode' => $barcode,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to generate barcode');
+        }
+    }
+
+    /**
+     * Generate both QR code and barcode for a component
+     */
+    public function generateCodes($id)
+    {
+        try {
+            $component = AssetComponent::findOrFail($id);
+
+            $qrCode = $component->generateAndSaveQRCode();
+            $barcode = $component->generateAndSaveBarcode();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Codes generated successfully',
+                'data' => [
+                    'id' => $component->id,
+                    'qr_code' => $qrCode,
+                    'barcode' => $barcode,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to generate codes');
+        }
+    }
+
+    /**
      * Get all components across all assets
      */
     public function all(Request $request)

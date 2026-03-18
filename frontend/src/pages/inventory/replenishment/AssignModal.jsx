@@ -1,29 +1,29 @@
 import { useState, useMemo } from 'react'
 import Modal from '../../../components/Modal'
 import SearchableSelect from '../../../components/SearchableSelect'
-import { UserPlus, X, Building2 } from 'lucide-react'
+import { Monitor, X, Building2 } from 'lucide-react'
 
 const AssignModal = ({
   isOpen,
   onClose,
   replenishment,
-  employeeOptions,
-  onAssignEmployee,
+  workstationOptions,
+  onAssignWorkstation,
   onRemoveAssignment,
   isAssigning,
 }) => {
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
+  const [selectedWorkstationId, setSelectedWorkstationId] = useState('')
 
-  // Get selected employee details to show branch info
-  const selectedEmployee = useMemo(() => {
-    if (!selectedEmployeeId) return null
-    return employeeOptions?.find((emp) => emp.id === parseInt(selectedEmployeeId))
-  }, [selectedEmployeeId, employeeOptions])
+  // Get selected workstation details to show branch info
+  const selectedWorkstation = useMemo(() => {
+    if (!selectedWorkstationId) return null
+    return workstationOptions?.find((ws) => ws.id === parseInt(selectedWorkstationId))
+  }, [selectedWorkstationId, workstationOptions])
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (selectedEmployeeId) {
-      onAssignEmployee(replenishment.id, selectedEmployeeId)
+    if (selectedWorkstationId) {
+      onAssignWorkstation(replenishment.id, selectedWorkstationId)
     }
   }
 
@@ -31,10 +31,10 @@ const AssignModal = ({
     onRemoveAssignment(replenishment.id)
   }
 
-  const hasAssignment = replenishment?.assigned_employee
+  const hasAssignment = replenishment?.assigned_workstation
 
   const resetForm = () => {
-    setSelectedEmployeeId('')
+    setSelectedWorkstationId('')
   }
 
   return (
@@ -44,7 +44,7 @@ const AssignModal = ({
         resetForm()
         onClose()
       }}
-      title="Assign Reserve Asset"
+      title="Deploy Reserve Asset to Workstation"
       size="lg"
       footer={
         <div className="flex justify-end gap-3 w-full">
@@ -60,12 +60,12 @@ const AssignModal = ({
           </button>
           <button
             type="submit"
-            form="assign-employee-form"
-            disabled={isAssigning || !selectedEmployeeId}
+            form="assign-workstation-form"
+            disabled={isAssigning || !selectedWorkstationId}
             className="p-2.5 text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title={isAssigning ? 'Assigning...' : 'Assign to Employee'}
+            title={isAssigning ? 'Deploying...' : 'Deploy to Workstation'}
           >
-            <UserPlus className="w-5 h-5" />
+            <Monitor className="w-5 h-5" />
           </button>
         </div>
       }
@@ -78,13 +78,18 @@ const AssignModal = ({
               <div>
                 <h4 className="text-sm font-semibold text-amber-800 mb-1">Currently Assigned</h4>
                 <div className="flex items-center gap-2 text-sm text-amber-700">
-                  <UserPlus className="w-4 h-4" />
-                  <span>{replenishment.assigned_employee.fullname}</span>
+                  <Monitor className="w-4 h-4" />
+                  <span>{replenishment.assigned_workstation.name}</span>
                 </div>
-                {replenishment.assigned_employee.branch && (
+                {replenishment.assigned_workstation.employee && (
+                  <div className="flex items-center gap-2 text-sm text-amber-600 mt-1 ml-6">
+                    <span>{replenishment.assigned_workstation.employee.fullname}</span>
+                  </div>
+                )}
+                {replenishment.assigned_workstation.branch && (
                   <div className="flex items-center gap-2 text-sm text-amber-600 mt-1">
                     <Building2 className="w-4 h-4" />
-                    <span>{replenishment.assigned_employee.branch.branch_name}</span>
+                    <span>{replenishment.assigned_workstation.branch.branch_name}</span>
                   </div>
                 )}
               </div>
@@ -102,33 +107,38 @@ const AssignModal = ({
         )}
 
         {/* Assignment Form */}
-        <form id="assign-employee-form" onSubmit={handleSubmit} className="space-y-4">
-          {/* Employee Selection */}
+        <form id="assign-workstation-form" onSubmit={handleSubmit} className="space-y-4">
+          {/* Workstation Selection */}
           <div>
             <SearchableSelect
-              label="Select Employee"
-              options={employeeOptions}
-              value={selectedEmployeeId}
-              onChange={setSelectedEmployeeId}
+              label="Select Workstation"
+              options={workstationOptions}
+              value={selectedWorkstationId}
+              onChange={setSelectedWorkstationId}
               displayField="name"
-              secondaryField="position"
+              secondaryField="workstation_name"
               tertiaryField="branch"
-              placeholder="Search for an employee..."
-              emptyMessage="No employees found"
+              placeholder="Search for a workstation..."
+              emptyMessage="No workstations found"
               required
             />
           </div>
 
-          {/* Show selected employee's branch */}
-          {selectedEmployee && selectedEmployee.branch && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          {/* Show selected workstation details */}
+          {selectedWorkstation && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5">
               <div className="flex items-center gap-2 text-sm text-blue-700">
-                <Building2 className="w-4 h-4" />
-                <span className="font-medium">Branch:</span>
-                <span>{selectedEmployee.branch}</span>
+                <Monitor className="w-4 h-4 shrink-0" />
+                <span className="font-medium">{selectedWorkstation.workstation_name}</span>
               </div>
-              <p className="text-xs text-blue-600 mt-1">
-                The asset will be assigned to this employee and their branch.
+              {selectedWorkstation.branch && (
+                <div className="flex items-center gap-2 text-sm text-blue-600 ml-6">
+                  <Building2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>{selectedWorkstation.branch}</span>
+                </div>
+              )}
+              <p className="text-xs text-blue-500 mt-2 ml-6">
+                This reserve asset will be deployed as an active asset at this workstation.
               </p>
             </div>
           )}

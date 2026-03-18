@@ -37,4 +37,22 @@ class Employee extends Model
     {
         return $this->hasMany(Asset::class, 'assigned_to_employee_id');
     }
+
+    /**
+     * Get the workstations assigned to this employee.
+     */
+    public function workstations()
+    {
+        return $this->hasMany(Workstation::class);
+    }
+
+    /**
+     * Get all assets from all assigned workstations.
+     */
+    public function workstationAssets()
+    {
+        $workstationIds = $this->workstations()->pluck('id');
+
+        return Asset::whereIn('workstation_id', $workstationIds);
+    }
 }

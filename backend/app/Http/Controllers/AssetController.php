@@ -10,6 +10,7 @@ use App\Services\InventoryAuditLogService;
 use App\Traits\ValidatesSort;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -32,7 +33,11 @@ class AssetController extends Controller
                 'status:id,name',
                 'vendor:id,company_name',
                 'equipment:id,brand,model',
-                'workstation:id,name,branch_id',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname,branch_id,position_id,department_id',
+                'workstation.employee.branch:id,branch_name',
+                'workstation.employee.position:id,title',
+                'workstation.employee.department:id,name',
                 'assignedEmployee:id,fullname,branch_id',
                 'assignedEmployee.branch:id,branch_name',
             ]);
@@ -66,14 +71,16 @@ class AssetController extends Controller
             // Check for 'all' parameter to return non-paginated data (must come before pagination)
             if ($request->boolean('all', false)) {
                 $assets = $query->get();
-                // We still need to deduplicate by assigned employee if required
-                $hasEmployeeFilter = $request->has('assigned_to_employee_id') && $request->assigned_to_employee_id;
-                if (! $hasEmployeeFilter && ! $request->boolean('all', false)) {
+                // Show QR/barcode when viewing a specific employee's or workstation's assets
+                $hasDetailFilter = ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id)
+                    || ($request->has('employee_id') && $request->employee_id)
+                    || ($request->has('workstation_id') && $request->workstation_id);
+                if (! $hasDetailFilter && ! $request->boolean('all', false)) {
                     $assets = $assets->unique(fn ($asset) => (int) ($asset->assigned_to_employee_id ?: 0))->values();
                 }
 
-                $assets->each(function ($asset) use ($hasEmployeeFilter) {
-                    if (! $hasEmployeeFilter) {
+                $assets->each(function ($asset) use ($hasDetailFilter) {
+                    if (! $hasDetailFilter) {
                         $asset->makeHidden(['qr_code', 'barcode']);
                     }
                     $asset->setAppends([]);
@@ -90,12 +97,14 @@ class AssetController extends Controller
             $paginated = $query->paginate($perPage);
 
             // Return a single row per employee for the main list; when filtering by a specific
-            // employee, return all of their assets. If ?all=1 is provided, return everything.
-            $hasEmployeeFilter = $request->has('assigned_to_employee_id') && $request->assigned_to_employee_id;
+            // employee or workstation, return all of their assets. If ?all=1 is provided, return everything.
+            $hasDetailFilter = ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id)
+                || ($request->has('employee_id') && $request->employee_id)
+                || ($request->has('workstation_id') && $request->workstation_id);
             $returnAll = $request->boolean('all', false);
 
             $assets = $paginated->getCollection();
-            if (! $hasEmployeeFilter && ! $returnAll) {
+            if (! $hasDetailFilter && ! $returnAll) {
                 $assets = $assets
                     ->unique(fn ($asset) => (int) ($asset->assigned_to_employee_id ?: 0))
                     ->values();
@@ -104,11 +113,11 @@ class AssetController extends Controller
             }
 
             // Strip heavy fields not needed in the list view:
-            // - qr_code / barcode: large base64 image strings (except when viewing a specific employee's assets in card view)
+            // - qr_code / barcode: large base64 image strings (shown when viewing a specific employee's or workstation's assets)
             // - calculated_book_value / depreciation_info: expensive computed appends
             //   (book_value accessor is still included; appends are redundant here)
-            $paginated->getCollection()->each(function ($asset) use ($hasEmployeeFilter) {
-                if (! $hasEmployeeFilter) {
+            $paginated->getCollection()->each(function ($asset) use ($hasDetailFilter) {
+                if (! $hasDetailFilter) {
                     $asset->makeHidden(['qr_code', 'barcode']);
                 }
                 $asset->setAppends([]);
@@ -133,21 +142,23 @@ class AssetController extends Controller
 
     /**
      * Return acquisition cost totals grouped by employee for filtered assets.
+     * Considers both direct employee assignment and workstation-based assignment.
      */
     public function totals(Request $request)
     {
         try {
-            $query = Asset::query();
+            $query = Asset::query()
+                ->leftJoin('workstations', 'assets.workstation_id', '=', 'workstations.id');
 
             // Apply all filters using centralized method
             $this->applyAssetFilters($query, $request);
 
             $totals = $query
-                ->selectRaw('assigned_to_employee_id, COALESCE(SUM(acq_cost), 0) as total_acq_cost')
-                ->groupBy('assigned_to_employee_id')
+                ->selectRaw('COALESCE(workstations.employee_id, assets.assigned_to_employee_id) as employee_id, COALESCE(SUM(assets.acq_cost), 0) as total_acq_cost')
+                ->groupBy(DB::raw('COALESCE(workstations.employee_id, assets.assigned_to_employee_id)'))
                 ->get()
                 ->map(fn ($row) => [
-                    'employee_id' => $row->assigned_to_employee_id,
+                    'employee_id' => $row->employee_id,
                     'total_acq_cost' => (float) $row->total_acq_cost,
                 ]);
 
@@ -312,6 +323,17 @@ class AssetController extends Controller
             $asset->book_value = $bookValueCalc['book_value'];
             $asset->save();
 
+            // Load relationships needed for QR code data before generating
+            $asset->load([
+                'category:id,name',
+                'status:id,name',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname',
+                'workstation.branch:id,branch_name',
+                'assignedEmployee:id,fullname,branch_id',
+                'assignedEmployee.branch:id,branch_name',
+            ]);
+
             // Generate QR code for the asset (non-blocking - won't fail asset creation)
             $qrCodeResult = null;
             $qrCodeWarning = null;
@@ -377,6 +399,11 @@ class AssetController extends Controller
                 'subcategory:id,name',
                 'status:id,name',
                 'equipment:id,brand,model',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname,branch_id,position_id,department_id',
+                'workstation.employee.branch:id,branch_name',
+                'workstation.employee.position:id,title',
+                'workstation.employee.department:id,name',
                 'assignedEmployee:id,fullname,branch_id',
                 'assignedEmployee.branch:id,branch_name',
             ]);
@@ -422,6 +449,9 @@ class AssetController extends Controller
                 'equipment',
                 'workstation.branch',
                 'workstation.position',
+                'workstation.employee.branch',
+                'workstation.employee.position',
+                'workstation.employee.department',
                 'workstationBranch',
                 'workstationPosition',
             ])->findOrFail($id);
@@ -578,6 +608,8 @@ class AssetController extends Controller
                 'subcategory:id,name',
                 'status:id,name',
                 'equipment:id,brand,model',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname',
                 'assignedEmployee:id,fullname,branch_id',
                 'assignedEmployee.branch:id,branch_name',
             ]);
@@ -798,6 +830,8 @@ class AssetController extends Controller
                 'subcategory:id,name',
                 'status:id,name',
                 'equipment:id,brand,model',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname',
                 'assignedEmployee:id,fullname,branch_id',
                 'assignedEmployee.branch:id,branch_name',
             ]);
@@ -851,6 +885,8 @@ class AssetController extends Controller
                 'subcategory:id,name',
                 'status:id,name',
                 'equipment:id,brand,model',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname',
                 'assignedEmployee:id,fullname,branch_id',
                 'assignedEmployee.branch:id,branch_name',
             ]);
@@ -973,13 +1009,18 @@ class AssetController extends Controller
     public function track(Request $request)
     {
         try {
-            // Optimized eager loading for tracking - essential relationships only
+            // Optimized eager loading for tracking - include workstation relationships
             $query = Asset::with([
                 'category:id,name,code',
                 'subcategory:id,name',
-                'vendor:id,name',
+                'vendor:id,company_name',
                 'status:id,name',
                 'equipment:id,brand,model',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname,branch_id,position_id,department_id',
+                'workstation.employee.branch:id,branch_name',
+                'workstation.employee.position:id,title',
+                'workstation.employee.department:id,name',
                 'assignedEmployee:id,fullname,branch_id,position_id',
                 'assignedEmployee.branch:id,branch_name',
                 'assignedEmployee.position:id,position_name',
@@ -1099,10 +1140,15 @@ class AssetController extends Controller
      */
     private function applyAssetFilters($query, Request $request): void
     {
-        // Branch filter
+        // Branch filter (check both direct employee assignment and workstation-based assignment)
         if ($request->has('branch_id') && $request->branch_id) {
-            $query->whereHas('assignedEmployee', function ($q) use ($request) {
-                $q->where('branch_id', $request->branch_id);
+            $branchId = $request->branch_id;
+            $query->where(function ($q) use ($branchId) {
+                $q->whereHas('assignedEmployee', function ($emp) use ($branchId) {
+                    $emp->where('branch_id', $branchId);
+                })->orWhereHas('workstation', function ($ws) use ($branchId) {
+                    $ws->where('branch_id', $branchId);
+                });
             });
         }
 
@@ -1129,21 +1175,44 @@ class AssetController extends Controller
             $query->where('vendor_id', $request->vendor_id);
         }
 
-        // Employee assignment
+        // Employee assignment (both direct and workstation-based)
         if ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id) {
-            $query->where('assigned_to_employee_id', $request->assigned_to_employee_id);
+            $employeeId = $request->assigned_to_employee_id;
+            $query->where(function ($q) use ($employeeId) {
+                $q->where('assigned_to_employee_id', $employeeId)
+                    ->orWhereHas('workstation', function ($ws) use ($employeeId) {
+                        $ws->where('employee_id', $employeeId);
+                    });
+            });
         }
 
         if ($request->has('employee_id') && $request->employee_id) {
-            $query->where('assigned_to_employee_id', $request->employee_id);
+            $employeeId = $request->employee_id;
+            $query->where(function ($q) use ($employeeId) {
+                $q->where('assigned_to_employee_id', $employeeId)
+                    ->orWhereHas('workstation', function ($ws) use ($employeeId) {
+                        $ws->where('employee_id', $employeeId);
+                    });
+            });
         }
 
-        // Assignment status
+        // Assignment status (check both direct employee and workstation-based assignment)
         if ($request->has('assignment_status') && $request->assignment_status) {
             if ($request->assignment_status === 'assigned') {
-                $query->whereNotNull('assigned_to_employee_id');
+                $query->where(function ($q) {
+                    $q->whereNotNull('assigned_to_employee_id')
+                        ->orWhereHas('workstation', function ($ws) {
+                            $ws->whereNotNull('employee_id');
+                        });
+                });
             } elseif ($request->assignment_status === 'unassigned') {
-                $query->whereNull('assigned_to_employee_id');
+                $query->whereNull('assigned_to_employee_id')
+                    ->where(function ($q) {
+                        $q->whereNull('workstation_id')
+                            ->orWhereHas('workstation', function ($ws) {
+                                $ws->whereNull('employee_id');
+                            });
+                    });
             }
         }
 

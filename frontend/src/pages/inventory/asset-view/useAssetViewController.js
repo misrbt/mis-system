@@ -8,8 +8,9 @@ import { useAssetQueryInvalidation } from "../../../hooks/useAssetQueryInvalidat
 import { buildSerialNumber } from "../../../utils/assetSerial";
 import { fetchEmployeeAssetHistory } from "../../../services/employeeAssetHistoryService";
 
-export default function useAssetViewController({ id, employeeId }) {
+export default function useAssetViewController({ id, employeeId, workstationId }) {
   const isAssetView = !!id;
+  const isWorkstationView = !!workstationId;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -48,6 +49,7 @@ export default function useAssetViewController({ id, employeeId }) {
     remarks: "",
     specifications: {},
     assigned_to_employee_id: "",
+    workstation_id: "",
     workstation_branch_id: "",
     workstation_position_id: "",
   });
@@ -91,8 +93,20 @@ export default function useAssetViewController({ id, employeeId }) {
 
   const asset = assetData?.data;
 
-  // Fetch employee details (when viewing employee's assets or from asset's assignment)
-  const actualEmployeeId = employeeId || asset?.assigned_to_employee_id;
+  // Fetch workstation details (when viewing workstation's assets)
+  const { data: workstationData, isLoading: isLoadingWorkstation } = useQuery({
+    queryKey: ["workstation", workstationId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/workstations/${workstationId}`);
+      return response.data;
+    },
+    enabled: isWorkstationView,
+  });
+
+  const workstation = workstationData?.data;
+
+  // Fetch employee details (when viewing employee's assets, from asset's assignment, or from workstation's employee)
+  const actualEmployeeId = employeeId || asset?.assigned_to_employee_id || workstation?.employee_id;
   const { data: employeeData, isLoading: isLoadingEmployee } = useQuery({
     queryKey: ["employee", actualEmployeeId],
     queryFn: async () => {
@@ -117,16 +131,26 @@ export default function useAssetViewController({ id, employeeId }) {
 
   const repairModalAsset = repairModalAssetData?.data;
 
-  // Fetch all assets assigned to this employee
+  // Fetch all assets assigned to this employee OR workstation
   const { data: employeeAssetsData, isLoading: isLoadingAssets } = useQuery({
-    queryKey: ["employeeAssets", actualEmployeeId],
+    queryKey: isWorkstationView
+      ? ["workstationAssets", workstationId]
+      : ["employeeAssets", actualEmployeeId],
     queryFn: async () => {
+      if (isWorkstationView) {
+        const response = await apiClient.get("/assets", {
+          params: { workstation_id: workstationId, all: true },
+        });
+        return response.data;
+      }
+      // For employee view: fetch assets via employee_id filter
+      // This checks both direct assignment AND workstation-based assignment on the backend
       const response = await apiClient.get("/assets", {
-        params: { assigned_to_employee_id: actualEmployeeId },
+        params: { employee_id: actualEmployeeId, all: true },
       });
       return response.data;
     },
-    enabled: !!actualEmployeeId,
+    enabled: !!actualEmployeeId || isWorkstationView,
   });
 
   const employeeAssets = useMemo(
@@ -428,6 +452,12 @@ export default function useAssetViewController({ id, employeeId }) {
       console.log("Asset created successfully:", data);
       await invalidateAssetRelatedQueries(id, employeeId, actualEmployeeId);
 
+      // Also invalidate workstation queries if in workstation view
+      if (isWorkstationView && workstationId) {
+        queryClient.invalidateQueries({ queryKey: ["workstation", workstationId] });
+        queryClient.invalidateQueries({ queryKey: ["workstationAssets", workstationId] });
+      }
+
       await Swal.fire({
         icon: "success",
         title: "Success",
@@ -453,6 +483,7 @@ export default function useAssetViewController({ id, employeeId }) {
         remarks: "",
         specifications: {},
         assigned_to_employee_id: "",
+        workstation_id: "",
         workstation_branch_id: "",
         workstation_position_id: "",
       });
@@ -1022,6 +1053,7 @@ export default function useAssetViewController({ id, employeeId }) {
       ...addFormData,
       serial_number: serialNumber,
       assigned_to_employee_id: actualEmployeeId || null,
+      workstation_id: isWorkstationView ? Number(workstationId) : (addFormData.workstation_id ? Number(addFormData.workstation_id) : null),
       asset_category_id: addFormData.asset_category_id
         ? Number(addFormData.asset_category_id)
         : null,
@@ -1040,11 +1072,20 @@ export default function useAssetViewController({ id, employeeId }) {
   };
 
   const openAddModal = () => {
-    if (!actualEmployeeId) {
+    if (!actualEmployeeId && !isWorkstationView) {
       Swal.fire({
         icon: "warning",
         title: "No Employee Selected",
         text: "Cannot add asset without an employee assignment",
+      });
+      return;
+    }
+
+    if (isWorkstationView && !actualEmployeeId) {
+      Swal.fire({
+        icon: "warning",
+        title: "No Employee Assigned",
+        text: "This workstation has no assigned employee. Please assign an employee first.",
       });
       return;
     }
@@ -1054,8 +1095,9 @@ export default function useAssetViewController({ id, employeeId }) {
     setAddFormData(prev => ({
       ...prev,
       assigned_to_employee_id: actualEmployeeId,
-      workstation_branch_id: employee?.branch_id || prev.workstation_branch_id || "",
-      workstation_position_id: employee?.position_id || prev.workstation_position_id || "",
+      workstation_id: isWorkstationView ? workstationId : prev.workstation_id || "",
+      workstation_branch_id: employee?.branch_id || workstation?.branch_id || prev.workstation_branch_id || "",
+      workstation_position_id: employee?.position_id || workstation?.position_id || prev.workstation_position_id || "",
     }));
     setShowAddModal(true);
   };
@@ -1223,8 +1265,13 @@ export default function useAssetViewController({ id, employeeId }) {
   const navigateToAssets = () => navigate(assetsReturnPath());
   const navigateToWorkstations = () => navigate("/inventory/workstations");
   const navigateToAsset = (assetId) => navigate(`/inventory/assets/${assetId}`);
-  const navigateToEmployeeAssets = (empId) =>
-    navigate(`/inventory/employees/${empId}/assets`);
+  const navigateToEmployeeAssets = (empId, wsId) => {
+    if (wsId) {
+      navigate(`/inventory/workstations/${wsId}/assets`);
+    } else if (empId) {
+      navigate(`/inventory/employees/${empId}/assets`);
+    }
+  };
   const navigateToAssetComponents = (assetId) =>
     navigate(`/inventory/assets/${assetId}/components`);
 
@@ -1245,8 +1292,10 @@ export default function useAssetViewController({ id, employeeId }) {
 
   return {
     isAssetView,
+    isWorkstationView,
     asset,
     employee,
+    workstation,
     employeeAssets,
     totalEmployeeAcqCost,
     employeeHistory,
@@ -1266,6 +1315,7 @@ export default function useAssetViewController({ id, employeeId }) {
     actualEmployeeId,
     isLoading,
     isLoadingEmployee,
+    isLoadingWorkstation,
     isLoadingMovements,
     isLoadingAssignments,
     isLoadingHistory,

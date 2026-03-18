@@ -1,4 +1,4 @@
-import { ArrowLeft, RefreshCw, Save, Shuffle } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Save, RotateCw } from 'lucide-react'
 import { TRANSITION_MODE_CONFIG } from '../constants'
 
 export function StickyHeader({
@@ -9,6 +9,7 @@ export function StickyHeader({
   onClear,
   onSubmit,
   isPending,
+  onOpenChainBuilder,
 }) {
   const config = TRANSITION_MODE_CONFIG[transitionMode]
   const ThemeIcon = config.icon
@@ -62,6 +63,20 @@ export function StickyHeader({
               )}
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
+              {onOpenChainBuilder && (
+                <button
+                  onClick={onOpenChainBuilder}
+                  className={`hidden sm:flex items-center px-3 py-2 text-sm font-medium rounded-lg border transition-colors whitespace-nowrap ${
+                    isBranch
+                      ? 'text-teal-700 bg-teal-50 border-teal-200 hover:bg-teal-100'
+                      : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
+                  }`}
+                  title="Build rotation chains for multi-employee swaps"
+                >
+                  <RotateCw className="w-4 h-4 mr-1.5" />
+                  Chain
+                </button>
+              )}
               <button
                 onClick={onClear}
                 disabled={modifiedCount === 0}

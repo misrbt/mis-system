@@ -26,8 +26,14 @@ class EmployeeController extends Controller
             $relations = ['branch', 'position', 'department'];
 
             if ($request->boolean('with_assets', false)) {
-                $relations[] = 'assignedAssets';
+                // Load both portable assets AND workstation assets
+                $relations[] = 'assignedAssets'; // Portable assets (laptops, etc.)
+                $relations[] = 'workstations.assets'; // Workstation assets (PCs, monitors, etc.)
             }
+
+            // Include workstation data for transitions
+            $relations[] = 'workstations.branch';
+            $relations[] = 'workstations.position';
 
             $query = Employee::with($relations);
 
@@ -69,9 +75,9 @@ class EmployeeController extends Controller
                 $query->orderBy('fullname', 'asc');
             }
 
-            // Handle "all" parameter with caution - limit to 1000 records max
+            // Handle "all" parameter - return all records without pagination
             if ($request->boolean('all', false)) {
-                $employees = $query->limit(1000)->get();
+                $employees = $query->get();
 
                 return response()->json([
                     'success' => true,
@@ -316,7 +322,7 @@ class EmployeeController extends Controller
                 'success' => true,
                 'message' => 'Branch transition completed successfully. '
                     .count($result['employees']).' employee'.(count($result['employees']) !== 1 ? 's' : '').' moved, '
-                    .$result['assets_reassigned'].' workstation asset'.(($result['assets_reassigned'] !== 1) ? 's' : '').' reassigned. Portable assets stay with their employees.',
+                    .$result['workstation_changes'].' workstation'.(($result['workstation_changes'] !== 1) ? 's' : '').' updated.',
                 'data' => $result,
             ], 200);
         } catch (\Exception $e) {
@@ -345,6 +351,32 @@ class EmployeeController extends Controller
             ], 200);
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to execute employee transition');
+        }
+    }
+
+    /**
+     * Get workstations assigned to an employee.
+     */
+    public function getWorkstations($id)
+    {
+        try {
+            $employee = Employee::findOrFail($id);
+
+            $workstations = $employee->workstations()
+                ->with(['branch', 'position'])
+                ->withCount('assets')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $workstations,
+                'employee' => [
+                    'id' => $employee->id,
+                    'name' => $employee->fullname,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to fetch employee workstations');
         }
     }
 }

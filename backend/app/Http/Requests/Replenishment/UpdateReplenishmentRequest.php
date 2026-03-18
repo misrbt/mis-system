@@ -27,7 +27,7 @@ class UpdateReplenishmentRequest extends FormRequest
             'estimate_life' => 'nullable|integer|min:0',
             'vendor_id' => 'nullable|exists:vendors,id',
             'status_id' => 'nullable|exists:status,id',
-            'assigned_to_employee_id' => 'nullable|exists:employee,id',
+            'assigned_to_workstation_id' => 'nullable|exists:workstations,id',
             'assigned_to_branch_id' => 'nullable|exists:branches,id',
             'remarks' => 'nullable|string',
             'specifications' => 'nullable|array',

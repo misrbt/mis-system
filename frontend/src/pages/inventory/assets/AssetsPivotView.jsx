@@ -16,6 +16,7 @@ const DIMENSION_LABELS = {
   status: 'Status',
   branch: 'Branch',
   vendor: 'Vendor',
+  workstation: 'Workstation',
   employee: 'Employee',
 }
 
@@ -100,6 +101,7 @@ const AssetsPivotView = ({
                   <option value="status">Status</option>
                   <option value="branch">Branch</option>
                   <option value="vendor">Vendor</option>
+                  <option value="workstation">Workstation</option>
                   <option value="employee">Employee</option>
                 </select>
               </div>
@@ -116,6 +118,7 @@ const AssetsPivotView = ({
                   <option value="category">Category</option>
                   <option value="branch">Branch</option>
                   <option value="vendor">Vendor</option>
+                  <option value="workstation">Workstation</option>
                   <option value="employee">Employee</option>
                 </select>
               </div>

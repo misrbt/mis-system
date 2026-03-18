@@ -386,8 +386,10 @@ class QRCodeMonkeyService
         $qrData .= 'Serial: '.($asset->serial_number ?? '-')."\n";
         $qrData .= 'Category: '.($asset->category?->name ?? '-')."\n";
         $qrData .= 'Status: '.($asset->status?->name ?? '-')."\n";
-        $qrData .= 'Assigned: '.($asset->assignedEmployee?->fullname ?? 'Unassigned')."\n";
-        $qrData .= 'Branch: '.($asset->assignedEmployee?->branch?->branch_name ?? '-')."\n";
+        $personnel = $asset->workstation?->employee?->fullname ?? $asset->assignedEmployee?->fullname ?? 'Unassigned';
+        $branch = $asset->workstation?->branch?->branch_name ?? $asset->assignedEmployee?->branch?->branch_name ?? '-';
+        $qrData .= 'Assigned: '.$personnel."\n";
+        $qrData .= 'Branch: '.$branch."\n";
         $qrData .= 'Purchase: '.$purchaseDate."\n";
         $qrData .= 'Warranty: '.$warrantyDate."\n";
         $qrData .= 'Cost: '.$acqCost."\n";

@@ -36,24 +36,27 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
     errorTitle: 'Return Failed',
   })
 
-  const currentEmployee = asset?.assigned_employee
-  const currentBranch = currentEmployee?.branch
+  const currentEmployee = asset?.workstation?.employee || asset?.assigned_employee
+  const currentWorkstation = asset?.workstation
+  const currentBranch = currentWorkstation?.branch || currentEmployee?.branch
   const reasonCharCount = getCharCount('reason')
+
+  const isAssigned = !!(currentEmployee || currentWorkstation)
 
   // Check if asset is assigned when modal opens
   useEffect(() => {
-    if (isOpen && !currentEmployee) {
+    if (isOpen && !isAssigned) {
       Swal.fire({
         icon: 'warning',
         title: 'Not Assigned',
-        text: 'This asset is not currently assigned to any employee',
+        text: 'This asset is not currently assigned to any workstation or employee',
       })
       handleClose()
     }
-  }, [isOpen, currentEmployee, handleClose])
+  }, [isOpen, isAssigned, handleClose])
 
   // Don't render if not assigned
-  if (isOpen && !currentEmployee) {
+  if (isOpen && !isAssigned) {
     return null
   }
 
@@ -98,7 +101,7 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Currently Assigned To */}
-        {currentEmployee && (
+        {isAssigned && (
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
             <p className="text-sm font-medium text-orange-900 mb-3">Returning From</p>
             <div className="flex items-start gap-3">
@@ -106,9 +109,14 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
                 <User className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-orange-900">{currentEmployee.fullname}</p>
-                {currentEmployee.position && (
-                  <p className="text-sm text-orange-700">{currentEmployee.position.position_name}</p>
+                {currentEmployee && (
+                  <p className="font-semibold text-orange-900">{currentEmployee.fullname}</p>
+                )}
+                {currentEmployee?.position && (
+                  <p className="text-sm text-orange-700">{currentEmployee.position.position_name || currentEmployee.position.title}</p>
+                )}
+                {currentWorkstation && (
+                  <p className="text-sm text-orange-700">{currentWorkstation.name}</p>
                 )}
                 {currentBranch && (
                   <div className="flex items-center gap-1 mt-1 text-sm text-orange-600">
@@ -139,7 +147,7 @@ function ReturnAssetModal({ isOpen, onClose, asset }) {
           <div className="text-sm text-blue-900">
             <p className="font-medium">This action will unassign the asset</p>
             <p className="text-blue-700 mt-1">
-              The asset will be returned to inventory and will no longer be assigned to {currentEmployee?.fullname}.
+              The asset will be returned to inventory and will no longer be assigned to {currentEmployee?.fullname || currentWorkstation?.name || 'current assignment'}.
             </p>
           </div>
         </div>

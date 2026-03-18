@@ -110,6 +110,10 @@ const inventoryRoutes = {
       element: <AssetViewPage />,
     },
     {
+      path: 'workstations/:workstationId/assets',
+      element: <AssetViewPage />,
+    },
+    {
       path: 'reports',
       element: <ReportsPage />,
     },
