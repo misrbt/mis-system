@@ -17,7 +17,8 @@ function BulkTransferModal({
 }) {
   if (!isOpen) return null
 
-  const selectedEmployee = employees.find((emp) => emp.id === selectedEmployeeId)
+  const employeesList = Array.isArray(employees) ? employees : []
+  const selectedEmployee = employeesList.find((emp) => emp.id === selectedEmployeeId)
 
   return createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>

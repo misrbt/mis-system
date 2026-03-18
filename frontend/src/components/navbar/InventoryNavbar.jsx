@@ -31,7 +31,6 @@ function InventoryNavBar({ user, onLogout }) {
   const location = useLocation()
   return (
     <InventoryNavBarContent
-      key={location.pathname}
       user={user}
       onLogout={onLogout}
       location={location}
@@ -135,6 +134,13 @@ function InventoryNavBarContent({ user, onLogout, location }) {
       ],
     },
   ]
+
+  // Close all dropdowns whenever the route changes
+  useEffect(() => {
+    setOpenGroup(null)
+    setIsNavOpen(false)
+    setIsUserMenuOpen(false)
+  }, [location.pathname])
 
   const isActive = (path) => location.pathname.startsWith(path)
   const toggleMobileGroup = (label) => {
@@ -314,6 +320,7 @@ function InventoryNavBarContent({ user, onLogout, location }) {
                             <Link
                               key={item.path}
                               to={item.path}
+                              onClick={() => setOpenGroup(null)}
                               className={`flex items-center gap-3 px-4 py-2 text-sm font-medium transition-colors ${
                                 isActive(item.path)
                                   ? 'bg-blue-600 text-white'

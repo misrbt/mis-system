@@ -183,15 +183,18 @@ class AssetMovementController extends Controller
 
             $asset = Asset::findOrFail($assetId);
 
-            if (! $asset->assigned_to_employee_id) {
+            if (! $asset->assigned_to_employee_id && ! $asset->workstation_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Asset is not currently assigned',
                 ], 400);
             }
 
-            // Unassign asset
+            // Unassign asset from both employee and workstation
             $asset->assigned_to_employee_id = null;
+            $asset->workstation_id = null;
+            $asset->workstation_branch_id = null;
+            $asset->workstation_position_id = null;
             $asset->save();
 
             // Update the movement created by observer

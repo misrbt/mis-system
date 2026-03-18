@@ -14,6 +14,7 @@ const AssetsFiltersPanel = ({
   filterSubcategories,
   statusOptions,
   vendors,
+  workstations,
   onClearFilters,
 }) => {
   if (viewMode === 'pivot') {
@@ -126,6 +127,22 @@ const AssetsFiltersPanel = ({
                 {(Array.isArray(vendors) ? vendors : []).map((vendor) => (
                   <option key={vendor.id} value={vendor.id}>
                     {vendor.company_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Workstation</label>
+              <select
+                name="workstation_id"
+                value={filters.workstation_id}
+                onChange={onFilterChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">All Workstations</option>
+                {(Array.isArray(workstations) ? workstations : []).map((ws) => (
+                  <option key={ws.id} value={ws.id}>
+                    {ws.name}
                   </option>
                 ))}
               </select>

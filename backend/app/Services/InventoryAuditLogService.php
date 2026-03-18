@@ -15,14 +15,13 @@ class InventoryAuditLogService
     /**
      * Log an inventory operation (for inventory entities like categories, vendors, employees, etc.)
      *
-     * @param string $entityType Type of entity (e.g., 'asset_category', 'vendor', 'employee', 'branch', 'section', 'status')
-     * @param string $operationType Operation performed (e.g., 'created', 'updated', 'deleted')
-     * @param int|null $entityId ID of the entity
-     * @param string|null $entityName Name/description of the entity
-     * @param array $changes Array of changed fields with old/new values
-     * @param string|null $reason Reason for the change
-     * @param array $additionalMetadata Any additional metadata to store
-     * @return AssetMovement
+     * @param  string  $entityType  Type of entity (e.g., 'asset_category', 'vendor', 'employee', 'branch', 'section', 'status')
+     * @param  string  $operationType  Operation performed (e.g., 'created', 'updated', 'deleted')
+     * @param  int|null  $entityId  ID of the entity
+     * @param  string|null  $entityName  Name/description of the entity
+     * @param  array  $changes  Array of changed fields with old/new values
+     * @param  string|null  $reason  Reason for the change
+     * @param  array  $additionalMetadata  Any additional metadata to store
      */
     public static function logInventoryOperation(
         string $entityType,
@@ -57,10 +56,9 @@ class InventoryAuditLogService
     /**
      * Log an asset-related operation
      *
-     * @param int $assetId Asset ID
-     * @param string $movementType Type of movement
-     * @param array $data Additional data for the movement
-     * @return AssetMovement
+     * @param  int  $assetId  Asset ID
+     * @param  string  $movementType  Type of movement
+     * @param  array  $data  Additional data for the movement
      */
     public static function logAssetOperation(
         int $assetId,
@@ -82,9 +80,9 @@ class InventoryAuditLogService
     /**
      * Track changes between old and new values
      *
-     * @param array $original Original values
-     * @param array $changes New values
-     * @param array $trackableFields Fields to track
+     * @param  array  $original  Original values
+     * @param  array  $changes  New values
+     * @param  array  $trackableFields  Fields to track
      * @return array Changed fields with old/new values
      */
     public static function trackChanges(array $original, array $changes, array $trackableFields): array
@@ -109,10 +107,9 @@ class InventoryAuditLogService
     /**
      * Generate human-readable remarks for inventory operations
      *
-     * @param string $entityType Type of entity
-     * @param string $operationType Operation performed
-     * @param string|null $entityName Name of entity
-     * @return string
+     * @param  string  $entityType  Type of entity
+     * @param  string  $operationType  Operation performed
+     * @param  string|null  $entityName  Name of entity
      */
     private static function generateRemarks(
         string $entityType,
@@ -132,10 +129,9 @@ class InventoryAuditLogService
     /**
      * Log bulk delete operation for inventory items
      *
-     * @param string $entityType Type of entity being deleted
-     * @param array $deletedItems Array of deleted items with id and name
-     * @param string|null $reason Reason for deletion
-     * @return AssetMovement
+     * @param  string  $entityType  Type of entity being deleted
+     * @param  array  $deletedItems  Array of deleted items with id and name
+     * @param  string|null  $reason  Reason for deletion
      */
     public static function logBulkDelete(
         string $entityType,
@@ -163,10 +159,9 @@ class InventoryAuditLogService
     /**
      * Log code generation (QR/Barcode) for assets
      *
-     * @param int $assetId Asset ID
-     * @param string $codeType Type of code (qr_code or barcode)
-     * @param string|null $assetName Asset name
-     * @return AssetMovement
+     * @param  int  $assetId  Asset ID
+     * @param  string  $codeType  Type of code (qr_code or barcode)
+     * @param  string|null  $assetName  Asset name
      */
     public static function logCodeGeneration(
         int $assetId,
@@ -177,7 +172,7 @@ class InventoryAuditLogService
             $assetId,
             'code_generated',
             [
-                'remarks' => "Generated {$codeType} for asset" . ($assetName ? ": {$assetName}" : ''),
+                'remarks' => "Generated {$codeType} for asset".($assetName ? ": {$assetName}" : ''),
                 'metadata' => [
                     'code_type' => $codeType,
                     'asset_name' => $assetName,
@@ -189,10 +184,9 @@ class InventoryAuditLogService
     /**
      * Log bulk code generation for assets
      *
-     * @param string $codeType Type of code (qr_code or barcode)
-     * @param int $count Number of codes generated
-     * @param array $assetIds Array of asset IDs
-     * @return AssetMovement
+     * @param  string  $codeType  Type of code (qr_code or barcode)
+     * @param  int  $count  Number of codes generated
+     * @param  array  $assetIds  Array of asset IDs
      */
     public static function logBulkCodeGeneration(
         string $codeType,
@@ -212,5 +206,26 @@ class InventoryAuditLogService
                 'asset_ids' => $assetIds,
             ]
         );
+    }
+
+    /**
+     * Simple log method for quick audit entries
+     *
+     * @param  string  $action  Action performed (e.g., 'workstation_created')
+     * @param  array  $data  Additional data to log
+     */
+    public static function log(string $action, array $data = []): AssetMovement
+    {
+        return AssetMovement::create([
+            'asset_id' => null,
+            'movement_type' => 'inventory_operation',
+            'performed_by_user_id' => Auth::id(),
+            'reason' => $action,
+            'remarks' => ucwords(str_replace('_', ' ', $action)),
+            'metadata' => array_merge(['action' => $action], $data),
+            'movement_date' => now(),
+            'ip_address' => Request::ip(),
+            'user_agent' => Request::userAgent(),
+        ]);
     }
 }

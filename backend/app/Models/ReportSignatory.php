@@ -13,6 +13,7 @@ class ReportSignatory extends Model
 
     protected $fillable = [
         'user_id',
+        'prepared_by_id',
         'checked_by_id',
         'noted_by_id',
     ];
@@ -20,6 +21,11 @@ class ReportSignatory extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function preparedBy()
+    {
+        return $this->belongsTo(Employee::class, 'prepared_by_id');
     }
 
     public function checkedBy()

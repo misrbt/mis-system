@@ -1,8 +1,13 @@
 import EmployeeAssetsView from "./EmployeeAssetsView";
+import { useSearchParams } from "react-router-dom";
 
-function AssetViewEmployeeContainer({ controller }) {
+function AssetViewEmployeeContainer({ controller, isWorkstationView = false }) {
+  const [searchParams] = useSearchParams();
+  const highlightedAssetId = searchParams.get("highlight") ? Number(searchParams.get("highlight")) : null;
+
   const {
     employee,
+    workstation,
     employeeAssets,
     totalEmployeeAcqCost,
     employeeHistory,
@@ -24,6 +29,8 @@ function AssetViewEmployeeContainer({ controller }) {
     vendors,
     statusColorMap,
     isLoadingHistory,
+    isLoadingEmployee,
+    isLoadingWorkstation,
     isPending,
     handleSelectAll,
     handleSelectAsset,
@@ -40,7 +47,7 @@ function AssetViewEmployeeContainer({ controller }) {
     navigateToAsset,
     navigateToAssetComponents,
     navigateBack,
-    navigateToEmployeeList,
+    navigateToWorkstations,
     editComponents,
     handleEditComponentAdd,
     handleEditComponentRemove,
@@ -48,13 +55,31 @@ function AssetViewEmployeeContainer({ controller }) {
     generateEditComponentSerialNumber,
   } = controller;
 
-  // Show loading state while employee data is fetching
-  if (!employee) {
+  // Show loading state while data is fetching
+  if (isWorkstationView ? isLoadingWorkstation : isLoadingEmployee) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading employee data...</p>
+          <p className="text-slate-600">Loading {isWorkstationView ? 'workstation' : 'employee'} data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if data failed to load
+  if (isWorkstationView ? !workstation : !employee) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-slate-600 text-lg font-medium mb-2">{isWorkstationView ? 'Workstation' : 'Employee'} not found</p>
+          <p className="text-slate-400 text-sm mb-4">The {isWorkstationView ? 'workstation' : 'employee'} data could not be loaded.</p>
+          <button
+            onClick={() => navigateToWorkstations()}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Back to Workstations
+          </button>
         </div>
       </div>
     );
@@ -62,7 +87,10 @@ function AssetViewEmployeeContainer({ controller }) {
 
   return (
     <EmployeeAssetsView
+      isWorkstationView={isWorkstationView}
+      highlightedAssetId={highlightedAssetId}
       employee={employee}
+      workstation={workstation}
       employeeAssets={employeeAssets}
       totalEmployeeAcqCost={totalEmployeeAcqCost}
       employeeHistory={employeeHistory}
@@ -107,7 +135,7 @@ function AssetViewEmployeeContainer({ controller }) {
       onAddClick={openAddModal}
       isPending={isPending}
       isLoadingHistory={isLoadingHistory}
-      navigateBack={() => (window.history.length > 1 ? navigateBack() : navigateToEmployeeList())}
+      navigateBack={() => (window.history.length > 1 ? navigateBack() : navigateToWorkstations())}
       editComponents={editComponents}
       onEditComponentAdd={handleEditComponentAdd}
       onEditComponentRemove={handleEditComponentRemove}

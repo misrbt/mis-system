@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Truck, Phone, MapPin, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -13,9 +14,6 @@ import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 
 function VendorsPage() {
-  const [vendors, setVendors] = useState([])
-  const [loading, setLoading] = useState(true)
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedVendor, setSelectedVendor] = useState(null)
@@ -28,27 +26,52 @@ function VendorsPage() {
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
 
-  const fetchVendors = async () => {
-    try {
-      setLoading(true)
-      const response = await apiClient.get('/vendors')
-      if (response.data.success) {
-        setVendors(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch vendors',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    fetchVendors()
-  }, [])
+  const { data: vendors = [], isLoading: loading } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: async () => {
+      const response = await apiClient.get('/vendors')
+      return response.data.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/vendors', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      setIsAddModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Vendor created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to create vendor' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => apiClient.put(`/vendors/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      setIsEditModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Vendor updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to update vendor' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => apiClient.delete(`/vendors/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Vendor deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete vendor' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -76,48 +99,12 @@ function VendorsPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.post('/vendors', formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchVendors()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to create vendor',
-      })
-    }
+    createMutation.mutate(formData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.put(`/vendors/${selectedVendor.id}`, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsEditModalOpen(false)
-        fetchVendors()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update vendor',
-      })
-    }
+    updateMutation.mutate({ id: selectedVendor.id, data: formData })
   }
 
   const handleDelete = useCallback(async (vendor) => {
@@ -131,26 +118,8 @@ function VendorsPage() {
       confirmButtonText: 'Yes, delete it!',
       cancelButtonText: 'Cancel',
     })
-
     if (result.isConfirmed) {
-      try {
-        const response = await apiClient.delete(`/vendors/${vendor.id}`)
-        if (response.data.success) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Deleted!',
-            text: response.data.message,
-            timer: 2000,
-          })
-          fetchVendors()
-        }
-      } catch (error) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.response?.data?.message || 'Failed to delete vendor',
-        })
-      }
+      deleteMutateRef.current(vendor.id)
     }
   }, [])
 
@@ -236,7 +205,9 @@ function VendorsPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : vendors.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 

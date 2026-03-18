@@ -28,6 +28,7 @@ class Replenishment extends Model
         'status_id',
         'assigned_to_employee_id',
         'assigned_to_branch_id',
+        'assigned_to_workstation_id',
         'remarks',
         'specifications',
     ];
@@ -71,6 +72,11 @@ class Replenishment extends Model
         return $this->belongsTo(Branch::class, 'assigned_to_branch_id');
     }
 
+    public function assignedWorkstation()
+    {
+        return $this->belongsTo(Workstation::class, 'assigned_to_workstation_id');
+    }
+
     /**
      * Calculate the current book value using straight-line depreciation
      * Formula: Book Value = max(1, Amount Purchased - (Daily Depreciation × Days Since Purchase))
@@ -79,7 +85,7 @@ class Replenishment extends Model
     public function calculateBookValue($asOfDate = null)
     {
         // Return null if required fields are missing
-        if (!$this->purchase_date || !$this->estimate_life || !$this->acq_cost) {
+        if (! $this->purchase_date || ! $this->estimate_life || ! $this->acq_cost) {
             $purchaseDateString = $this->purchase_date
                 ? \Carbon\Carbon::parse($this->purchase_date)->toDateString()
                 : null;
@@ -141,7 +147,7 @@ class Replenishment extends Model
         return Attribute::make(
             get: function ($value) {
                 // If required fields are missing, return stored value or acquisition cost
-                if (!$this->purchase_date || !$this->estimate_life || !$this->acq_cost) {
+                if (! $this->purchase_date || ! $this->estimate_life || ! $this->acq_cost) {
                     return $value ?? $this->acq_cost ?? 0;
                 }
 

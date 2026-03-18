@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
-use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 
 class ReportController extends Controller
 {
@@ -92,6 +92,7 @@ class ReportController extends Controller
 
     /**
      * Build the asset query with all filters applied.
+     * Includes both direct employee assignment and workstation-based assignment.
      */
     private function buildAssetQuery(Request $request)
     {
@@ -101,13 +102,24 @@ class ReportController extends Controller
             'status',
             'assignedEmployee.branch',
             'assignedEmployee.position',
-            'assignedEmployee.department'
+            'assignedEmployee.department',
+            'workstation:id,name,branch_id,employee_id',
+            'workstation.employee:id,fullname,branch_id,position_id,department_id',
+            'workstation.employee.branch:id,branch_name',
+            'workstation.employee.position:id,title',
+            'workstation.employee.department:id,name',
+            'workstation.branch:id,branch_name',
         ]);
 
-        // Branch filter (via employee relationship)
+        // Branch filter (via direct employee OR workstation)
         if ($request->has('branch_id') && $request->branch_id) {
-            $query->whereHas('assignedEmployee', function ($q) use ($request) {
-                $q->where('branch_id', $request->branch_id);
+            $branchId = $request->branch_id;
+            $query->where(function ($q) use ($branchId) {
+                $q->whereHas('assignedEmployee', function ($emp) use ($branchId) {
+                    $emp->where('branch_id', $branchId);
+                })->orWhereHas('workstation', function ($ws) use ($branchId) {
+                    $ws->where('branch_id', $branchId);
+                });
             });
         }
 
@@ -126,17 +138,26 @@ class ReportController extends Controller
             $query->where('vendor_id', $request->vendor_id);
         }
 
-        // Assigned employee filter
+        // Assigned employee filter (both direct and workstation-based)
         if ($request->has('assigned_to_employee_id') && $request->assigned_to_employee_id) {
-            $query->where('assigned_to_employee_id', $request->assigned_to_employee_id);
+            $employeeId = $request->assigned_to_employee_id;
+            $query->where(function ($q) use ($employeeId) {
+                $q->where('assigned_to_employee_id', $employeeId)
+                    ->orWhereHas('workstation', function ($ws) use ($employeeId) {
+                        $ws->where('employee_id', $employeeId);
+                    });
+            });
         }
 
         $reportDateTo = $request->input('report_date_to', $request->input('purchase_date_to'));
 
         // Report snapshot: Show all assets that existed as of the end date
-        // Only filter by purchase date <= end date (asset must have been acquired by then)
+        // Assets with NULL purchase_date are included (date unknown but asset exists)
         if ($reportDateTo) {
-            $query->whereDate('purchase_date', '<=', $reportDateTo);
+            $query->where(function ($q) use ($reportDateTo) {
+                $q->whereDate('purchase_date', '<=', $reportDateTo)
+                    ->orWhereNull('purchase_date');
+            });
         }
 
         // Search filter
@@ -144,9 +165,9 @@ class ReportController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('asset_name', 'like', "%{$search}%")
-                  ->orWhere('serial_number', 'like', "%{$search}%")
-                  ->orWhere('brand', 'like', "%{$search}%")
-                  ->orWhere('model', 'like', "%{$search}%");
+                    ->orWhere('serial_number', 'like', "%{$search}%")
+                    ->orWhere('brand', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%");
             });
         }
 
@@ -159,20 +180,41 @@ class ReportController extends Controller
     }
 
     /**
-     * Group assets by employee with totals.
+     * Group assets by effective employee (direct assignment or via workstation).
+     * Assets on workstations without employees are grouped by workstation name.
      */
     private function groupAssetsByEmployee($assets)
     {
-        $grouped = $assets->groupBy('assigned_to_employee_id')->map(function ($employeeAssets, $employeeId) {
-            $employee = $employeeAssets->first()->assignedEmployee;
-            $totalAcquisitionCost = $employeeAssets->sum('acq_cost') ?? 0;
+        // Build a unique grouping key:
+        // - If workstation has employee -> use employee ID
+        // - If direct employee assignment -> use employee ID
+        // - If workstation but no employee -> use "ws:{workstation_id}" to keep them separate
+        // - Otherwise -> null (truly unassigned)
+        $grouped = $assets->groupBy(function ($asset) {
+            $effectiveEmployeeId = $asset->workstation?->employee_id ?? $asset->assigned_to_employee_id;
+            if ($effectiveEmployeeId) {
+                return (string) $effectiveEmployeeId;
+            }
+            if ($asset->workstation_id) {
+                return 'ws:'.$asset->workstation_id;
+            }
 
-            return [
-                'employee_id' => $employeeId,
-                'employee' => $employee ? [
+            return 'unassigned';
+        })->map(function ($groupAssets, $groupKey) {
+            $firstAsset = $groupAssets->first();
+            $employee = $firstAsset->workstation?->employee ?? $firstAsset->assignedEmployee;
+            $workstation = $firstAsset->workstation;
+            $totalAcquisitionCost = $groupAssets->sum('acq_cost') ?? 0;
+
+            // Determine the effective employee ID
+            $employeeId = $employee?->id;
+
+            // Build employee data - for workstation-only assets (no employee), use workstation info
+            $employeeData = null;
+            if ($employee) {
+                $employeeData = [
                     'id' => $employee->id,
                     'fullname' => $employee->fullname,
-                    'employee_id' => $employee->employee_id,
                     'branch' => $employee->branch ? [
                         'id' => $employee->branch->id,
                         'branch_name' => $employee->branch->branch_name,
@@ -183,21 +225,44 @@ class ReportController extends Controller
                     ] : null,
                     'department' => $employee->department ? [
                         'id' => $employee->department->id,
-                        'dept_name' => $employee->department->dept_name,
+                        'name' => $employee->department->name,
                     ] : null,
-                ] : null,
-                'assets' => $employeeAssets->values(),
-                'total_assets' => $employeeAssets->count(),
+                ];
+            } elseif ($workstation) {
+                // Workstation exists but no employee - show workstation as the "user"
+                $employeeData = [
+                    'id' => null,
+                    'fullname' => $workstation->name,
+                    'employee_id' => null,
+                    'branch' => $workstation->branch ? [
+                        'id' => $workstation->branch->id,
+                        'branch_name' => $workstation->branch->branch_name,
+                    ] : null,
+                    'position' => null,
+                    'department' => null,
+                    'is_workstation' => true,
+                ];
+            }
+
+            return [
+                'employee_id' => $employeeId,
+                'employee' => $employeeData,
+                'assets' => $groupAssets->values(),
+                'total_assets' => $groupAssets->count(),
                 'total_acquisition_cost' => round($totalAcquisitionCost, 2),
             ];
         });
 
-        // Sort: Unassigned first, then by employee name
+        // Sort: Unassigned first, then workstations without employees, then by employee name
         return $grouped->sortBy(function ($group) {
-            if ($group['employee_id'] === null) {
-                return '0'; // Unassigned first
+            if ($group['employee'] === null) {
+                return '0'; // Truly unassigned first
             }
-            return '1' . ($group['employee']['fullname'] ?? '');
+            if (! empty($group['employee']['is_workstation'])) {
+                return '0w'.($group['employee']['fullname'] ?? '');
+            }
+
+            return '1'.($group['employee']['fullname'] ?? '');
         })->values();
     }
 
@@ -233,9 +298,11 @@ class ReportController extends Controller
             ];
         });
 
-        // Group by branch
+        // Group by branch (check workstation branch first, then direct employee branch)
         $byBranch = $assets->groupBy(function ($asset) {
-            return $asset->assignedEmployee->branch->branch_name ?? 'Unassigned';
+            return $asset->workstation?->branch?->branch_name
+                ?? $asset->assignedEmployee?->branch?->branch_name
+                ?? 'Unassigned';
         })->map(function ($group) {
             return [
                 'count' => $group->count(),
@@ -266,43 +333,43 @@ class ReportController extends Controller
         $reportDateTo = $request->input('report_date_to', $request->input('purchase_date_to'));
 
         if ($reportDateFrom) {
-            $filters[] = 'Report Date From: ' . date('M d, Y', strtotime($reportDateFrom));
+            $filters[] = 'Report Date From: '.date('M d, Y', strtotime($reportDateFrom));
         }
 
         if ($reportDateTo) {
-            $filters[] = 'Report Date To: ' . date('M d, Y', strtotime($reportDateTo));
+            $filters[] = 'Report Date To: '.date('M d, Y', strtotime($reportDateTo));
         }
 
         if ($request->has('branch_id') && $request->branch_id) {
             $branch = \App\Models\Branch::find($request->branch_id);
             if ($branch) {
-                $filters[] = 'Branch: ' . $branch->branch_name;
+                $filters[] = 'Branch: '.$branch->branch_name;
             }
         }
 
         if ($request->has('category_id') && $request->category_id) {
             $category = \App\Models\AssetCategory::find($request->category_id);
             if ($category) {
-                $filters[] = 'Category: ' . $category->name;
+                $filters[] = 'Category: '.$category->name;
             }
         }
 
         if ($request->has('status_id') && $request->status_id) {
             $status = \App\Models\Status::find($request->status_id);
             if ($status) {
-                $filters[] = 'Status: ' . $status->name;
+                $filters[] = 'Status: '.$status->name;
             }
         }
 
         if ($request->has('vendor_id') && $request->vendor_id) {
             $vendor = \App\Models\Vendor::find($request->vendor_id);
             if ($vendor) {
-                $filters[] = 'Vendor: ' . $vendor->company_name;
+                $filters[] = 'Vendor: '.$vendor->company_name;
             }
         }
 
         if ($request->has('search') && $request->search) {
-            $filters[] = 'Search: ' . $request->search;
+            $filters[] = 'Search: '.$request->search;
         }
 
         return implode(' | ', $filters);
@@ -323,7 +390,7 @@ class ReportController extends Controller
             'filters' => $filtersDisplay,
         ])->setPaper('a4', 'landscape');
 
-        $filename = 'asset-report-' . now()->format('Y-m-d-His') . '.pdf';
+        $filename = 'asset-report-'.now()->format('Y-m-d-His').'.pdf';
 
         return $pdf->download($filename);
     }

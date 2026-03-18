@@ -7,7 +7,10 @@ import EmployeeAssetHistory from '../../../components/employee/EmployeeAssetHist
 import AssetDetailModal from '../assets/AssetDetailModal'
 
 function EmployeeAssetsView({
+  isWorkstationView = false,
+  highlightedAssetId,
   employee,
+  workstation,
   employeeAssets,
   totalEmployeeAcqCost,
   employeeHistory,
@@ -69,13 +72,16 @@ function EmployeeAssetsView({
           className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors touch-manipulation"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium hidden sm:inline">Back to Assets</span>
+          <span className="font-medium hidden sm:inline">{isWorkstationView ? 'Back to Workstations' : 'Back to Assets'}</span>
           <span className="font-medium sm:hidden">Back</span>
         </button>
       </div>
 
       <EmployeeHeader
-        employee={employee}
+        employee={isWorkstationView ? {
+          fullname: workstation?.employee?.fullname || 'Unassigned Workstation',
+          position: { title: workstation?.name || 'Workstation' },
+        } : employee}
         assetCount={employeeAssets.length}
         totalAcqCost={totalEmployeeAcqCost}
       />
@@ -117,17 +123,19 @@ function EmployeeAssetsView({
                 <Table className="w-4 h-4" />
                 <span className="text-sm sm:text-base">Table</span>
               </button>
-              <button
-                onClick={() => setEmployeeViewTab('history')}
-                className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 border-b-2 transition-colors whitespace-nowrap touch-manipulation font-medium ${
-                  employeeViewTab === 'history'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <History className="w-4 h-4" />
-                <span className="text-sm sm:text-base">Asset History</span>
-              </button>
+              {!isWorkstationView && (
+                <button
+                  onClick={() => setEmployeeViewTab('history')}
+                  className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 border-b-2 transition-colors whitespace-nowrap touch-manipulation font-medium ${
+                    employeeViewTab === 'history'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <History className="w-4 h-4" />
+                  <span className="text-sm sm:text-base">Asset History</span>
+                </button>
+              )}
             </div>
             {/* Add Asset Button */}
             {employeeViewTab === 'assets' && employeeAssets.length > 0 && (
@@ -175,6 +183,7 @@ function EmployeeAssetsView({
 
                   {viewMode === 'cards' && (
                     <AssetCardsView
+                      highlightedAssetId={highlightedAssetId}
                       assets={employeeAssets}
                       editingAssetId={editingAssetId}
                       editFormData={editFormData}

@@ -49,8 +49,11 @@ class QRCodeMonkeyService
      * Error codes for different failure scenarios
      */
     public const ERROR_NO_INTERNET = 'NO_INTERNET';
+
     public const ERROR_API_TIMEOUT = 'API_TIMEOUT';
+
     public const ERROR_API_ERROR = 'API_ERROR';
+
     public const ERROR_INVALID_RESPONSE = 'INVALID_RESPONSE';
 
     /**
@@ -60,8 +63,6 @@ class QRCodeMonkeyService
 
     /**
      * Get the last error that occurred
-     *
-     * @return array|null
      */
     public static function getLastError(): ?array
     {
@@ -78,8 +79,6 @@ class QRCodeMonkeyService
 
     /**
      * Check if the API is reachable
-     *
-     * @return bool
      */
     public static function isApiReachable(): bool
     {
@@ -97,8 +96,8 @@ class QRCodeMonkeyService
     /**
      * Generate a QR code using QR Code Monkey API
      *
-     * @param string $data The content to encode in the QR code
-     * @param array $options Optional configuration overrides
+     * @param  string  $data  The content to encode in the QR code
+     * @param  array  $options  Optional configuration overrides
      * @return string|null Base64 encoded PNG image or null on failure
      */
     public static function generate(string $data, array $options = []): ?string
@@ -124,16 +123,20 @@ class QRCodeMonkeyService
         ]);
 
         try {
-            $response = Http::timeout(self::API_TIMEOUT)
+            $httpClient = Http::timeout(self::API_TIMEOUT)
                 ->connectTimeout(self::CONNECT_TIMEOUT)
-                ->withoutVerifying() // Disable SSL verification for compatibility
-                ->retry(2, 1000) // Retry 2 times with 1 second delay
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'image/png',
-                    'User-Agent' => 'MIS-System/1.0',
-                ])
-                ->post(self::API_URL, $requestBody);
+                ->retry(2, 1000); // Retry 2 times with 1 second delay
+
+            // Disable SSL verification only in development
+            if (! config('app.debug', false)) {
+                $httpClient = $httpClient->withoutVerifying();
+            }
+
+            $response = $httpClient->withHeaders([
+                'Content-Type' => 'application/json',
+                'Accept' => 'image/png',
+                'User-Agent' => 'MIS-System/1.0',
+            ])->post(self::API_URL, $requestBody);
 
             if ($response->successful()) {
                 $imageData = $response->body();
@@ -152,7 +155,7 @@ class QRCodeMonkeyService
                     return null;
                 }
 
-                return 'data:image/png;base64,' . base64_encode($imageData);
+                return 'data:image/png;base64,'.base64_encode($imageData);
             }
 
             // API returned an error status
@@ -208,7 +211,7 @@ class QRCodeMonkeyService
             } else {
                 self::$lastError = [
                     'code' => self::ERROR_API_ERROR,
-                    'message' => 'QR Code Monkey API request failed: ' . $e->getMessage(),
+                    'message' => 'QR Code Monkey API request failed: '.$e->getMessage(),
                 ];
             }
 
@@ -228,7 +231,7 @@ class QRCodeMonkeyService
             // cURL also failed
             self::$lastError = [
                 'code' => self::ERROR_API_ERROR,
-                'message' => 'Failed to generate QR code: ' . $e->getMessage(),
+                'message' => 'Failed to generate QR code: '.$e->getMessage(),
             ];
 
             Log::error('QR Code Monkey API exception', [
@@ -242,16 +245,12 @@ class QRCodeMonkeyService
 
     /**
      * Generate QR code using cURL directly (fallback method)
-     *
-     * @param string $data
-     * @param int $size
-     * @param array $config
-     * @return string|null
      */
     protected static function generateViaCurl(string $data, int $size, array $config): ?string
     {
-        if (!function_exists('curl_init')) {
+        if (! function_exists('curl_init')) {
             Log::warning('cURL extension not available');
+
             return null;
         }
 
@@ -265,15 +264,13 @@ class QRCodeMonkeyService
 
         $ch = curl_init();
 
-        curl_setopt_array($ch, [
+        $curlOptions = [
             CURLOPT_URL => self::API_URL,
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $requestBody,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => self::API_TIMEOUT,
             CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT,
-            CURLOPT_SSL_VERIFYPEER => false, // Disable SSL verification
-            CURLOPT_SSL_VERIFYHOST => 0,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
                 'Accept: image/png',
@@ -281,7 +278,15 @@ class QRCodeMonkeyService
             ],
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 3,
-        ]);
+        ];
+
+        // Only disable SSL verification in development
+        if (! config('app.debug', false)) {
+            $curlOptions[CURLOPT_SSL_VERIFYPEER] = false;
+            $curlOptions[CURLOPT_SSL_VERIFYHOST] = 0;
+        }
+
+        curl_setopt_array($ch, $curlOptions);
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -295,6 +300,7 @@ class QRCodeMonkeyService
                 'error' => $error,
                 'errno' => $errno,
             ]);
+
             return null;
         }
 
@@ -302,24 +308,26 @@ class QRCodeMonkeyService
             Log::warning('cURL received non-200 response', [
                 'http_code' => $httpCode,
             ]);
+
             return null;
         }
 
         if (empty($response) || strlen($response) < 100) {
             Log::warning('cURL received empty or invalid response');
+
             return null;
         }
 
         Log::info('QR Code generated successfully via cURL fallback');
 
-        return 'data:image/png;base64,' . base64_encode($response);
+        return 'data:image/png;base64,'.base64_encode($response);
     }
 
     /**
      * Generate a QR code for an asset
      *
-     * @param \App\Models\Asset $asset
-     * @param array $options Optional configuration
+     * @param  \App\Models\Asset  $asset
+     * @param  array  $options  Optional configuration
      * @return string|null Base64 encoded PNG image
      */
     public static function generateForAsset($asset, array $options = []): ?string
@@ -337,15 +345,15 @@ class QRCodeMonkeyService
     /**
      * Generate a QR code with asset URL for scanning to view details
      *
-     * @param \App\Models\Asset $asset
-     * @param string $baseUrl Base URL of the application
-     * @param array $options Optional configuration
+     * @param  \App\Models\Asset  $asset
+     * @param  string  $baseUrl  Base URL of the application
+     * @param  array  $options  Optional configuration
      * @return string|null Base64 encoded PNG image
      */
     public static function generateForAssetWithUrl($asset, string $baseUrl, array $options = []): ?string
     {
         // Create URL that points to asset detail page
-        $assetUrl = rtrim($baseUrl, '/') . "/inventory/assets/{$asset->id}";
+        $assetUrl = rtrim($baseUrl, '/')."/inventory/assets/{$asset->id}";
 
         return self::generate($assetUrl, array_merge([
             'size' => 300,
@@ -357,8 +365,8 @@ class QRCodeMonkeyService
      * Generate a QR code with full asset information
      * Simple table format - easy to read when scanned
      *
-     * @param \App\Models\Asset $asset
-     * @param array $options Optional configuration
+     * @param  \App\Models\Asset  $asset
+     * @param  array  $options  Optional configuration
      * @return string|null Base64 encoded PNG image
      */
     public static function generateForAssetWithInfo($asset, array $options = []): ?string
@@ -369,21 +377,23 @@ class QRCodeMonkeyService
         $warrantyDate = $asset->waranty_expiration_date
             ? \Carbon\Carbon::parse($asset->waranty_expiration_date)->format('m-d-Y')
             : '-';
-        $acqCost = !is_null($asset->acq_cost) ? 'PHP ' . number_format($asset->acq_cost, 2) : '-';
-        $bookValue = !is_null($asset->book_value) ? 'PHP ' . number_format($asset->book_value, 2) : '-';
+        $acqCost = ! is_null($asset->acq_cost) ? 'PHP '.number_format($asset->acq_cost, 2) : '-';
+        $bookValue = ! is_null($asset->book_value) ? 'PHP '.number_format($asset->book_value, 2) : '-';
 
         // Simple table format - clean and easy to read
         $qrData = "ASSET INFO\n";
-        $qrData .= "Name: " . ($asset->asset_name ?? '-') . "\n";
-        $qrData .= "Serial: " . ($asset->serial_number ?? '-') . "\n";
-        $qrData .= "Category: " . ($asset->category?->name ?? '-') . "\n";
-        $qrData .= "Status: " . ($asset->status?->name ?? '-') . "\n";
-        $qrData .= "Assigned: " . ($asset->assignedEmployee?->fullname ?? 'Unassigned') . "\n";
-        $qrData .= "Branch: " . ($asset->assignedEmployee?->branch?->branch_name ?? '-') . "\n";
-        $qrData .= "Purchase: " . $purchaseDate . "\n";
-        $qrData .= "Warranty: " . $warrantyDate . "\n";
-        $qrData .= "Cost: " . $acqCost . "\n";
-        $qrData .= "Book Value: " . $bookValue;
+        $qrData .= 'Name: '.($asset->asset_name ?? '-')."\n";
+        $qrData .= 'Serial: '.($asset->serial_number ?? '-')."\n";
+        $qrData .= 'Category: '.($asset->category?->name ?? '-')."\n";
+        $qrData .= 'Status: '.($asset->status?->name ?? '-')."\n";
+        $personnel = $asset->workstation?->employee?->fullname ?? $asset->assignedEmployee?->fullname ?? 'Unassigned';
+        $branch = $asset->workstation?->branch?->branch_name ?? $asset->assignedEmployee?->branch?->branch_name ?? '-';
+        $qrData .= 'Assigned: '.$personnel."\n";
+        $qrData .= 'Branch: '.$branch."\n";
+        $qrData .= 'Purchase: '.$purchaseDate."\n";
+        $qrData .= 'Warranty: '.$warrantyDate."\n";
+        $qrData .= 'Cost: '.$acqCost."\n";
+        $qrData .= 'Book Value: '.$bookValue;
 
         return self::generate($qrData, array_merge([
             'size' => 350,

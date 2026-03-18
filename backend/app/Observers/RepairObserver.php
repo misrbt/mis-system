@@ -2,8 +2,8 @@
 
 namespace App\Observers;
 
-use App\Models\Repair;
 use App\Models\AssetMovement;
+use App\Models\Repair;
 use Illuminate\Support\Facades\Auth;
 
 class RepairObserver
@@ -53,7 +53,7 @@ class RepairObserver
             'performed_by_user_id' => Auth::id(),
             'movement_date' => $repair->repair_date ?? now(),
             'reason' => $repair->description,
-            'remarks' => 'Sent to ' . ($repair->vendor?->company_name ?? 'vendor') . ' for repair',
+            'remarks' => 'Sent to '.($repair->vendor?->company_name ?? 'vendor').' for repair',
             'metadata' => [
                 'expected_return_date' => $repair->expected_return_date,
                 'repair_cost' => $repair->repair_cost,
@@ -87,17 +87,17 @@ class RepairObserver
      */
     private function logStatusChange(Repair $repair, string $oldStatus, string $newStatus): void
     {
-        $movementType = match($newStatus) {
+        $movementType = match ($newStatus) {
             'In Repair' => 'repair_in_progress',
             'Completed' => 'repair_completed',
             'Returned' => 'repair_returned',
             default => 'repair_status_changed',
         };
 
-        $remarks = match($newStatus) {
-            'In Repair' => 'Repair status changed to Under Repair at ' . ($repair->vendor?->company_name ?? 'vendor'),
-            'Completed' => 'Repair completed by ' . ($repair->vendor?->company_name ?? 'vendor'),
-            'Returned' => 'Asset returned from ' . ($repair->vendor?->company_name ?? 'vendor') . ' after repair',
+        $remarks = match ($newStatus) {
+            'In Repair' => 'Repair status changed to Under Repair at '.($repair->vendor?->company_name ?? 'vendor'),
+            'Completed' => 'Repair completed by '.($repair->vendor?->company_name ?? 'vendor'),
+            'Returned' => 'Asset returned from '.($repair->vendor?->company_name ?? 'vendor').' after repair',
             default => "Repair status changed from {$oldStatus} to {$newStatus}",
         };
 
@@ -221,7 +221,7 @@ class RepairObserver
         }
 
         // Only log if there are field changes (excluding status)
-        if (!empty($changedFields)) {
+        if (! empty($changedFields)) {
             AssetMovement::create([
                 'asset_id' => $repair->asset_id,
                 'movement_type' => 'repair_updated',
@@ -229,7 +229,7 @@ class RepairObserver
                 'performed_by_user_id' => Auth::id(),
                 'movement_date' => now(),
                 'reason' => 'Repair record updated',
-                'remarks' => 'Updated repair record fields: ' . implode(', ', array_column($changedFields, 'label')),
+                'remarks' => 'Updated repair record fields: '.implode(', ', array_column($changedFields, 'label')),
                 'metadata' => [
                     'changed_fields' => $changedFields,
                     'change_count' => count($changedFields),
@@ -299,11 +299,11 @@ class RepairObserver
         AssetMovement::create([
             'asset_id' => $repair->asset_id,
             'movement_type' => 'repair_deleted',
-            'repair_id' => $repair->id,
+            'repair_id' => null, // Repair is being deleted, can't reference it
             'performed_by_user_id' => Auth::id(),
             'movement_date' => now(),
             'reason' => 'Repair record deleted',
-            'remarks' => 'Deleted repair record (Status: ' . $repair->status . ', Vendor: ' . ($repair->vendor?->company_name ?? 'N/A') . ')',
+            'remarks' => 'Deleted repair record (Status: '.$repair->status.', Vendor: '.($repair->vendor?->company_name ?? 'N/A').')',
             'metadata' => [
                 'deleted_repair_data' => $deletedFields,
                 'repair_id' => $repair->id,

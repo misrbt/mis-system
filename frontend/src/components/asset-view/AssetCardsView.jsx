@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Package,
   Calendar,
@@ -17,15 +17,12 @@ import {
   Barcode,
   Eye,
   Boxes,
-  RefreshCw,
-  Loader2,
 } from 'lucide-react'
 import SearchableSelect from '../SearchableSelect'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
 import apiClient from '../../services/apiClient'
 import SpecificationFields from '../specifications/SpecificationFields'
 import Swal from 'sweetalert2'
-import { getAssetQRCode, regenerateQRCode, QR_ERROR_CODES, getErrorMessage } from '../../services/qrCodeService'
 
 // Small helper component for info cards
 const InfoCard = ({ label, value, icon }) => (
@@ -37,221 +34,6 @@ const InfoCard = ({ label, value, icon }) => (
     <div className="text-base font-semibold text-slate-900 truncate">{value}</div>
   </div>
 )
-
-// QR Code Section Component - Handles QR code generation on demand
-const QRCodeSection = ({ asset, onCodeView }) => {
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [localQRCode, setLocalQRCode] = useState(asset?.qr_code || null)
-  const queryClient = useQueryClient()
-
-  // Update local state when asset changes
-  useEffect(() => {
-    setLocalQRCode(asset?.qr_code || null)
-  }, [asset?.qr_code])
-
-  const handleViewQRCode = useCallback(async (e) => {
-    e.stopPropagation()
-
-    // If QR code already exists, show it
-    if (localQRCode) {
-      onCodeView({
-        src: localQRCode,
-        asset_name: asset.asset_name,
-        serial_number: asset.serial_number,
-        type: 'qr',
-      })
-      return
-    }
-
-    // Check internet connection first
-    if (!navigator.onLine) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No Internet Connection',
-        text: 'Please check your internet connection and try again.',
-        confirmButtonColor: '#3b82f6',
-      })
-      return
-    }
-
-    // Generate QR code on demand
-    setIsGenerating(true)
-    try {
-      const result = await getAssetQRCode(asset, false)
-      setLocalQRCode(result.src)
-
-      // Update cache if it was generated via backend
-      if (result.source === 'backend') {
-        queryClient.invalidateQueries(['asset', asset.id])
-        queryClient.invalidateQueries(['employeeAssets'])
-      }
-
-      onCodeView({
-        src: result.src,
-        asset_name: asset.asset_name,
-        serial_number: asset.serial_number,
-        type: 'qr',
-      })
-    } catch (error) {
-      console.error('Failed to generate QR code:', error)
-
-      let title = 'QR Code Generation Failed'
-      let text = error.message || 'Failed to generate QR code. Please try again.'
-
-      if (error.code === QR_ERROR_CODES.NO_INTERNET || error.code === QR_ERROR_CODES.NETWORK_ERROR) {
-        title = 'Connection Error'
-        text = getErrorMessage(error.code, error.message)
-      } else if (error.code === QR_ERROR_CODES.API_TIMEOUT) {
-        title = 'Request Timeout'
-        text = getErrorMessage(error.code, error.message)
-      }
-
-      Swal.fire({
-        icon: 'error',
-        title,
-        text,
-        confirmButtonColor: '#3b82f6',
-      })
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [asset, localQRCode, onCodeView, queryClient])
-
-  const handleRegenerateQRCode = useCallback(async (e) => {
-    e.stopPropagation()
-
-    // Check internet connection first
-    if (!navigator.onLine) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No Internet Connection',
-        text: 'Unable to connect to QR Code Monkey API. Please check your internet connection.',
-        confirmButtonColor: '#3b82f6',
-      })
-      return
-    }
-
-    setIsGenerating(true)
-    try {
-      const response = await regenerateQRCode(asset.id)
-      const newQRCode = response.data?.qr_code
-
-      if (newQRCode) {
-        setLocalQRCode(newQRCode)
-
-        // Update cache
-        queryClient.invalidateQueries(['asset', asset.id])
-        queryClient.invalidateQueries(['employeeAssets'])
-
-        onCodeView({
-          src: newQRCode,
-          asset_name: asset.asset_name,
-          serial_number: asset.serial_number,
-          type: 'qr',
-        })
-
-        // Check if fallback was used
-        if (response.warning) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'QR Code Generated (Fallback)',
-            text: response.warning,
-            confirmButtonColor: '#3b82f6',
-          })
-        } else {
-          Swal.fire({
-            icon: 'success',
-            title: 'QR Code Regenerated',
-            text: 'New QR code has been generated successfully.',
-            timer: 2000,
-            showConfirmButton: false,
-          })
-        }
-      } else {
-        throw new Error('No QR code returned from server')
-      }
-    } catch (error) {
-      console.error('Failed to regenerate QR code:', error)
-
-      let title = 'Regeneration Failed'
-      let text = error.message || 'Failed to regenerate QR code. Please try again.'
-
-      if (error.code === QR_ERROR_CODES.NO_INTERNET || error.code === QR_ERROR_CODES.NETWORK_ERROR) {
-        title = 'Connection Error'
-        text = 'Unable to connect to QR Code Monkey API. Please check your internet connection.'
-      } else if (error.code === QR_ERROR_CODES.API_TIMEOUT) {
-        title = 'Request Timeout'
-        text = 'The QR Code Monkey API took too long to respond. Please try again.'
-      }
-
-      Swal.fire({
-        icon: 'error',
-        title,
-        text,
-        confirmButtonColor: '#3b82f6',
-      })
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [asset, onCodeView, queryClient])
-
-  const handleViewBarcode = useCallback((e) => {
-    e.stopPropagation()
-    if (asset.barcode) {
-      onCodeView({
-        src: asset.barcode,
-        asset_name: asset.asset_name,
-        serial_number: asset.serial_number,
-        type: 'barcode',
-      })
-    }
-  }, [asset, onCodeView])
-
-  return (
-    <div className="pt-2 border-t border-slate-200 flex gap-2">
-      {/* QR Code Button - Always visible */}
-      <button
-        onClick={handleViewQRCode}
-        disabled={isGenerating}
-        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded hover:bg-blue-100 border border-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isGenerating ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <QrCode className="w-3.5 h-3.5" />
-        )}
-        {localQRCode ? 'QR Code' : 'Generate QR'}
-      </button>
-
-      {/* Regenerate Button - Only show if QR code exists */}
-      {localQRCode && (
-        <button
-          onClick={handleRegenerateQRCode}
-          disabled={isGenerating}
-          className="py-1.5 px-2 flex items-center justify-center bg-amber-50 text-amber-700 text-xs font-medium rounded hover:bg-amber-100 border border-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Regenerate QR Code"
-        >
-          {isGenerating ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="w-3.5 h-3.5" />
-          )}
-        </button>
-      )}
-
-      {/* Barcode Button */}
-      {asset.barcode && (
-        <button
-          onClick={handleViewBarcode}
-          className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded hover:bg-slate-200 border border-slate-200 transition-colors"
-        >
-          <Barcode className="w-3.5 h-3.5" />
-          Barcode
-        </button>
-      )}
-    </div>
-  )
-}
 
 const AssetCard = ({
   asset,
@@ -278,11 +60,6 @@ const AssetCard = ({
   onCardClick,
   onComponentsClick,
   isPending,
-  editComponents,
-  onEditComponentAdd,
-  onEditComponentRemove,
-  onEditComponentChange,
-  onGenerateEditComponentSerial,
 }) => {
   // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
@@ -341,18 +118,9 @@ const AssetCard = ({
     categoryLabel,
   }))
 
-  // Check if asset is Desktop PC (based on original category)
+  // Check if asset is Desktop PC
   const isDesktopPC = asset.category?.name?.toLowerCase().includes('desktop') ||
                       asset.category?.name?.toLowerCase().includes('pc')
-
-  // Check if the SELECTED category in edit form is Desktop PC
-  const editSelectedCategory = categories.find(
-    (cat) => String(cat.id) === String(editFormData.asset_category_id)
-  )
-  const isEditDesktopPC = isEditing && (
-    editSelectedCategory?.name?.toLowerCase().includes('desktop') ||
-    editSelectedCategory?.name?.toLowerCase().includes('pc')
-  )
 
   // Fetch components for Desktop PC assets
   const { data: componentsData } = useQuery({
@@ -387,6 +155,25 @@ const AssetCard = ({
       }))
     )
   }, [components, isDesktopPC, isEditing])
+
+  const handleCardClick = (e) => {
+    // Don't navigate if in edit mode
+    if (isEditing) {
+      return
+    }
+
+    // Don't navigate if clicking on interactive elements
+    if (
+      e.target.closest('button') ||
+      e.target.closest('select') ||
+      e.target.closest('input') ||
+      e.target.closest('textarea') ||
+      e.target.closest('img')
+    ) {
+      return
+    }
+    onCardClick?.()
+  }
 
   const updateComponentEdit = (componentId, field, value) => {
     setComponentEdits((prev) =>
@@ -476,11 +263,12 @@ const AssetCard = ({
 
   return (
     <div
-      className={`group relative bg-white rounded-xl shadow-sm border transition-all duration-300 flex flex-col box-border ${
+      className={`group relative bg-white rounded-xl shadow-sm border overflow-hidden transition-all duration-300 flex flex-col box-border ${
         isSelected ? 'border-blue-500 border-2 shadow-lg' : 'border-slate-200 border'
       } ${
-        !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1' : ''
+        !isEditing ? 'hover:shadow-xl hover:border-blue-300 hover:-translate-y-1 cursor-pointer' : ''
       } ${isEditing ? 'h-auto' : isDetailsExpanded ? 'min-h-[260px] h-auto' : 'h-[260px]'}`}
+      onClick={handleCardClick}
     >
       {/* Selection Checkbox */}
       {onSelect && !isEditing && (
@@ -553,9 +341,9 @@ const AssetCard = ({
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
-              </select>
+              </select> 
             </div>
-            {resolvedEditSubcategories.length > 0 && (
+            {(editFormData.subcategory_id || asset.subcategory?.id) && (
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600">Subcategory</label>
                 <select
@@ -564,7 +352,13 @@ const AssetCard = ({
                   className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   disabled={!editFormData.asset_category_id}
                 >
-                  <option value="">Select Subcategory</option>
+                  <option value="">
+                    {!editFormData.asset_category_id
+                      ? 'Select category first'
+                      : resolvedEditSubcategories.length === 0
+                        ? 'No subcategories available'
+                        : 'Select Subcategory'}
+                  </option>
                   {resolvedEditSubcategories.map((subcategory) => (
                     <option key={subcategory.id} value={subcategory.id}>
                       {subcategory.name}
@@ -573,7 +367,7 @@ const AssetCard = ({
                 </select>
               </div>
             )}
-            {!isEditDesktopPC && (
+            {!isDesktopPC && (
               <div className="space-y-1">
                 <SearchableSelect
                   label="Brand"
@@ -587,7 +381,7 @@ const AssetCard = ({
                 />
               </div>
             )}
-            {!isEditDesktopPC && (
+            {!isDesktopPC && (
               <div className="space-y-1">
                 <SearchableSelect
                   label="Model"
@@ -601,43 +395,11 @@ const AssetCard = ({
                 />
               </div>
             )}
-            {!isEditDesktopPC &&
-              editFormData.asset_category_id &&
-              (!resolvedEditSubcategories.length || editFormData.subcategory_id) && (
-                <SpecificationFields
-                  categoryName={
-                    categories.find((cat) => String(cat.id) === String(editFormData.asset_category_id))
-                      ?.name || ''
-                  }
-                  subcategoryName={
-                    resolvedEditSubcategories.find(
-                      (sub) => String(sub.id) === String(editFormData.subcategory_id)
-                    )?.name || ''
-                  }
-                  specifications={editFormData.specifications || {}}
-                  onChange={(specs) => onChange('specifications', specs)}
-                />
-              )}
-            {isEditDesktopPC && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                    <Boxes className="w-3.5 h-3.5 text-amber-600" />
-                    Desktop PC Components
-                  </label>
-                  {onEditComponentAdd && (
-                    <button
-                      type="button"
-                      onClick={onEditComponentAdd}
-                      className="px-2 py-1 bg-green-600 text-white text-[10px] font-medium rounded hover:bg-green-700 transition-colors flex items-center gap-1"
-                    >
-                      <span>+ Add</span>
-                    </button>
-                  )}
-                </div>
-                {/* Existing components */}
-                {componentEdits.length > 0 && (
-                  <div className="space-y-2">
+            {isDesktopPC && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-600">Desktop PC Components</label>
+                {componentEdits.length ? (
+                  <div className="space-y-3">
                     {componentEdits.map((comp) => {
                       const original = componentsById.get(comp.id)
                       return (
@@ -645,7 +407,7 @@ const AssetCard = ({
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
                               <div className="text-xs font-semibold text-slate-600">Component</div>
-                              <div className="font-semibold text-slate-900 truncate text-sm">
+                              <div className="font-semibold text-slate-900 truncate">
                                 {original?.component_name || comp.component_name || 'Component'}
                               </div>
                             </div>
@@ -683,114 +445,9 @@ const AssetCard = ({
                       )
                     })}
                   </div>
-                )}
-                {/* New components being added */}
-                {editComponents && editComponents.length > 0 && (
-                  <div className="space-y-2">
-                    {editComponents.map((comp, index) => (
-                      <div key={comp.id} className="border border-amber-200 rounded-lg p-3 bg-amber-50 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-amber-700">New Component {index + 1}</span>
-                          <button
-                            type="button"
-                            onClick={() => onEditComponentRemove?.(comp.id)}
-                            className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600">Category Type</label>
-                            <select
-                              value={comp.category_id || ''}
-                              onChange={(e) => onEditComponentChange?.(comp.id, 'category_id', e.target.value)}
-                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                              <option value="">Select category</option>
-                              {categories
-                                .filter((cat) => {
-                                  const name = cat?.name?.toLowerCase() || ''
-                                  return !name.includes('desktop pc')
-                                })
-                                .map((cat) => (
-                                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                ))}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600">Asset Name</label>
-                            <input
-                              type="text"
-                              value={comp.component_name || ''}
-                              onChange={(e) => onEditComponentChange?.(comp.id, 'component_name', e.target.value)}
-                              placeholder="Enter asset name"
-                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600">Brand</label>
-                            <input
-                              type="text"
-                              value={comp.brand || ''}
-                              onChange={(e) => onEditComponentChange?.(comp.id, 'brand', e.target.value)}
-                              placeholder="Enter brand"
-                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600">Model</label>
-                            <input
-                              type="text"
-                              value={comp.model || ''}
-                              onChange={(e) => onEditComponentChange?.(comp.id, 'model', e.target.value)}
-                              placeholder="Enter model"
-                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                          </div>
-                          <div className="sm:col-span-2 space-y-1">
-                            <label className="text-xs font-semibold text-slate-600">Serial Number</label>
-                            <div className="flex gap-1.5">
-                              <input
-                                type="text"
-                                value={comp.serial_number || ''}
-                                onChange={(e) => onEditComponentChange?.(comp.id, 'serial_number', e.target.value)}
-                                placeholder="Enter serial number"
-                                className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                              {onGenerateEditComponentSerial && (
-                                <button
-                                  type="button"
-                                  onClick={() => onGenerateEditComponentSerial(comp.id)}
-                                  className="px-2 py-1.5 bg-indigo-600 text-white text-[10px] font-medium rounded hover:bg-indigo-700 transition-colors whitespace-nowrap flex items-center gap-1"
-                                >
-                                  <RefreshCw className="w-3 h-3" />
-                                  Generate
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <div className="sm:col-span-2 space-y-1">
-                            <label className="text-xs font-semibold text-slate-600">Status</label>
-                            <select
-                              value={comp.status_id || ''}
-                              onChange={(e) => onEditComponentChange?.(comp.id, 'status_id', e.target.value)}
-                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                              <option value="">Select status</option>
-                              {statuses.map((status) => (
-                                <option key={status.id} value={status.id}>{status.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {componentEdits.length === 0 && (!editComponents || editComponents.length === 0) && (
-                  <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-center">
-                    No components yet. Click "+ Add" to add components.
+                ) : (
+                  <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    No components yet. Use the Components page to add brand/model.
                   </div>
                 )}
               </div>
@@ -890,12 +547,7 @@ const AssetCard = ({
           <div className="bg-gradient-to-br from-slate-50 to-blue-50 p-4 border-b border-slate-200">
             <div className="flex items-start justify-between mb-2">
               <div className={`flex-1 min-w-0 pr-2 ${onSelect ? 'pl-8' : ''}`}>
-                <h3
-                  className={`font-bold text-slate-900 mb-2 leading-tight line-clamp-2 break-words ${
-                    cardTitle.length > 25 ? 'text-sm' : 'text-base'
-                  }`}
-                  title={cardTitle}
-                >
+                <h3 className="text-lg font-bold text-slate-900 mb-2 truncate" title={cardTitle}>
                   {cardTitle}
                 </h3>
                 {(displayBrand || displayModel) && (
@@ -910,14 +562,9 @@ const AssetCard = ({
                       {asset.category.name}
                     </span>
                   )}
-                  {/* Always show subcategory badge - display N/A if no subcategory */}
-                  {asset.category && (
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                      asset.subcategory 
-                        ? 'bg-slate-50 border border-slate-200 text-slate-600' 
-                        : 'bg-slate-100 border border-slate-300 text-slate-500 italic'
-                    }`}>
-                      {asset.subcategory ? asset.subcategory.name : 'N/A'}
+                  {asset.subcategory && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-50 border border-slate-200 text-slate-600">
+                      {asset.subcategory.name}
                     </span>
                   )}
                 </div>
@@ -950,7 +597,7 @@ const AssetCard = ({
                 </button>
                 {/* Status Dropdown - Same as before */}
                 {showStatusPicker && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
                     <div className="max-h-56 overflow-y-auto py-1">
                       {statuses.length ? (
                         statuses.map((status) => {
@@ -1085,101 +732,121 @@ const AssetCard = ({
                    )}
                 </div>
 
-                {/* Specifications - Dynamic Renderer */}
-                {asset.specifications && Object.keys(asset.specifications).length > 0 && (() => {
-                  // Define specification metadata for proper display
-                  const specConfig = {
-                    // Storage specs
-                    capacity: { label: 'Capacity', color: 'blue', format: (v, s) => `${v} ${s.capacity_unit || 'GB'}` },
-                    interface: { label: 'Interface', color: 'slate' },
-                    form_factor: { label: 'Form Factor', color: 'slate' },
-                    
-                    // Memory specs
-                    memory_type: { label: 'Type', color: 'purple' },
-                    
-                    // Speed (used by multiple categories)
-                    speed: { label: 'Speed', color: 'slate', format: (v, s) => {
-                      // If it's a number without units, assume MHz for memory
-                      if (s.memory_type && !isNaN(v)) return `${v} MHz`
-                      return v
-                    }},
-                    
-                    // Monitor specs
-                    screen_size: { label: 'Screen Size', color: 'indigo', format: (v) => `${v}"` },
-                    resolution: { label: 'Resolution', color: 'slate' },
-                    panel_type: { label: 'Panel Type', color: 'slate' },
-                    refresh_rate: { label: 'Refresh Rate', color: 'slate', format: (v) => `${v} Hz` },
-                    
-                    // Printer specs
-                    printer_type: { label: 'Printer Type', color: 'green' },
-                    color_support: { label: 'Color', color: 'slate' },
-                    print_speed: { label: 'Print Speed', color: 'slate', format: (v) => `${v} ppm` },
-                    connectivity: { label: 'Connectivity', color: 'slate' },
-                    
-                    // Network specs
-                    device_type: { label: 'Device Type', color: 'cyan' },
-                    ports: { label: 'Ports', color: 'slate' },
-                    poe_support: { label: 'PoE Support', color: 'slate' },
-                    
-                    // CCTV specs
-                    camera_type: { label: 'Camera Type', color: 'red' },
-                    night_vision_range: { label: 'Night Vision', color: 'slate', format: (v) => `${v}m` },
-                    storage_support: { label: 'Storage Support', color: 'slate' },
-                    
-                    // Laptop specs
-                    processor: { label: 'Processor', color: 'amber' },
-                    ram: { label: 'RAM', color: 'amber', format: (v, s) => `${v} ${s.ram_unit || 'GB'}` },
-                    storage_capacity: { label: 'Storage', color: 'amber', format: (v, s) => {
-                      let result = `${v} ${s.storage_unit || 'GB'}`
-                      if (s.storage_type) result += ` ${s.storage_type}`
-                      return result
-                    }},
-                    gpu: { label: 'Graphics', color: 'slate' },
-                    os: { label: 'Operating System', color: 'slate' },
-                  }
-                  
-                  // Fields to skip (already displayed elsewhere or composite)
-                  const skipFields = ['capacity_unit', 'ram_unit', 'storage_unit', 'storage_type']
-                  
-                  // Get all spec entries that have values
-                  const specEntries = Object.entries(asset.specifications)
-                    .filter(([key, value]) => {
-                      // Skip if in skip list
-                      if (skipFields.includes(key)) return false
-                      // Skip if empty
-                      if (value === null || value === undefined || value === '') return false
-                      return true
-                    })
-                  
-                  if (specEntries.length === 0) return null
-                  
-                  return (
-                    <div className="space-y-2 pt-2 border-t border-slate-200">
-                      <div className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1">
-                        <Shield className="w-3 h-3" />
-                        Specifications
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {specEntries.map(([key, value]) => {
-                          const config = specConfig[key] || { label: key.replace(/_/g, ' '), color: 'slate' }
-                          const displayValue = config.format 
-                            ? config.format(value, asset.specifications)
-                            : value
-                          const color = config.color
-                          
-                          return (
-                            <div key={key} className={`bg-${color}-50 p-2 rounded border border-${color}-100`}>
-                              <div className={`text-[10px] text-${color === 'slate' ? 'slate-500' : `${color}-600`} uppercase tracking-wide mb-0.5`}>
-                                {config.label}
-                              </div>
-                              <div className="text-sm font-semibold text-slate-900">{displayValue}</div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                {/* Specifications */}
+                {asset.specifications && Object.keys(asset.specifications).length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-200">
+                    <div className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      Specifications
                     </div>
-                  )
-                })()}
+                    <div className="grid grid-cols-2 gap-2">
+                      {asset.specifications.capacity && (
+                        <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                          <div className="text-[10px] text-blue-600 uppercase tracking-wide mb-0.5">Capacity</div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            {asset.specifications.capacity} {asset.specifications.capacity_unit || 'GB'}
+                          </div>
+                        </div>
+                      )}
+                      {asset.specifications.interface && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Interface</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.interface}</div>
+                        </div>
+                      )}
+                      {asset.specifications.form_factor && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Form Factor</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.form_factor}</div>
+                        </div>
+                      )}
+                      {asset.specifications.speed && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Speed</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.speed}</div>
+                        </div>
+                      )}
+                      {asset.specifications.memory_type && (
+                        <div className="bg-purple-50 p-2 rounded border border-purple-100">
+                          <div className="text-[10px] text-purple-600 uppercase tracking-wide mb-0.5">Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.memory_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.screen_size && (
+                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
+                          <div className="text-[10px] text-indigo-600 uppercase tracking-wide mb-0.5">Screen Size</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.screen_size}"</div>
+                        </div>
+                      )}
+                      {asset.specifications.resolution && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Resolution</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.resolution}</div>
+                        </div>
+                      )}
+                      {asset.specifications.panel_type && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Panel Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.panel_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.refresh_rate && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Refresh Rate</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.refresh_rate} Hz</div>
+                        </div>
+                      )}
+                      {asset.specifications.printer_type && (
+                        <div className="bg-green-50 p-2 rounded border border-green-100">
+                          <div className="text-[10px] text-green-600 uppercase tracking-wide mb-0.5">Printer Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.printer_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.color_support && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Color</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.color_support}</div>
+                        </div>
+                      )}
+                      {asset.specifications.print_speed && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Print Speed</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.print_speed} ppm</div>
+                        </div>
+                      )}
+                      {asset.specifications.device_type && (
+                        <div className="bg-cyan-50 p-2 rounded border border-cyan-100">
+                          <div className="text-[10px] text-cyan-600 uppercase tracking-wide mb-0.5">Device Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.device_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.ports && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Ports</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.ports}</div>
+                        </div>
+                      )}
+                      {asset.specifications.poe_support && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">PoE Support</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.poe_support}</div>
+                        </div>
+                      )}
+                      {asset.specifications.camera_type && (
+                        <div className="bg-red-50 p-2 rounded border border-red-100">
+                          <div className="text-[10px] text-red-600 uppercase tracking-wide mb-0.5">Camera Type</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.camera_type}</div>
+                        </div>
+                      )}
+                      {asset.specifications.night_vision_range && (
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Night Vision</div>
+                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.night_vision_range}m</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Remarks */}
                 {asset.remarks && (
@@ -1216,11 +883,29 @@ const AssetCard = ({
                   </div>
                 )}
 
-                 {/* QR/Barcode - Always show QR button, generate on demand if needed */}
-                <QRCodeSection
-                  asset={asset}
-                  onCodeView={onCodeView}
-                />
+                 {/* QR/Barcode */}
+                {(asset.qr_code || asset.barcode) && (
+                  <div className="pt-2 border-t border-slate-200 flex gap-2">
+                     {asset.qr_code && (
+                       <button
+                        onClick={() => onCodeView({ src: asset.qr_code, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'qr' })}
+                        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded hover:bg-blue-100 border border-blue-100 transition-colors"
+                       >
+                         <QrCode className="w-3.5 h-3.5" />
+                         QR Code
+                       </button>
+                     )}
+                     {asset.barcode && (
+                       <button
+                        onClick={() => onCodeView({ src: asset.barcode, asset_name: asset.asset_name, serial_number: asset.serial_number, type: 'barcode' })}
+                        className="flex-1 py-1.5 flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded hover:bg-slate-200 border border-slate-200 transition-colors"
+                       >
+                         <Barcode className="w-3.5 h-3.5" />
+                         Barcode
+                       </button>
+                     )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1287,11 +972,6 @@ const AssetCardsView = ({
   onCardClick,
   onComponentsClick,
   isPending,
-  editComponents,
-  onEditComponentAdd,
-  onEditComponentRemove,
-  onEditComponentChange,
-  onGenerateEditComponentSerial,
 }) => {
   const isSelected = (assetId) => selectedAssets?.includes(assetId)
 
@@ -1328,11 +1008,6 @@ const AssetCardsView = ({
           onCardClick={() => onCardClick?.(asset.id)}
           onComponentsClick={() => onComponentsClick?.(asset.id)}
           isPending={isPending}
-          editComponents={editComponents}
-          onEditComponentAdd={onEditComponentAdd}
-          onEditComponentRemove={onEditComponentRemove}
-          onEditComponentChange={onEditComponentChange}
-          onGenerateEditComponentSerial={onGenerateEditComponentSerial}
         />
       ))}
     </div>

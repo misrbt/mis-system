@@ -1,4 +1,4 @@
-import { Edit, Trash2, UserPlus, Building2 } from 'lucide-react'
+import { Edit, Trash2, Monitor, Building2 } from 'lucide-react'
 
 export const getReplenishmentColumns = ({
   statusColorMap,
@@ -98,20 +98,25 @@ export const getReplenishmentColumns = ({
     id: 'assigned_to',
     header: 'Assigned To',
     cell: ({ row }) => {
-      const employee = row.original.assigned_employee
+      const workstation = row.original.assigned_workstation
       const branch = row.original.assigned_branch
 
-      if (employee) {
+      if (workstation) {
         return (
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-1.5">
-              <UserPlus className="w-3.5 h-3.5 text-green-600" />
+              <Monitor className="w-3.5 h-3.5 text-indigo-600" />
               <span className="text-sm font-medium text-slate-900">
-                {employee.fullname}
+                {workstation.name}
               </span>
             </div>
+            {workstation.employee && (
+              <span className="text-xs text-slate-600 ml-5">
+                {workstation.employee.fullname}
+              </span>
+            )}
             <span className="text-xs text-slate-500 ml-5">
-              {employee.branch?.branch_name || 'No Branch'}
+              {workstation.branch?.branch_name || 'No Branch'}
             </span>
           </div>
         )
@@ -169,10 +174,10 @@ export const getReplenishmentColumns = ({
       <div className="flex items-center gap-2">
         <button
           onClick={() => openAssignModal(row.original)}
-          className="p-2 text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-all duration-200"
-          title="Assign to employee or branch"
+          className="p-2 text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-200"
+          title="Deploy to workstation"
         >
-          <UserPlus className="w-4 h-4" />
+          <Monitor className="w-4 h-4" />
         </button>
         <button
           onClick={() => openEditModal(row.original)}

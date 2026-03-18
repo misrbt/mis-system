@@ -26,4 +26,12 @@ class Position extends Model
     {
         return $this->hasMany(Employee::class);
     }
+
+    /**
+     * Get the workstations associated with this position.
+     */
+    public function workstations()
+    {
+        return $this->hasMany(Workstation::class);
+    }
 }

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Briefcase, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -13,9 +14,6 @@ import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 
 function PositionPage() {
-  const [positions, setPositions] = useState([])
-  const [loading, setLoading] = useState(true)
-
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -28,28 +26,52 @@ function PositionPage() {
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
 
-  // Fetch positions
-  const fetchPositions = async () => {
-    try {
-      setLoading(true)
-      const response = await apiClient.get('/positions')
-      if (response.data.success) {
-        setPositions(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch positions'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    fetchPositions()
-  }, [])
+  const { data: positions = [], isLoading: loading } = useQuery({
+    queryKey: ['positions'],
+    queryFn: async () => {
+      const response = await apiClient.get('/positions')
+      return response.data.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/positions', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['positions'] })
+      setIsAddModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Position created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to create position' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => apiClient.put(`/positions/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['positions'] })
+      setIsEditModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Position updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to update position' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => apiClient.delete(`/positions/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['positions'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Position deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete position' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   // Handle form input change
   const handleInputChange = (e) => {
@@ -72,55 +94,16 @@ function PositionPage() {
     setIsEditModalOpen(true)
   }, [])
 
-  // Handle Create
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.post('/positions', formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000
-        })
-        setIsAddModalOpen(false)
-        fetchPositions()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to create position'
-      })
-    }
+    createMutation.mutate(formData)
   }
 
-  // Handle Update
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.put(`/positions/${selectedPosition.id}`, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000
-        })
-        setIsEditModalOpen(false)
-        fetchPositions()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update position'
-      })
-    }
+    updateMutation.mutate({ id: selectedPosition.id, data: formData })
   }
 
-  // Handle Delete
   const handleDelete = useCallback(async (position) => {
     const result = await Swal.fire({
       title: 'Are you sure?',
@@ -132,26 +115,8 @@ function PositionPage() {
       confirmButtonText: 'Yes, delete it!',
       cancelButtonText: 'Cancel'
     })
-
     if (result.isConfirmed) {
-      try {
-        const response = await apiClient.delete(`/positions/${position.id}`)
-        if (response.data.success) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Deleted!',
-            text: response.data.message,
-            timer: 2000
-          })
-          fetchPositions()
-        }
-      } catch (error) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.response?.data?.message || 'Failed to delete position'
-        })
-      }
+      deleteMutateRef.current(position.id)
     }
   }, [])
 
@@ -221,7 +186,9 @@ function PositionPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : positions.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 

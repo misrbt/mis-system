@@ -5,6 +5,7 @@ import { Package } from 'lucide-react'
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
+import { normalizeArrayResponse } from '../../utils/assetFormatters'
 import AssetComponentsHeader from './asset-components/AssetComponentsHeader'
 import AssetComponentsAddModal from './asset-components/AssetComponentsAddModal'
 import AssetComponentsTransferModal from './asset-components/AssetComponentsTransferModal'
@@ -123,14 +124,14 @@ function AssetComponentsPage() {
     },
   })
 
-  const statuses = statusesData || []
-  const categories = categoriesData?.data || []
-  const subcategories = subcategoriesData?.data || []
-  const editSubcategories = editSubcategoriesData?.data || []
-  const vendors = vendorsData?.data || []
+  const statuses = normalizeArrayResponse(statusesData)
+  const categories = normalizeArrayResponse(categoriesData)
+  const subcategories = normalizeArrayResponse(subcategoriesData)
+  const editSubcategories = normalizeArrayResponse(editSubcategoriesData)
+  const vendors = normalizeArrayResponse(vendorsData)
   const components = componentsData || []
   const equipment = useMemo(
-    () => equipmentData?.data || equipmentData || [],
+    () => normalizeArrayResponse(equipmentData),
     [equipmentData]
   )
 
@@ -153,7 +154,7 @@ function AssetComponentsPage() {
     [eq.category_name, eq.subcategory_name].filter(Boolean).join(' / ')
 
   // Memoize employees to prevent unnecessary re-renders
-  const employees = useMemo(() => employeesData?.data || [], [employeesData?.data])
+  const employees = useMemo(() => normalizeArrayResponse(employeesData), [employeesData])
 
   // Filter employees based on search (same as bulk transfer)
   const filteredEmployees = useMemo(() => {
@@ -649,6 +650,22 @@ function AssetComponentsPage() {
           } else {
             handleDownloadBarcode(payload.component)
           }
+        }}
+        onCodeGenerated={(componentId, codeData) => {
+          // Update the modal with the newly generated code
+          setShowCodeModal((prev) => {
+            if (!prev || prev.component.id !== componentId) return prev
+            return {
+              ...prev,
+              component: {
+                ...prev.component,
+                qr_code: codeData.qr_code ?? prev.component.qr_code,
+                barcode: codeData.barcode ?? prev.component.barcode,
+              },
+            }
+          })
+          // Refresh the components list
+          queryClient.invalidateQueries({ queryKey: ['asset-components', id] })
         }}
       />
     </div>

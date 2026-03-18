@@ -22,6 +22,7 @@ import {
   Download,
   Printer,
   Loader2,
+  Shield,
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import CodeDisplayModal from '../../../components/CodeDisplayModal'
@@ -434,7 +435,8 @@ function IndividualAssetView({
     )
   }
 
-  const currentEmployee = asset?.assigned_employee
+  const currentEmployee = asset?.workstation?.employee || asset?.assigned_employee
+  const currentWorkstation = asset?.workstation
   const currentStatus = asset?.status
   const currentAssignmentDays = statistics?.current_assignment_days || 0
   const equipmentName = asset?.equipment
@@ -592,25 +594,40 @@ function IndividualAssetView({
                 <User className="w-5 h-5 text-blue-600" />
                 Current Assignment
               </h3>
-              {currentEmployee ? (
+              {currentEmployee || currentWorkstation ? (
                 <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600">
-                      <User className="w-6 h-6" />
+                  {currentEmployee && (
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600">
+                        <User className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{currentEmployee.fullname}</p>
+                        {(currentEmployee.position?.position_name || currentEmployee.position?.title) && (
+                          <p className="text-sm text-gray-600">{currentEmployee.position.position_name || currentEmployee.position.title}</p>
+                        )}
+                        {currentEmployee.branch && (
+                          <div className="flex items-center gap-1 mt-1 text-sm text-gray-500">
+                            <MapPin className="w-3.5 h-3.5" />
+                            {currentEmployee.branch.branch_name}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{currentEmployee.fullname}</p>
-                      {currentEmployee.position && (
-                        <p className="text-sm text-gray-600">{currentEmployee.position.position_name}</p>
-                      )}
-                      {currentEmployee.branch && (
-                        <div className="flex items-center gap-1 mt-1 text-sm text-gray-500">
-                          <MapPin className="w-3.5 h-3.5" />
-                          {currentEmployee.branch.branch_name}
-                        </div>
-                      )}
+                  )}
+                  {currentWorkstation && (
+                    <div className={`flex items-center gap-2 text-sm ${currentEmployee ? 'pt-3 border-t border-gray-100' : ''}`}>
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-700">{currentWorkstation.name}</p>
+                        {currentWorkstation.branch && (
+                          <p className="text-xs text-gray-500">{currentWorkstation.branch.branch_name}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {currentAssignmentDays > 0 && (
                     <div className="pt-3 border-t border-gray-100">
                       <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -621,15 +638,31 @@ function IndividualAssetView({
                       </div>
                     </div>
                   )}
-                  <div className="pt-3 border-t border-gray-100">
-                    <button
-                      onClick={() => navigateToEmployeeAssets(currentEmployee.id)}
-                      className="w-full px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Package className="w-4 h-4" />
-                      View All {currentEmployee.fullname.split(' ')[0]}'s Assets
-                    </button>
-                  </div>
+                  {currentEmployee && (
+                    <div className="pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => currentWorkstation
+                          ? navigateToEmployeeAssets(null, currentWorkstation.id)
+                          : navigateToEmployeeAssets(currentEmployee.id)
+                        }
+                        className="w-full px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Package className="w-4 h-4" />
+                        View All {currentEmployee.fullname.split(' ')[0]}'s Assets
+                      </button>
+                    </div>
+                  )}
+                  {!currentEmployee && currentWorkstation && (
+                    <div className="pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => navigateToEmployeeAssets(null, currentWorkstation.id)}
+                        className="w-full px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Package className="w-4 h-4" />
+                        View Workstation Assets
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
@@ -719,6 +752,48 @@ function IndividualAssetView({
                 )}
               </div>
             </div>
+
+            {/* Specifications Section */}
+            {asset.specifications && Object.keys(asset.specifications).length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 mt-4 sm:mt-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-indigo-600" />
+                  Specifications
+                </h3>
+                <div className="space-y-3">
+                  {Object.entries(asset.specifications).map(([key, value]) => {
+                    // Skip empty values and unit helpers
+                    if (value === null || value === undefined || value === '') return null
+                    if (key.includes('_unit')) return null
+                    
+                    // Format label nicely
+                    let label = key.replace(/_/g, ' ')
+                    label = label.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+                    
+                    // Special label cases
+                    if (key === 'os') label = 'Operating System'
+                    if (key === 'gpu') label = 'Graphics Processing Unit'
+
+                    // Format values with units if they exist
+                    let displayValue = value
+                    if (key === 'capacity' && asset.specifications.capacity_unit) displayValue = `${value} ${asset.specifications.capacity_unit}`
+                    if (key === 'ram' && asset.specifications.ram_unit) displayValue = `${value} ${asset.specifications.ram_unit}`
+                    if (key === 'storage_capacity' && asset.specifications.storage_unit) {
+                      displayValue = `${value} ${asset.specifications.storage_unit}`
+                      if (asset.specifications.storage_type) displayValue += ` ${asset.specifications.storage_type}`
+                    }
+                    if (key === 'storage_type') return null // Handled in storage_capacity
+
+                    return (
+                      <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-2 border-b border-gray-100 last:border-0">
+                        <span className="text-sm text-gray-600">{label}</span>
+                        <span className="font-medium text-gray-900 text-right">{String(displayValue)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* QR Code & Barcode Section */}
             <QRCodeSection asset={asset} />

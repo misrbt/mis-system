@@ -1,11 +1,12 @@
 <?php
 
+use App\Http\Middleware\ApiLogger;
+use App\Http\Middleware\CacheApiResponse;
+use App\Http\Middleware\ForceJsonResponse;
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use App\Http\Middleware\ForceJsonResponse;
-use App\Http\Middleware\SecurityHeaders;
-use App\Http\Middleware\ApiLogger;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -31,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Configure rate limiting for auth routes
         $middleware->alias([
             'throttle.auth' => \Illuminate\Routing\Middleware\ThrottleRequests::class.':5,1',
+            'cache.response' => CacheApiResponse::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

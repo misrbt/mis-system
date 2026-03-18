@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Package } from 'lucide-react'
 import Modal from '../../../components/Modal'
 import DataTable from '../../../components/DataTable'
@@ -6,9 +7,6 @@ import apiClient from '../../../services/apiClient'
 import Swal from 'sweetalert2'
 
 function OfficeToolsTab() {
-  const [officeTools, setOfficeTools] = useState([])
-  const [loading, setLoading] = useState(true)
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedOfficeTool, setSelectedOfficeTool] = useState(null)
@@ -19,27 +17,52 @@ function OfficeToolsTab() {
     description: '',
   })
 
-  const fetchOfficeTools = async () => {
-    try {
-      setLoading(true)
-      const response = await apiClient.get('/office-tools')
-      if (response.data.success) {
-        setOfficeTools(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch office tools',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    fetchOfficeTools()
-  }, [])
+  const { data: officeTools = [], isLoading: loading } = useQuery({
+    queryKey: ['office-tools'],
+    queryFn: async () => {
+      const response = await apiClient.get('/office-tools?all=true')
+      return response.data.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/office-tools', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['office-tools'] })
+      setIsAddModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Office tool created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to create office tool' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => apiClient.put(`/office-tools/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['office-tools'] })
+      setIsEditModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Office tool updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to update office tool' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => apiClient.delete(`/office-tools/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['office-tools'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Office tool deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete office tool' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -67,48 +90,12 @@ function OfficeToolsTab() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.post('/office-tools', formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchOfficeTools()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to create office tool',
-      })
-    }
+    createMutation.mutate(formData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.put(`/office-tools/${selectedOfficeTool.id}`, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsEditModalOpen(false)
-        fetchOfficeTools()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update office tool',
-      })
-    }
+    updateMutation.mutate({ id: selectedOfficeTool.id, data: formData })
   }
 
   const handleDelete = useCallback(async (officeTool) => {
@@ -124,24 +111,7 @@ function OfficeToolsTab() {
     })
 
     if (result.isConfirmed) {
-      try {
-        const response = await apiClient.delete(`/office-tools/${officeTool.id}`)
-        if (response.data.success) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Deleted!',
-            text: response.data.message,
-            timer: 2000,
-          })
-          fetchOfficeTools()
-        }
-      } catch (error) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.response?.data?.message || 'Failed to delete office tool',
-        })
-      }
+      deleteMutateRef.current(officeTool.id)
     }
   }, [])
 

@@ -20,6 +20,8 @@ const INITIAL_FORM_STATE = {
   vendor_id: '',
   remarks: '',
   assigned_to_employee_id: '',
+  workstation_branch_id: '',
+  workstation_position_id: '',
 }
 
 export const useAssetForm = (initialData = INITIAL_FORM_STATE) => {
@@ -128,6 +130,8 @@ export const useAssetForm = (initialData = INITIAL_FORM_STATE) => {
       { field: 'asset_category_id', label: 'Category' },
       { field: 'purchase_date', label: 'Purchase Date' },
       { field: 'acq_cost', label: 'Acquisition Cost' },
+      { field: 'workstation_branch_id', label: 'Workstation Branch' },
+      { field: 'workstation_position_id', label: 'Workstation Position' },
     ]
 
     for (const { field, label } of requiredFields) {
@@ -210,6 +214,8 @@ export const useAssetForm = (initialData = INITIAL_FORM_STATE) => {
       asset_category_id: formData.asset_category_id || null,
       vendor_id: formData.vendor_id || null,
       assigned_to_employee_id: formData.assigned_to_employee_id || null,
+      workstation_branch_id: formData.workstation_branch_id || null,
+      workstation_position_id: formData.workstation_position_id || null,
     }
   }
 

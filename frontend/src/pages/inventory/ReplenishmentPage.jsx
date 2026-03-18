@@ -1,30 +1,27 @@
-import { useCallback, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   RefreshCw,
-  Search,
   Plus,
   Filter,
   Package2,
 } from 'lucide-react'
-import {
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
 import apiClient from '../../services/apiClient'
 import { getReplenishmentColumns } from './replenishment/replenishmentColumns'
-import ReplenishmentFormModal from './replenishment/ReplenishmentFormModal'
-import AssignModal from './replenishment/AssignModal'
 import Modal from '../../components/Modal'
+
+const ReplenishmentFormModal = lazy(() => import('./replenishment/ReplenishmentFormModal'))
+const AssignModal = lazy(() => import('./replenishment/AssignModal'))
+import DataTable from '../../components/DataTable'
 import Swal from 'sweetalert2'
 import { buildSerialNumber } from '../../utils/assetSerial'
 
 const normalizeArrayResponse = (data) => {
+  // Handle paginated responses (data.data.data)
+  if (data?.data && Array.isArray(data.data.data)) return data.data.data
+  // Handle standard wrapped responses (data.data)
   if (Array.isArray(data?.data)) return data.data
+  // Handle direct arrays
   if (Array.isArray(data)) return data
   return []
 }
@@ -110,46 +107,68 @@ const notifyError = (fallback, error) => {
 function ReplenishmentPage() {
   const queryClient = useQueryClient()
 
+  // Defer secondary queries until after first paint to prevent mount-time flood
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setHydrated(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
   // State management
-  const [selectedRows, setSelectedRows] = useState({})
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [selectedReplenishment, setSelectedReplenishment] = useState(null)
-  const [globalFilter, setGlobalFilter] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState(INITIAL_FILTERS)
+  const [queryFilters, setQueryFilters] = useState(INITIAL_FILTERS)
   const [formData, setFormData] = useState(INITIAL_FORM_DATA)
   const [components, setComponents] = useState([])
 
-  // Fetch replenishments - disabled by default to prevent freeze if DB not ready
+  // Debounce filters: update queryFilters 300ms after user stops changing filters
+  useEffect(() => {
+    const id = setTimeout(() => setQueryFilters(filters), 300)
+    return () => clearTimeout(id)
+  }, [filters])
+
+  // Fetch replenishments
   const { data: replenishmentsData, isLoading, refetch, isError, error } = useQuery({
-    queryKey: ['replenishments', filters],
+    queryKey: ['replenishments', queryFilters],
     queryFn: async () => {
       const params = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
+      Object.entries(queryFilters).forEach(([key, value]) => {
         if (value) params.append(key, value)
       })
+      params.append('all', 'true')
       const response = await apiClient.get(`/replenishments?${params.toString()}`)
       return response.data
     },
     retry: 0,
-    enabled: true, // Allow it to try once
+    enabled: true,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    staleTime: Infinity,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
   })
 
-  // Fetch filter options
+  // modalOpen = any form modal is open (drives secondary query loading)
+  const modalOpen = isAddModalOpen || isEditModalOpen
+
+  // Fetch filter options — only load when the filter panel or a modal is open
+  const filterOrModal = hydrated && (showFilters || modalOpen)
+
   const { data: categories } = useQuery({
     queryKey: ['asset-categories'],
     queryFn: async () => {
       const response = await apiClient.get('/asset-categories')
       return normalizeArrayResponse(response.data)
     },
+    enabled: filterOrModal,
     retry: 0,
     refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: subcategories } = useQuery({
@@ -159,10 +178,11 @@ function ReplenishmentPage() {
       const response = await apiClient.get(`/asset-categories/${formData.asset_category_id}/subcategories`)
       return normalizeArrayResponse(response.data)
     },
-    enabled: !!formData.asset_category_id,
+    enabled: modalOpen && !!formData.asset_category_id,
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: statuses } = useQuery({
@@ -171,9 +191,11 @@ function ReplenishmentPage() {
       const response = await apiClient.get('/statuses')
       return normalizeArrayResponse(response.data)
     },
+    enabled: filterOrModal,
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: vendors } = useQuery({
@@ -182,9 +204,11 @@ function ReplenishmentPage() {
       const response = await apiClient.get('/vendors')
       return normalizeArrayResponse(response.data)
     },
+    enabled: filterOrModal,
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: branches } = useQuery({
@@ -193,20 +217,25 @@ function ReplenishmentPage() {
       const response = await apiClient.get('/branches')
       return normalizeArrayResponse(response.data)
     },
+    enabled: filterOrModal,
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
-  const { data: employees } = useQuery({
-    queryKey: ['employees'],
+  // Workstations — needed for assign modal and forms
+  const { data: workstations } = useQuery({
+    queryKey: ['workstations'],
     queryFn: async () => {
-      const response = await apiClient.get('/employees')
+      const response = await apiClient.get('/workstations')
       return normalizeArrayResponse(response.data)
     },
+    enabled: hydrated && (modalOpen || isAssignModalOpen),
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   const { data: equipmentList } = useQuery({
@@ -215,9 +244,11 @@ function ReplenishmentPage() {
       const response = await apiClient.get('/equipment')
       return normalizeArrayResponse(response.data)
     },
+    enabled: hydrated && modalOpen,
     retry: 0,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   })
 
   // Vendor modal state
@@ -239,32 +270,35 @@ function ReplenishmentPage() {
 
   const vendorOptions = useMemo(
     () =>
-      (Array.isArray(vendors) ? vendors : []).map((vendor) => ({
+      normalizeArrayResponse(vendors).map((vendor) => ({
         id: vendor.id,
         name: vendor.company_name,
       })),
     [vendors]
   )
 
-  const employeeOptions = useMemo(
+  const workstationOptions = useMemo(
     () =>
-      (Array.isArray(employees) ? employees : []).map((emp) => ({
-        id: emp.id,
-        name: emp.fullname,
-        position: emp.position?.title,
-        branch: emp.branch?.branch_name,
+      normalizeArrayResponse(workstations).map((ws) => ({
+        id: ws.id,
+        name: ws.employee?.fullname
+          ? `${ws.employee.fullname}`
+          : ws.name,
+        branch: ws.branch?.branch_name,
+        employee: ws.employee?.fullname,
+        workstation_name: ws.name,
       })),
-    [employees]
+    [workstations]
   )
 
   const branchOptions = useMemo(
-    () => (Array.isArray(branches) ? branches : []),
+    () => normalizeArrayResponse(branches),
     [branches]
   )
 
   const equipmentOptions = useMemo(
     () =>
-      (Array.isArray(equipmentList) ? equipmentList : []).map((eq) => ({
+      normalizeArrayResponse(equipmentList).map((eq) => ({
         id: eq.id,
         name: `${eq.brand} ${eq.model}`,
         brand: eq.brand,
@@ -320,25 +354,14 @@ function ReplenishmentPage() {
     },
   })
 
-  const assignEmployeeMutation = useMutation({
-    mutationFn: ({ id, employeeId }) =>
-      apiClient.post(`/replenishments/${id}/assign-employee`, { employee_id: employeeId }),
+  const assignWorkstationMutation = useMutation({
+    mutationFn: ({ id, workstationId }) =>
+      apiClient.post(`/replenishments/${id}/assign-workstation`, { workstation_id: workstationId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['replenishments'] })
-      notifySuccess('Success', 'Asset assigned to employee successfully')
-      setIsAssignModalOpen(false)
-    },
-    onError: (error) => {
-      notifyError('Failed to assign asset', error)
-    },
-  })
-
-  const assignBranchMutation = useMutation({
-    mutationFn: ({ id, branchId }) =>
-      apiClient.post(`/replenishments/${id}/assign-branch`, { branch_id: branchId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['replenishments'] })
-      notifySuccess('Success', 'Asset assigned to branch successfully')
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      queryClient.invalidateQueries({ queryKey: ['workstations'] })
+      notifySuccess('Success', 'Asset deployed to workstation successfully')
       setIsAssignModalOpen(false)
     },
     onError: (error) => {
@@ -441,7 +464,7 @@ function ReplenishmentPage() {
   const handleCreateVendor = useCallback((e) => {
     e.preventDefault()
     createVendorMutation.mutate(vendorFormData)
-  }, [createVendorMutation, vendorFormData])
+  }, [vendorFormData, createVendorMutation])
 
   // Component handlers for Desktop PC
   const handleComponentAdd = useCallback(() => {
@@ -514,6 +537,7 @@ function ReplenishmentPage() {
 
   const clearFilters = useCallback(() => {
     setFilters(INITIAL_FILTERS)
+    setQueryFilters(INITIAL_FILTERS)
   }, [])
 
   const openAddModal = useCallback(() => {
@@ -546,7 +570,7 @@ function ReplenishmentPage() {
       }
       createMutation.mutate(payload)
     },
-    [createMutation, formData]
+    [formData, createMutation]
   )
 
   const handleUpdate = useCallback(
@@ -567,46 +591,29 @@ function ReplenishmentPage() {
     [formData, selectedReplenishment, updateMutation]
   )
 
-  const handleDelete = useCallback(
-    async (replenishment) => {
-      const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: `Delete reserve asset "${replenishment.asset_name}"?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc2626',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-      })
+  const handleDelete = useCallback(async (replenishment) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Delete reserve asset "${replenishment.asset_name}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+    })
+    if (result.isConfirmed) {
+      deleteMutation.mutate(replenishment.id)
+    }
+  }, [deleteMutation])
 
-      if (result.isConfirmed) {
-        deleteMutation.mutate(replenishment.id)
-      }
-    },
-    [deleteMutation]
-  )
+  const handleAssignWorkstation = useCallback((id, workstationId) => {
+    assignWorkstationMutation.mutate({ id, workstationId })
+  }, [assignWorkstationMutation])
 
-  const handleAssignEmployee = useCallback(
-    (id, employeeId) => {
-      assignEmployeeMutation.mutate({ id, employeeId })
-    },
-    [assignEmployeeMutation]
-  )
-
-  const handleAssignBranch = useCallback(
-    (id, branchId) => {
-      assignBranchMutation.mutate({ id, branchId })
-    },
-    [assignBranchMutation]
-  )
-
-  const handleRemoveAssignment = useCallback(
-    (id) => {
-      removeAssignmentMutation.mutate(id)
-    },
-    [removeAssignmentMutation]
-  )
+  const handleRemoveAssignment = useCallback((id) => {
+    removeAssignmentMutation.mutate(id)
+  }, [removeAssignmentMutation])
 
   // Table columns
   const columns = useMemo(
@@ -622,30 +629,17 @@ function ReplenishmentPage() {
     [statusColorMap, openEditModal, openAssignModal, handleDelete]
   )
 
-  const replenishmentsList = Array.isArray(replenishmentsData?.data) ? replenishmentsData.data : []
+  const replenishmentsList = useMemo(() => {
+    const raw = replenishmentsData?.data
+    if (Array.isArray(raw?.data)) return raw.data
+    if (Array.isArray(raw)) return raw
+    return []
+  }, [replenishmentsData?.data])
 
-  // Table instance
-  const table = useReactTable({
-    data: replenishmentsList,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    state: {
-      rowSelection: selectedRows,
-      globalFilter,
-    },
-    onGlobalFilterChange: setGlobalFilter,
-    onRowSelectionChange: setSelectedRows,
-    enableRowSelection: true,
-  })
-
-  const filteredCount = globalFilter
-    ? table.getFilteredRowModel().rows.length
-    : replenishmentsList.length
-
-  const hasActiveFilters = Object.values(filters).some((v) => v)
+  const hasActiveFilters = useMemo(
+    () => Object.values(filters).some((v) => v),
+    [filters]
+  )
 
   return (
     <div className="space-y-6">
@@ -788,227 +782,107 @@ function ReplenishmentPage() {
         </div>
       )}
 
-      {/* Data Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        {/* Search */}
-        <div className="px-4 py-3 border-b border-slate-200">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder="Search assets..."
-              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+      {/* Data Table — same pattern as StatusPage/SubcategoryPage */}
+      {isError ? (
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
+          <div className="text-red-600 font-semibold mb-2">Failed to load replenishments</div>
+          <div className="text-sm text-slate-500 mb-4">
+            {error?.response?.data?.message || error?.message || 'An error occurred'}
           </div>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50"
+          >
+            Try again
+          </button>
         </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={replenishmentsList}
+          loading={isLoading}
+          pageSize={10}
+        />
+      )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider"
-                      style={{ width: header.getSize() }}
-                    >
-                      {header.isPlaceholder ? null : (
-                        <div
-                          className={
-                            header.column.getCanSort()
-                              ? 'cursor-pointer select-none hover:text-slate-900'
-                              : ''
-                          }
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {{
-                            asc: ' ↑',
-                            desc: ' ↓',
-                          }[header.column.getIsSorted()] ?? null}
-                        </div>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody className="bg-white divide-y divide-slate-200">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-8 text-center">
-                    <div className="flex items-center justify-center">
-                      <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
-                      <span className="ml-2 text-slate-600">Loading reserve assets...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : isError ? (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-8 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="text-red-600 font-semibold">Failed to load replenishments</div>
-                      <div className="text-sm text-slate-500">
-                        {error?.response?.data?.message || error?.message || 'Database table may not exist yet'}
-                      </div>
-                      <button
-                        onClick={() => refetch()}
-                        className="mt-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 underline"
-                      >
-                        Try again
-                      </button>
-                      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg max-w-lg">
-                        <p className="text-sm text-yellow-800">
-                          <strong>Note:</strong> The replenishments table may not be created yet. 
-                          You can still add reserve assets using the "Add Reserve Asset" button above, 
-                          but they won't be saved until the database is set up.
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : table.getRowModel().rows.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-500">
-                    No reserve assets found. Try adjusting your filters or add a new one.
-                  </td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={`hover:bg-slate-50 transition-colors ${
-                      row.getIsSelected() ? 'bg-blue-50' : ''
-                    }`}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-sm">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Add Modal — lazy loaded, only mounted when open */}
+      {isAddModalOpen && (
+        <Suspense fallback={null}>
+          <ReplenishmentFormModal
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          title="Add Reserve Asset"
+          onSubmit={handleCreate}
+          submitLabel={createMutation.isPending ? 'Creating...' : 'Create Asset'}
+          isSubmitting={createMutation.isPending}
+          formData={formData}
+          onInputChange={handleInputChange}
+          onVendorChange={handleVendorChange}
+          onGenerateSerial={generateSerialNumber}
+          onGenerateComponentSerial={generateComponentSerial}
+          onAddVendor={openVendorModal}
+          categories={categories}
+          subcategories={subcategories || []}
+          vendorOptions={vendorOptions}
+          statusOptions={statusOptions}
+          equipmentOptions={equipmentOptions}
+          components={components}
+          onComponentAdd={handleComponentAdd}
+          onComponentRemove={handleComponentRemove}
+          onComponentChange={handleComponentChange}
+          isEditMode={false}
+        />
+        </Suspense>
+      )}
 
-        {/* Pagination */}
-        {!isLoading && table.getRowModel().rows.length > 0 && (
-          <div className="px-4 py-3 border-t border-slate-200">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-sm text-slate-700">
-                Showing{' '}
-                <span className="font-semibold">
-                  {filteredCount === 0
-                    ? 0
-                    : table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}
-                </span>
-                -
-                <span className="font-semibold">
-                  {Math.min(
-                    (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                    filteredCount
-                  )}
-                </span>{' '}
-                of <span className="font-semibold">{filteredCount}</span> assets
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => table.previousPage()}
-                  disabled={!table.getCanPreviousPage()}
-                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-slate-700 px-2">
-                  Page{' '}
-                  <span className="font-semibold">{table.getState().pagination.pageIndex + 1}</span> of{' '}
-                  <span className="font-semibold">{table.getPageCount()}</span>
-                </span>
-                <button
-                  onClick={() => table.nextPage()}
-                  disabled={!table.getCanNextPage()}
-                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Edit Modal — lazy loaded, only mounted when open */}
+      {isEditModalOpen && (
+        <Suspense fallback={null}>
+          <ReplenishmentFormModal
+          isOpen={true}
+          onClose={() => setIsEditModalOpen(false)}
+          title="Edit Reserve Asset"
+          onSubmit={handleUpdate}
+          submitLabel={updateMutation.isPending ? 'Updating...' : 'Update Asset'}
+          isSubmitting={updateMutation.isPending}
+          formData={formData}
+          onInputChange={handleInputChange}
+          onVendorChange={handleVendorChange}
+          onGenerateSerial={generateSerialNumber}
+          onGenerateComponentSerial={generateComponentSerial}
+          onAddVendor={openVendorModal}
+          categories={categories}
+          subcategories={subcategories || []}
+          vendorOptions={vendorOptions}
+          statusOptions={statusOptions}
+          equipmentOptions={equipmentOptions}
+          components={components}
+          onComponentAdd={handleComponentAdd}
+          onComponentRemove={handleComponentRemove}
+          onComponentChange={handleComponentChange}
+          isEditMode={true}
+          showBookValue={true}
+        />
+        </Suspense>
+      )}
 
-      {/* Add Modal */}
-      <ReplenishmentFormModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Add Reserve Asset"
-        onSubmit={handleCreate}
-        submitLabel={createMutation.isPending ? 'Creating...' : 'Create Asset'}
-        isSubmitting={createMutation.isPending}
-        formData={formData}
-        onInputChange={handleInputChange}
-        onVendorChange={handleVendorChange}
-        onGenerateSerial={generateSerialNumber}
-        onGenerateComponentSerial={generateComponentSerial}
-        onAddVendor={openVendorModal}
-        categories={categories}
-        subcategories={subcategories || []}
-        vendorOptions={vendorOptions}
-        statusOptions={statusOptions}
-        equipmentOptions={equipmentOptions}
-        components={components}
-        onComponentAdd={handleComponentAdd}
-        onComponentRemove={handleComponentRemove}
-        onComponentChange={handleComponentChange}
-        isEditMode={false}
-      />
-
-      {/* Edit Modal */}
-      <ReplenishmentFormModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        title="Edit Reserve Asset"
-        onSubmit={handleUpdate}
-        submitLabel={updateMutation.isPending ? 'Updating...' : 'Update Asset'}
-        isSubmitting={updateMutation.isPending}
-        formData={formData}
-        onInputChange={handleInputChange}
-        onVendorChange={handleVendorChange}
-        onGenerateSerial={generateSerialNumber}
-        onGenerateComponentSerial={generateComponentSerial}
-        onAddVendor={openVendorModal}
-        categories={categories}
-        subcategories={subcategories || []}
-        vendorOptions={vendorOptions}
-        statusOptions={statusOptions}
-        equipmentOptions={equipmentOptions}
-        components={components}
-        onComponentAdd={handleComponentAdd}
-        onComponentRemove={handleComponentRemove}
-        onComponentChange={handleComponentChange}
-        isEditMode={true}
-        showBookValue={true}
-      />
-
-      {/* Assign Modal */}
-      <AssignModal
-        isOpen={isAssignModalOpen}
-        onClose={() => setIsAssignModalOpen(false)}
-        replenishment={selectedReplenishment}
-        employeeOptions={employeeOptions}
-        onAssignEmployee={handleAssignEmployee}
-        onRemoveAssignment={handleRemoveAssignment}
-        isAssigning={
-          assignEmployeeMutation.isPending ||
-          removeAssignmentMutation.isPending
-        }
-      />
+      {/* Assign Modal — lazy loaded, only mounted when open */}
+      {isAssignModalOpen && (
+        <Suspense fallback={null}>
+          <AssignModal
+          isOpen={true}
+          onClose={() => setIsAssignModalOpen(false)}
+          replenishment={selectedReplenishment}
+          workstationOptions={workstationOptions}
+          onAssignWorkstation={handleAssignWorkstation}
+          onRemoveAssignment={handleRemoveAssignment}
+          isAssigning={
+            assignWorkstationMutation.isPending ||
+            removeAssignmentMutation.isPending
+          }
+        />
+        </Suspense>
+      )}
 
       {/* Add Vendor Modal */}
       <Modal

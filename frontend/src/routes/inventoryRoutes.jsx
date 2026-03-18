@@ -9,7 +9,8 @@ const BranchPage = lazy(() => import('../pages/inventory/BranchPage'))
 const SectionPage = lazy(() => import('../pages/inventory/SectionPage'))
 const PositionPage = lazy(() => import('../pages/inventory/PositionPage'))
 const EmployeePage = lazy(() => import('../pages/inventory/EmployeePage'))
-const EmployeeListPage = lazy(() => import('../pages/inventory/EmployeeListPage'))
+const WorkstationListPage = lazy(() => import('../pages/inventory/WorkstationListPage'))
+const EmployeeTransitionsPage = lazy(() => import('../pages/inventory/EmployeeTransitionsPage'))
 const StatusPage = lazy(() => import('../pages/inventory/StatusPage'))
 const VendorsPage = lazy(() => import('../pages/inventory/VendorsPage'))
 const EquipmentPage = lazy(() => import('../pages/inventory/EquipmentPage'))
@@ -60,8 +61,12 @@ const inventoryRoutes = {
       element: <EmployeePage />,
     },
     {
-      path: 'employee-list',
-      element: <EmployeeListPage />,
+      path: 'workstations',
+      element: <WorkstationListPage />,
+    },
+    {
+      path: 'employee-transitions',
+      element: <EmployeeTransitionsPage />,
     },
     {
       path: 'statuses',
@@ -102,6 +107,10 @@ const inventoryRoutes = {
 
     {
       path: 'employees/:employeeId/assets',
+      element: <AssetViewPage />,
+    },
+    {
+      path: 'workstations/:workstationId/assets',
       element: <AssetViewPage />,
     },
     {

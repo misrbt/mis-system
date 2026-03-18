@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Eye, EyeOff, LogIn, Loader2, Mail, Lock, Shield } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -128,15 +128,6 @@ function Login() {
                   )}
                 </button>
               </form>
-
-              <div className="mt-6 pt-6 border-t border-slate-200">
-                <p className="text-center text-slate-500 text-sm">
-                  Don't have an account?{' '}
-                  <Link to="/auth/register" className="text-blue-600 hover:text-blue-700 font-medium transition-colors">
-                    Create account
-                  </Link>
-                </p>
-              </div>
             </div>
           </div>
         </div>

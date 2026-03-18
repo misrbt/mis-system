@@ -1,8 +1,7 @@
-import AddAssetModal from "../../../components/asset-view/AddAssetModal";
 import DeleteConfirmModal from "../../../components/asset-view/DeleteConfirmModal";
 import BulkTransferModal from "./BulkTransferModal";
 import CodeModal from "./CodeModal";
-import EditAssetModal from "./EditAssetModal";
+import AssetFormModal from "../../../components/asset-view/AssetFormModal";
 import RemarksModal from "./RemarksModal";
 import VendorModal from "./VendorModal";
 import RepairFormModal from "../../../components/RepairFormModal";
@@ -72,6 +71,8 @@ function AssetViewModals({ controller, isEmployeeView }) {
     isRepairModalOpen,
     repairModalAsset,
     closeRepairModal,
+    branchOptions,
+    positionOptions,
   } = controller;
 
   return (
@@ -90,25 +91,40 @@ function AssetViewModals({ controller, isEmployeeView }) {
             onClose={() => setRemarksModal(null)}
           />
 
-          <AddAssetModal
+          <AssetFormModal
             isOpen={showAddModal}
             onClose={() => setShowAddModal(false)}
+            title="Create New Asset"
+            submitLabel="Create Asset"
             formData={addFormData}
             onInputChange={handleAddInputChange}
+            onVendorChange={(value) => handleAddInputChange('vendor_id', value)}
+            onEmployeeChange={(value) => handleAddInputChange('assigned_to_employee_id', value)}
             categories={categories}
             subcategories={addSubcategories}
             equipmentOptions={equipmentOptions}
-            vendors={vendors}
-            statuses={statuses}
+            vendorOptions={vendors}
+            employeeOptions={employees}
+            statusOptions={statuses}
+            branchOptions={branchOptions}
+            positionOptions={positionOptions}
+            showStatus={false}
+            showBookValue={false}
+            hideWorkstationFields={true}
+            hideAssignedEmployee={true}
+            assignmentTitle="Remarks & Notes"
+            assignmentSubtitle="Additional information about the asset"
+            usePlaceholders={true}
             onGenerateSerial={generateSerialNumber}
             onGenerateComponentSerial={generateComponentSerialNumber}
             onSubmit={handleAddAsset}
-            isPending={addAssetPending}
+            isSubmitting={addAssetPending}
             components={components}
             onComponentAdd={handleComponentAdd}
             onComponentRemove={handleComponentRemove}
             onComponentChange={handleComponentChange}
             onAddVendor={openVendorModal}
+            isEditMode={false}
           />
 
           <VendorModal
@@ -149,24 +165,39 @@ function AssetViewModals({ controller, isEmployeeView }) {
             isPending={deleteAssetPending}
           />
 
-          <EditAssetModal
+          <AssetFormModal
             isOpen={showEditModal}
             data={editModalData}
+            title="Edit Asset Details"
+            submitLabel="Save Changes"
             categories={categories}
             subcategories={editSubcategories}
-            statuses={statuses}
-            vendors={vendors}
+            statusOptions={statuses}
+            vendorOptions={vendors}
+            employeeOptions={employees}
             equipmentOptions={equipmentOptions}
+            branchOptions={branchOptions}
+            positionOptions={positionOptions}
             formData={editFormData}
             onClose={handleCancelEdit}
-            onChange={(field, value) => handleInputChange(field, value)}
-            onSave={handleSaveEdit}
-            isPending={updateAssetPending}
+            onInputChange={(field, value) => handleInputChange(field, value)}
+            onVendorChange={(value) => handleInputChange('vendor_id', value)}
+            onEmployeeChange={(value) => handleInputChange('assigned_to_employee_id', value)}
+            usePlaceholders={false}
+            showStatus={false}
+            showBookValue={true}
+            hideWorkstationFields={true}
+            hideAssignedEmployee={true}
+            assignmentTitle="Remarks & Notes"
+            assignmentSubtitle="Additional information about the asset"
+            onSubmit={handleSaveEdit}
+            isSubmitting={updateAssetPending}
             components={editComponents}
             onComponentAdd={handleEditComponentAdd}
             onComponentRemove={handleEditComponentRemove}
             onComponentChange={handleEditComponentChange}
             onGenerateComponentSerial={generateEditComponentSerialNumber}
+            isEditMode={true}
           />
 
           <RepairFormModal

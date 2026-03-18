@@ -22,7 +22,7 @@ class UpdateAssetSubcategoryRequest extends FormRequest
                 'max:255',
                 Rule::unique('asset_subcategories')->where(function ($query) {
                     return $query->where('category_id', $this->category_id);
-                })->ignore($this->route('id')),
+                })->ignore($this->route('asset_subcategory')),
             ],
             'description' => 'nullable|string',
         ];

@@ -35,11 +35,12 @@ class DashboardService
             $topCategories = $this->getTopCategories();
             $warrantyExpiringSoon = $this->getWarrantyExpiringSoon();
 
-            // Count assigned and available assets based on employee assignment
+            // Count assigned and available assets (both direct employee and workstation-based)
             $assignmentStats = DB::table('assets')
+                ->leftJoin('workstations', 'assets.workstation_id', '=', 'workstations.id')
                 ->selectRaw('
-                    COUNT(CASE WHEN assigned_to_employee_id IS NOT NULL THEN 1 END) as assigned_count,
-                    COUNT(CASE WHEN assigned_to_employee_id IS NULL THEN 1 END) as available_count
+                    COUNT(CASE WHEN assigned_to_employee_id IS NOT NULL OR workstations.employee_id IS NOT NULL THEN 1 END) as assigned_count,
+                    COUNT(CASE WHEN assigned_to_employee_id IS NULL AND (workstations.employee_id IS NULL OR assets.workstation_id IS NULL) THEN 1 END) as available_count
                 ')
                 ->first();
 
@@ -138,12 +139,14 @@ class DashboardService
 
     /**
      * Get assets grouped by branch with percentages
+     * Considers both direct employee assignment and workstation-based assignment
      */
     private function getAssetsByBranch(int $totalAssets)
     {
         $branches = DB::table('assets')
             ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
-            ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
+            ->leftJoin('workstations', 'assets.workstation_id', '=', 'workstations.id')
+            ->leftJoin('branch', DB::raw('COALESCE(workstations.branch_id, employee.branch_id)'), '=', 'branch.id')
             ->select(
                 DB::raw('COALESCE(branch.branch_name, \'Unassigned\') as branch'),
                 DB::raw('COUNT(*) as count'),
@@ -164,14 +167,17 @@ class DashboardService
 
     /**
      * Get recent assets with minimal data
+     * Considers both direct employee assignment and workstation-based assignment
      */
     private function getRecentAssets()
     {
         return DB::table('assets')
             ->leftJoin('asset_category', 'assets.asset_category_id', '=', 'asset_category.id')
             ->leftJoin('status', 'assets.status_id', '=', 'status.id')
-            ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
-            ->leftJoin('branch', 'employee.branch_id', '=', 'branch.id')
+            ->leftJoin('employee as direct_emp', 'assets.assigned_to_employee_id', '=', 'direct_emp.id')
+            ->leftJoin('workstations', 'assets.workstation_id', '=', 'workstations.id')
+            ->leftJoin('employee as ws_emp', 'workstations.employee_id', '=', 'ws_emp.id')
+            ->leftJoin('branch', DB::raw('COALESCE(workstations.branch_id, direct_emp.branch_id)'), '=', 'branch.id')
             ->select(
                 'assets.id',
                 'assets.asset_name',
@@ -180,7 +186,7 @@ class DashboardService
                 'asset_category.name as category_name',
                 'status.name as status_name',
                 'branch.branch_name',
-                'employee.fullname as employee_name'
+                DB::raw('COALESCE(ws_emp.fullname, direct_emp.fullname) as employee_name')
             )
             ->orderBy('assets.created_at', 'desc')
             ->limit(10)
@@ -300,42 +306,37 @@ class DashboardService
         $cacheKey = "dashboard:monthly_expenses:{$currentYear}";
 
         return Cache::remember($cacheKey, self::CACHE_DURATION, function () use ($currentYear) {
-            // Single query to get both acquisitions and repairs
-            $expenses = DB::table(DB::raw('
-                (SELECT
-                    EXTRACT(MONTH FROM purchase_date) as month_num,
-                    SUM(acq_cost) as acquisition_cost,
-                    0 as repair_cost
-                FROM assets
-                WHERE EXTRACT(YEAR FROM purchase_date) = ?
-                GROUP BY EXTRACT(MONTH FROM purchase_date)
+            // Optimized: Separate queries are faster than UNION with EXTRACT
+            // DATE_TRUNC enables index usage (purchase_date and repair_date indexes)
+            $startDate = "{$currentYear}-01-01";
+            $endDate = "{$currentYear}-12-31";
 
-                UNION ALL
-
-                SELECT
-                    EXTRACT(MONTH FROM repair_date) as month_num,
-                    0 as acquisition_cost,
-                    SUM(repair_cost) as repair_cost
-                FROM repairs
-                WHERE EXTRACT(YEAR FROM repair_date) = ?
-                GROUP BY EXTRACT(MONTH FROM repair_date)) as combined
-            '))
-                ->select(
-                    'month_num',
-                    DB::raw('SUM(acquisition_cost) as acquisition_cost'),
-                    DB::raw('SUM(repair_cost) as repair_cost')
-                )
-                ->setBindings([$currentYear, $currentYear])
-                ->groupBy('month_num')
+            // Get asset acquisitions - uses purchase_date index
+            $acquisitions = DB::table('assets')
+                ->select(DB::raw("DATE_PART('month', purchase_date) as month_num"))
+                ->selectRaw('SUM(acq_cost) as acquisition_cost')
+                ->whereBetween('purchase_date', [$startDate, $endDate])
+                ->groupBy(DB::raw("DATE_PART('month', purchase_date)"))
                 ->get()
                 ->keyBy('month_num');
 
-            // Generate all 12 months
+            // Get repairs - uses repair_date index
+            $repairs = DB::table('repairs')
+                ->select(DB::raw("DATE_PART('month', repair_date) as month_num"))
+                ->selectRaw('SUM(repair_cost) as repair_cost')
+                ->whereBetween('repair_date', [$startDate, $endDate])
+                ->groupBy(DB::raw("DATE_PART('month', repair_date)"))
+                ->get()
+                ->keyBy('month_num');
+
+            // Generate all 12 months with merged data
             $result = [];
             for ($m = 1; $m <= 12; $m++) {
-                $expense = $expenses->get($m);
-                $acquisitionCost = (float) ($expense->acquisition_cost ?? 0);
-                $repairCost = (float) ($expense->repair_cost ?? 0);
+                $acquisition = $acquisitions->get($m);
+                $repair = $repairs->get($m);
+
+                $acquisitionCost = (float) ($acquisition->acquisition_cost ?? 0);
+                $repairCost = (float) ($repair->repair_cost ?? 0);
 
                 $result[] = [
                     'month' => date('M Y', mktime(0, 0, 0, $m, 1, $currentYear)),
@@ -359,50 +360,47 @@ class DashboardService
             $currentYear = now()->year;
             $years = range($currentYear - 2, $currentYear);
 
-            // Single query for all years
-            $data = DB::table(DB::raw('
-                (SELECT
-                    EXTRACT(YEAR FROM purchase_date) as year,
-                    SUM(acq_cost) as acquisition_cost,
-                    0 as repair_cost,
-                    COUNT(*) as asset_count
-                FROM assets
-                WHERE EXTRACT(YEAR FROM purchase_date) IN (' . implode(',', $years) . ')
-                GROUP BY EXTRACT(YEAR FROM purchase_date)
+            // Sanitize years array - ensure only integers
+            $years = array_map('intval', $years);
+            $startYear = $currentYear - 2;
+            $endYear = $currentYear;
 
-                UNION ALL
-
-                SELECT
-                    EXTRACT(YEAR FROM repair_date) as year,
-                    0 as acquisition_cost,
-                    SUM(repair_cost) as repair_cost,
-                    0 as asset_count
-                FROM repairs
-                WHERE EXTRACT(YEAR FROM repair_date) IN (' . implode(',', $years) . ')
-                GROUP BY EXTRACT(YEAR FROM repair_date)) as combined
-            '))
-                ->select(
-                    'year',
-                    DB::raw('SUM(acquisition_cost) as acquisition_cost'),
-                    DB::raw('SUM(repair_cost) as repair_cost'),
-                    DB::raw('SUM(asset_count) as asset_count')
-                )
-                ->groupBy('year')
+            // Optimized: Separate queries with date range filters (index-friendly)
+            // Get asset acquisitions - uses purchase_date index
+            $acquisitions = DB::table('assets')
+                ->select(DB::raw("DATE_PART('year', purchase_date) as year"))
+                ->selectRaw('SUM(acq_cost) as acquisition_cost')
+                ->selectRaw('COUNT(*) as asset_count')
+                ->whereBetween('purchase_date', ["{$startYear}-01-01", "{$endYear}-12-31"])
+                ->groupBy(DB::raw("DATE_PART('year', purchase_date)"))
                 ->get()
                 ->keyBy('year');
 
+            // Get repairs - uses repair_date index
+            $repairData = DB::table('repairs')
+                ->select(DB::raw("DATE_PART('year', repair_date) as year"))
+                ->selectRaw('SUM(repair_cost) as repair_cost')
+                ->whereBetween('repair_date', ["{$startYear}-01-01", "{$endYear}-12-31"])
+                ->groupBy(DB::raw("DATE_PART('year', repair_date)"))
+                ->get()
+                ->keyBy('year');
+
+            // Merge data from both queries
             $result = [];
             foreach ($years as $year) {
-                $yearData = $data->get($year);
-                $acquisitionCost = (float) ($yearData->acquisition_cost ?? 0);
-                $repairCost = (float) ($yearData->repair_cost ?? 0);
+                $acquisition = $acquisitions->get($year);
+                $repair = $repairData->get($year);
+
+                $acquisitionCost = (float) ($acquisition->acquisition_cost ?? 0);
+                $repairCost = (float) ($repair->repair_cost ?? 0);
+                $assetCount = (int) ($acquisition->asset_count ?? 0);
 
                 $result[] = [
                     'year' => (string) $year,
                     'acquisition_cost' => $acquisitionCost,
                     'repair_cost' => $repairCost,
                     'total_cost' => $acquisitionCost + $repairCost,
-                    'asset_count' => (int) ($yearData->asset_count ?? 0),
+                    'asset_count' => $assetCount,
                 ];
             }
 
@@ -425,21 +423,21 @@ class DashboardService
             try {
                 $summary = $this->getAllBranchStats();
             } catch (\Exception $e) {
-                Log::error('Branch stats error: ' . $e->getMessage());
+                Log::error('Branch stats error: '.$e->getMessage());
                 $summary = [];
             }
 
             try {
                 $monthlyTrends = $this->getBranchMonthlyTrends($months);
             } catch (\Exception $e) {
-                Log::error('Branch monthly trends error: ' . $e->getMessage());
+                Log::error('Branch monthly trends error: '.$e->getMessage());
                 $monthlyTrends = [];
             }
 
             try {
                 $statusBreakdown = $this->getBranchStatusBreakdown();
             } catch (\Exception $e) {
-                Log::error('Branch status breakdown error: ' . $e->getMessage());
+                Log::error('Branch status breakdown error: '.$e->getMessage());
                 $statusBreakdown = [];
             }
 
@@ -453,19 +451,47 @@ class DashboardService
 
     /**
      * Get current statistics for all branches
+     * Considers both direct employee assignment and workstation-based assignment
      */
     private function getAllBranchStats(): array
     {
+        // Get assets assigned via direct employee
+        $directAssets = DB::table('assets')
+            ->join('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
+            ->whereNull('assets.workstation_id')
+            ->select(
+                'employee.branch_id',
+                'assets.id as asset_id',
+                'assets.book_value',
+                'assets.acq_cost'
+            );
+
+        // Get assets assigned via workstation
+        $workstationAssets = DB::table('assets')
+            ->join('workstations', 'assets.workstation_id', '=', 'workstations.id')
+            ->select(
+                'workstations.branch_id',
+                'assets.id as asset_id',
+                'assets.book_value',
+                'assets.acq_cost'
+            );
+
+        // Union both sources and aggregate by branch
         return DB::table('branch')
-            ->leftJoin('employee', 'branch.id', '=', 'employee.branch_id')
-            ->leftJoin('assets', 'employee.id', '=', 'assets.assigned_to_employee_id')
+            ->leftJoinSub(
+                $directAssets->unionAll($workstationAssets),
+                'branch_assets',
+                'branch.id',
+                '=',
+                'branch_assets.branch_id'
+            )
             ->select(
                 'branch.id as branch_id',
                 'branch.branch_name',
                 'branch.brcode',
-                DB::raw('COUNT(DISTINCT assets.id) as total_assets'),
-                DB::raw('COALESCE(SUM(assets.book_value), 0) as total_book_value'),
-                DB::raw('COALESCE(SUM(assets.acq_cost), 0) as total_acquisition_cost')
+                DB::raw('COUNT(DISTINCT branch_assets.asset_id) as total_assets'),
+                DB::raw('COALESCE(SUM(branch_assets.book_value), 0) as total_book_value'),
+                DB::raw('COALESCE(SUM(branch_assets.acq_cost), 0) as total_acquisition_cost')
             )
             ->groupBy('branch.id', 'branch.branch_name', 'branch.brcode')
             ->orderBy('branch.brcode')
@@ -493,10 +519,11 @@ class DashboardService
     {
         $startDate = now()->subMonths($months)->startOfMonth();
 
-        // Get acquisitions per branch per month
+        // Get acquisitions per branch per month (both direct employee and workstation-based)
         $acquisitions = DB::table('assets')
-            ->join('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
-            ->join('branch', 'employee.branch_id', '=', 'branch.id')
+            ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
+            ->leftJoin('workstations', 'assets.workstation_id', '=', 'workstations.id')
+            ->join('branch', DB::raw('COALESCE(workstations.branch_id, employee.branch_id)'), '=', 'branch.id')
             ->select(
                 'branch.id as branch_id',
                 'branch.branch_name',
@@ -509,11 +536,12 @@ class DashboardService
             ->groupBy('branch.id', 'branch.branch_name', DB::raw("TO_CHAR(assets.purchase_date, 'YYYY-MM')"))
             ->get();
 
-        // Get repairs per branch per month
+        // Get repairs per branch per month (both direct employee and workstation-based)
         $repairs = DB::table('repairs')
             ->join('assets', 'repairs.asset_id', '=', 'assets.id')
-            ->join('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
-            ->join('branch', 'employee.branch_id', '=', 'branch.id')
+            ->leftJoin('employee', 'assets.assigned_to_employee_id', '=', 'employee.id')
+            ->leftJoin('workstations', 'assets.workstation_id', '=', 'workstations.id')
+            ->join('branch', DB::raw('COALESCE(workstations.branch_id, employee.branch_id)'), '=', 'branch.id')
             ->select(
                 'branch.id as branch_id',
                 'branch.branch_name',
@@ -532,6 +560,7 @@ class DashboardService
 
     /**
      * Format branch trends into monthly time series
+     * Optimized: O(n) instead of O(n²) by using lookup arrays
      *
      * @param  \Illuminate\Support\Collection  $acquisitions
      * @param  \Illuminate\Support\Collection  $repairs
@@ -556,16 +585,26 @@ class DashboardService
         // Get all branches
         $branches = DB::table('branch')->select('id', 'branch_name')->get();
 
-        // Populate data for each month and branch
+        // Create fast lookup arrays (O(1) access instead of O(n) search)
+        $acqLookup = [];
+        foreach ($acquisitions as $acq) {
+            $key = $acq->branch_id.':'.$acq->month;
+            $acqLookup[$key] = $acq;
+        }
+
+        $repLookup = [];
+        foreach ($repairs as $rep) {
+            $key = $rep->branch_id.':'.$rep->month;
+            $repLookup[$key] = $rep;
+        }
+
+        // Populate data for each month and branch - now O(n) instead of O(n²)
         foreach ($result as &$monthData) {
             foreach ($branches as $branch) {
-                $acq = $acquisitions->where('branch_id', $branch->id)
-                    ->where('month', $monthData['month_key'])
-                    ->first();
+                $lookupKey = $branch->id.':'.$monthData['month_key'];
 
-                $rep = $repairs->where('branch_id', $branch->id)
-                    ->where('month', $monthData['month_key'])
-                    ->first();
+                $acq = $acqLookup[$lookupKey] ?? null;
+                $rep = $repLookup[$lookupKey] ?? null;
 
                 $acquisitionCost = (float) ($acq->acquisition_cost ?? 0);
                 $repairCost = (float) ($rep->repair_cost ?? 0);
@@ -604,11 +643,16 @@ class DashboardService
             ->keyBy('id');
 
         // Get asset counts per branch and status
-        // Using LEFT JOIN to include all combinations
+        // Using LEFT JOIN to include all combinations (both direct employee and workstation-based)
         $assetCounts = DB::table('branch')
             ->leftJoin('employee', 'branch.id', '=', 'employee.branch_id')
-            ->leftJoin('assets', 'employee.id', '=', 'assets.assigned_to_employee_id')
-            ->leftJoin('status', 'assets.status_id', '=', 'status.id')
+            ->leftJoin('assets as emp_assets', function ($join) {
+                $join->on('employee.id', '=', 'emp_assets.assigned_to_employee_id')
+                    ->whereNull('emp_assets.workstation_id');
+            })
+            ->leftJoin('workstations', 'branch.id', '=', 'workstations.branch_id')
+            ->leftJoin('assets as ws_assets', 'workstations.id', '=', 'ws_assets.workstation_id')
+            ->leftJoin('status', DB::raw('COALESCE(ws_assets.status_id, emp_assets.status_id)'), '=', 'status.id')
             ->select(
                 'branch.id as branch_id',
                 'branch.branch_name',
@@ -616,7 +660,7 @@ class DashboardService
                 'status.id as status_id',
                 'status.name as status_name',
                 'status.color as status_color',
-                DB::raw('COUNT(assets.id) as count')
+                DB::raw('COUNT(DISTINCT COALESCE(ws_assets.id, emp_assets.id)) as count')
             )
             ->groupBy('branch.id', 'branch.branch_name', 'branch.brcode', 'status.id', 'status.name', 'status.color')
             ->orderBy('branch.brcode')
@@ -661,7 +705,7 @@ class DashboardService
     public function clearCache(): void
     {
         Cache::forget('dashboard:statistics');
-        Cache::forget('dashboard:monthly_expenses:' . now()->year);
+        Cache::forget('dashboard:monthly_expenses:'.now()->year);
         Cache::forget('dashboard:yearly_expenses');
 
         // Clear new unified endpoint caches

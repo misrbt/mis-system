@@ -14,7 +14,11 @@ class ReportSignatoryController extends Controller
     public function show(Request $request)
     {
         try {
-            $signatory = ReportSignatory::with(['checkedBy.position', 'checkedBy.branch', 'notedBy.position', 'notedBy.branch'])
+            $signatory = ReportSignatory::with([
+                'preparedBy.position', 'preparedBy.branch',
+                'checkedBy.position', 'checkedBy.branch',
+                'notedBy.position', 'notedBy.branch',
+            ])
                 ->where('user_id', $request->user()->id)
                 ->first();
 
@@ -36,12 +40,17 @@ class ReportSignatoryController extends Controller
             $signatory = ReportSignatory::updateOrCreate(
                 ['user_id' => $request->user()->id],
                 [
+                    'prepared_by_id' => $request->prepared_by_id,
                     'checked_by_id' => $request->checked_by_id,
                     'noted_by_id' => $request->noted_by_id,
                 ]
             );
 
-            $signatory->load(['checkedBy.position', 'checkedBy.branch', 'notedBy.position', 'notedBy.branch']);
+            $signatory->load([
+                'preparedBy.position', 'preparedBy.branch',
+                'checkedBy.position', 'checkedBy.branch',
+                'notedBy.position', 'notedBy.branch',
+            ]);
 
             return response()->json([
                 'success' => true,

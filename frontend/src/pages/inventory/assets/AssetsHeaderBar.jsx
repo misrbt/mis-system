@@ -117,14 +117,14 @@ const AssetsHeaderBar = ({
           </button>
         )}
 
-        {/* View Employees button - only show on inventory tab */}
+        {/* View Workstations button - only show on inventory tab */}
         {activeTab === 'inventory' && (
           <button
             onClick={onViewEmployees}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
           >
             <Users className="w-4 h-4" />
-            <span>View Employees</span>
+            <span>View Workstations</span>
           </button>
         )}
       </div>

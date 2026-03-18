@@ -43,3 +43,8 @@ Schedule::command('assets:catchup')
     ->between('8:00', '18:00')
     ->weekdays()
     ->description('Hourly catch-up for asset updates during business hours');
+
+// Cleanup expired defective assets - runs hourly to ensure timely deletion
+Schedule::command('cleanup:expired-defective-assets')
+    ->hourly()
+    ->description('Delete expired defective assets that have passed their delete_after_at timestamp');

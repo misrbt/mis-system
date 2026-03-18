@@ -1,18 +1,14 @@
-import { useState } from 'react'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Modal from './Modal'
 import { Activity, AlertCircle, RefreshCw } from 'lucide-react'
-import Swal from 'sweetalert2'
 import apiClient from '../services/apiClient'
+import { useFormModal } from '../hooks/useFormModal'
+import { useAssetQueryInvalidation } from '../hooks/useAssetQueryInvalidation'
 
 function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
-  const queryClient = useQueryClient()
+  const { invalidateAssetQueries } = useAssetQueryInvalidation()
   const [draftStatusId, setDraftStatusId] = useState(null)
-  const [reason, setReason] = useState('')
-  const [remarks, setRemarks] = useState('')
-  const [errors, setErrors] = useState({})
-
-  const selectedStatusId = draftStatusId ?? (asset?.status_id ? String(asset.status_id) : '')
 
   // Fetch statuses
   const { data: statusesData } = useQuery({
@@ -27,126 +23,100 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
     ? statusesData
     : []
 
-  // Update status mutation
-  const updateStatusMutation = useMutation({
-    mutationFn: (data) => apiClient.post(`/assets/${asset?.id}/movements/update-status`, data),
+  const selectedStatusId = draftStatusId ?? (asset?.status_id ? String(asset.status_id) : '')
+
+  // Custom validation for status change
+  const validateStatusChange = useCallback((value) => {
+    if (!value) {
+      return 'Please select a status'
+    }
+    if (String(value) === String(asset?.status_id)) {
+      return 'Please select a different status'
+    }
+    return null
+  }, [asset?.status_id])
+
+  const {
+    formData,
+    errors,
+    isLoading,
+    handleChange,
+    handleSubmit: baseHandleSubmit,
+    handleClose: baseHandleClose,
+    getCharCount,
+    setFormData,
+  } = useFormModal({
+    initialData: { reason: '', remarks: '' },
+    validationRules: {
+      reason: {
+        required: true,
+        minLength: 10,
+        label: 'Reason',
+      },
+    },
+    mutationFn: (data) => apiClient.post(`/assets/${asset?.id}/movements/update-status`, {
+      ...data,
+      status_id: Number(selectedStatusId),
+    }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['asset', asset?.id] })
-      queryClient.invalidateQueries({ queryKey: ['asset-movements', asset?.id] })
-      queryClient.invalidateQueries({ queryKey: ['asset-assignments', asset?.id] })
-      queryClient.invalidateQueries({ queryKey: ['asset-statistics', asset?.id] })
-      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      invalidateAssetQueries(asset?.id)
 
-      // Find the selected status to check if it's "Under Repair"
+      // Check if status is "Under Repair" and trigger callback
       const selectedStatus = statuses.find(s => s.id === parseInt(selectedStatusId))
-
-      Swal.fire({
-        icon: 'success',
-        title: 'Status Updated',
-        text: 'Asset status has been successfully updated',
-        timer: 2000,
-        showConfirmButton: false,
-      }).then(() => {
-        // After SweetAlert closes, trigger callback if status is "Under Repair"
-        if (onAfterUpdate && selectedStatus?.name === 'Under Repair') {
+      if (onAfterUpdate && selectedStatus?.name === 'Under Repair') {
+        // Delay callback to let success alert close first
+        setTimeout(() => {
           onAfterUpdate(selectedStatus)
-        }
-      })
-
-      handleClose()
+        }, 2100)
+      }
     },
-    onError: (error) => {
-      const errorMessage = error.response?.data?.message || 'Failed to update status'
-      const validationErrors = error.response?.data?.errors || {}
-
-      setErrors(validationErrors)
-
-      Swal.fire({
-        icon: 'error',
-        title: 'Update Failed',
-        text: errorMessage,
-      })
+    onClose: () => {
+      setDraftStatusId(null)
+      onClose()
     },
+    successTitle: 'Status Updated',
+    successMessage: 'Asset status has been successfully updated',
+    errorTitle: 'Update Failed',
   })
 
-  const validateForm = () => {
-    const newErrors = {}
-
-    if (!selectedStatusId) {
-      newErrors.status_id = 'Please select a status'
+  // Reset draft status when modal opens with new asset
+  useEffect(() => {
+    if (isOpen) {
+      setDraftStatusId(null)
     }
+  }, [isOpen, asset?.id])
 
-    // Check if status actually changed
-    if (String(selectedStatusId) === String(asset?.status_id)) {
-      newErrors.status_id = 'Please select a different status'
-    }
+  const handleClose = useCallback(() => {
+    setDraftStatusId(null)
+    baseHandleClose()
+  }, [baseHandleClose])
 
-    if (!reason || reason.trim() === '') {
-      newErrors.reason = 'Reason is required'
-    } else if (reason.trim().length < 10) {
-      newErrors.reason = 'Reason must be at least 10 characters'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'Please fill in all required fields correctly',
-      })
+  // Custom submit handler with status validation
+  const handleSubmit = useCallback((e) => {
+    e?.preventDefault()
+    const statusError = validateStatusChange(selectedStatusId)
+    if (statusError) {
+      // Show status error
       return
     }
-
-    updateStatusMutation.mutate({
-      status_id: Number(selectedStatusId),
-      reason,
-      remarks,
-    })
-  }
-
-  const handleReasonChange = (e) => {
-    const value = e.target.value
-    setReason(value)
-
-    // Clear error when user starts typing
-    if (errors.reason) {
-      setErrors(prev => ({ ...prev, reason: undefined }))
-    }
-  }
+    baseHandleSubmit(e)
+  }, [selectedStatusId, validateStatusChange, baseHandleSubmit])
 
   const handleStatusChange = (e) => {
-    const value = e.target.value
-    setDraftStatusId(value)
-
-    // Clear error when user selects
-    if (errors.status_id) {
-      setErrors(prev => ({ ...prev, status_id: undefined }))
-    }
-  }
-
-  const handleClose = () => {
-    setDraftStatusId(null)
-    setReason('')
-    setRemarks('')
-    setErrors({})
-    onClose()
+    setDraftStatusId(e.target.value)
   }
 
   const currentStatus = asset?.status
   const selectedStatus = statuses.find(s => s.id === parseInt(selectedStatusId))
+  const reasonCharCount = getCharCount('reason')
+  const statusError = validateStatusChange(selectedStatusId)
 
   const footer = (
     <div className="flex gap-3 justify-end">
       <button
         type="button"
         onClick={handleClose}
-        disabled={updateStatusMutation.isPending}
+        disabled={isLoading}
         className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         Cancel
@@ -154,10 +124,10 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
       <button
         type="submit"
         onClick={handleSubmit}
-        disabled={updateStatusMutation.isPending}
+        disabled={isLoading}
         className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
       >
-        {updateStatusMutation.isPending ? (
+        {isLoading ? (
           <>
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             Updating...
@@ -208,7 +178,7 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
             value={selectedStatusId}
             onChange={handleStatusChange}
             className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
-              errors.status_id ? 'border-red-300' : 'border-slate-300'
+              statusError && draftStatusId !== null ? 'border-red-300' : 'border-slate-300'
             }`}
           >
             <option value="">Select a status</option>
@@ -218,10 +188,10 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
               </option>
             ))}
           </select>
-          {errors.status_id && (
+          {statusError && draftStatusId !== null && (
             <div className="flex items-center gap-1 mt-1 text-sm text-red-600">
               <AlertCircle className="w-4 h-4" />
-              {errors.status_id}
+              {statusError}
             </div>
           )}
         </div>
@@ -232,7 +202,7 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
             <Activity className="w-5 h-5 text-indigo-600 flex-shrink-0" />
             <div className="text-sm">
               <span className="font-medium text-indigo-900">{currentStatus?.name || 'Unknown'}</span>
-              <span className="mx-2 text-indigo-600">→</span>
+              <span className="mx-2 text-indigo-600">&rarr;</span>
               <span className="font-semibold text-indigo-900">{selectedStatus.name}</span>
             </div>
           </div>
@@ -244,8 +214,8 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
             Reason for Status Change <span className="text-red-500">*</span>
           </label>
           <textarea
-            value={reason}
-            onChange={handleReasonChange}
+            value={formData.reason}
+            onChange={handleChange('reason')}
             placeholder="Explain why the status is being changed (minimum 10 characters)"
             rows={4}
             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none ${
@@ -261,10 +231,8 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
                 </div>
               )}
             </div>
-            <span className={`text-sm ${
-              reason.length >= 10 ? 'text-green-600' : 'text-slate-500'
-            }`}>
-              {reason.length} / 10 characters
+            <span className={`text-sm ${reasonCharCount.isValid ? 'text-green-600' : 'text-slate-500'}`}>
+              {reasonCharCount.current} / {reasonCharCount.min} characters
             </span>
           </div>
         </div>
@@ -275,8 +243,8 @@ function StatusUpdateModal({ isOpen, onClose, asset, onAfterUpdate }) {
             Additional Remarks (Optional)
           </label>
           <textarea
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
+            value={formData.remarks}
+            onChange={handleChange('remarks')}
             placeholder="Any additional notes or comments about this status change"
             rows={3}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"

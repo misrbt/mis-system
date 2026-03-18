@@ -659,7 +659,7 @@ function EditAssetModal({
               </select>
             </div>
 
-            {!isDesktopPCCategory() && (
+            {formData.asset_category_id && (
               <div className="md:col-span-2">
                 <SpecificationFields
                   categoryName={categories?.find(c => c.id == formData.asset_category_id)?.name}

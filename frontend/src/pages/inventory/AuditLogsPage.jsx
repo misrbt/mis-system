@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Loader2,
   ArrowRight,
+  ArrowLeftRight,
   Clock,
   LayoutList,
   LayoutGrid,
@@ -56,6 +57,7 @@ const getMovementIconComponent = (type) => {
     code_generated: QrCode,
     inventory_operation: Database,
     under_repair_reminder: Wrench,
+    branch_transition: ArrowLeftRight,
   }
   return icons[type] || AlertCircle
 }
@@ -153,6 +155,13 @@ const getMovementStyles = (type) => {
       text: 'text-amber-700',
       icon: 'text-amber-600',
       dot: 'bg-amber-500',
+    },
+    branch_transition: {
+      bg: 'bg-teal-50',
+      border: 'border-teal-200',
+      text: 'text-teal-700',
+      icon: 'text-teal-600',
+      dot: 'bg-teal-500',
     },
   }
   return styles[type] || styles.updated
@@ -857,6 +866,7 @@ function AuditLogsPage() {
                 <option value="transferred">Transferred</option>
                 <option value="returned">Returned</option>
                 <option value="status_changed">Status Changed</option>
+                <option value="branch_transition">Branch Transition</option>
                 <option value="repair_initiated">Repair Initiated</option>
                 <option value="repair_completed">Repair Completed</option>
                 <option value="repair_deleted">Repair Deleted</option>

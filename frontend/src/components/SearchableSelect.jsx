@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X, ChevronDown, User } from 'lucide-react'
 
@@ -19,25 +19,35 @@ function SearchableSelect({
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
   const dropdownRef = useRef(null)
+  const dropdownContentRef = useRef(null)
   const searchInputRef = useRef(null)
+  const triggerRef = useRef(null)
+
+  // Ensure options is an array
+  const safeOptions = Array.isArray(options) ? options : []
 
   // Filter options based on search term
-  const filteredOptions = options.filter(option => {
+  const filteredOptions = safeOptions.filter(option => {
     const searchLower = searchTerm.toLowerCase()
-    const primaryMatch = option[displayField]?.toLowerCase().includes(searchLower)
-    const secondaryMatch = secondaryField && option[secondaryField]?.toLowerCase().includes(searchLower)
-    const tertiaryMatch = tertiaryField && option[tertiaryField]?.toLowerCase().includes(searchLower)
+    const primaryMatch = option[displayField] && String(option[displayField]).toLowerCase().includes(searchLower)
+    const secondaryMatch = secondaryField && option[secondaryField] && String(option[secondaryField]).toLowerCase().includes(searchLower)
+    const tertiaryMatch = tertiaryField && option[tertiaryField] && String(option[tertiaryField]).toLowerCase().includes(searchLower)
     return primaryMatch || secondaryMatch || tertiaryMatch
   })
 
   // Get selected option
-  const selectedOption = options.find(opt => opt.id === value)
+  const selectedOption = safeOptions.find(opt => opt.id === value)
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      const clickedInside =
+        (dropdownRef.current && dropdownRef.current.contains(event.target)) ||
+        (dropdownContentRef.current && dropdownContentRef.current.contains(event.target))
+
+      if (!clickedInside) {
         setIsOpen(false)
       }
     }
@@ -106,6 +116,18 @@ function SearchableSelect({
     setHighlightedIndex(0)
   }
 
+  // Calculate dropdown position
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      })
+    }
+  }, [isOpen])
+
   return (
     <div ref={dropdownRef} className="relative">
       {label && (
@@ -116,6 +138,7 @@ function SearchableSelect({
 
       {/* Trigger Button */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
@@ -152,9 +175,19 @@ function SearchableSelect({
         </div>
       </button>
 
-      {/* Dropdown Menu */}
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-80 overflow-hidden">
+      {/* Dropdown Menu - Portal */}
+      {isOpen && createPortal(
+        <div
+          ref={dropdownContentRef}
+          style={{
+            position: 'absolute',
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`,
+            zIndex: 9999,
+          }}
+          className="bg-white border border-slate-300 rounded-lg shadow-lg max-h-80 overflow-hidden"
+        >
           {/* Search Input */}
           <div className="p-2 border-b border-slate-200 sticky top-0 bg-white">
             <div className="relative">
@@ -176,7 +209,7 @@ function SearchableSelect({
             {isLoading ? (
               <div className="px-4 py-8 text-center text-slate-500 text-sm">
                 <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
-                <p>Loading employees...</p>
+                <p>Loading {label ? label.toLowerCase() : 'items'}...</p>
               </div>
             ) : filteredOptions.length === 0 ? (
               <div className="px-4 py-8 text-center text-slate-500 text-sm">
@@ -187,7 +220,7 @@ function SearchableSelect({
               <>
                 <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
                   <p className="text-xs text-slate-600">
-                    Showing {filteredOptions.length} of {options.length} {filteredOptions.length === 1 ? 'employee' : 'employees'}
+                    Showing {filteredOptions.length} of {safeOptions.length} {label ? label.toLowerCase() : 'item'}{filteredOptions.length !== 1 ? 's' : ''}
                   </p>
                 </div>
                 {filteredOptions.map((option, index) => (
@@ -218,7 +251,8 @@ function SearchableSelect({
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

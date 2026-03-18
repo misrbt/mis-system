@@ -5,108 +5,62 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Vendor\StoreVendorRequest;
 use App\Http\Requests\Vendor\UpdateVendorRequest;
 use App\Models\Vendor;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class VendorController extends Controller
+class VendorController extends BaseCatalogController
 {
-    /**
-     * Display a listing of vendors.
-     */
-    public function index()
-    {
-        try {
-            // Cache vendors for 24 hours (86400 seconds)
-            $vendors = \Illuminate\Support\Facades\Cache::remember('vendors_all', 86400, function () {
-                return Vendor::withCount('assets')
-                    ->orderBy('company_name', 'asc')
-                    ->get();
-            });
+    protected string $model = Vendor::class;
 
-            return response()->json([
-                'success' => true,
-                'data' => $vendors,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to fetch vendors');
-        }
-    }
+    protected string $resourceName = 'Vendor';
+
+    protected array $searchFields = ['company_name', 'contact_person', 'email'];
+
+    protected string $orderByField = 'company_name';
+
+    protected ?string $cacheKey = 'vendors_all';
+
+    protected array $withCounts = ['assets'];
 
     /**
      * Store a newly created vendor.
      */
-    public function store(StoreVendorRequest $request)
+    public function store(Request $request): JsonResponse
     {
-        try {
-            $vendor = Vendor::create($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Vendor created successfully',
-                'data' => $vendor,
-            ], 201);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to create vendor');
-        }
-    }
-
-    /**
-     * Display the specified vendor.
-     */
-    public function show($id)
-    {
-        try {
-            $vendor = Vendor::withCount('assets')->findOrFail($id);
-
-            return response()->json([
-                'success' => true,
-                'data' => $vendor,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Vendor not found', 404);
-        }
+        return parent::store($request);
     }
 
     /**
      * Update the specified vendor.
      */
-    public function update(UpdateVendorRequest $request, $id)
+    public function update(Request $request, int $id): JsonResponse
     {
-        try {
-            $vendor = Vendor::findOrFail($id);
-            $vendor->update($request->validated());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Vendor updated successfully',
-                'data' => $vendor,
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to update vendor');
-        }
+        return parent::update($request, $id);
     }
 
     /**
-     * Remove the specified vendor.
+     * Get validated data using the appropriate form request.
      */
-    public function destroy($id)
+    protected function getValidatedData(Request $request): array
     {
-        try {
-            $vendor = Vendor::findOrFail($id);
-
-            if ($vendor->assets()->count() > 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot delete vendor with assigned assets',
-                ], 409);
-            }
-
-            $vendor->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Vendor deleted successfully',
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to delete vendor');
+        if ($request->isMethod('POST')) {
+            return $request->validate(app(StoreVendorRequest::class)->rules());
         }
+
+        return $request->validate(app(UpdateVendorRequest::class)->rules());
+    }
+
+    /**
+     * Check if vendor has assets before deletion.
+     */
+    protected function checkDependencies(Model $record): ?string
+    {
+        /** @var Vendor $record */
+        if ($record->assets()->count() > 0) {
+            return 'Cannot delete vendor with assigned assets';
+        }
+
+        return null;
     }
 }

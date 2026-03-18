@@ -21,7 +21,7 @@ class AssetObserver
     public function created(Asset $asset): void
     {
         // Only create movement if not already tracked (to avoid duplicates from backfill)
-        if (!AssetMovement::where('asset_id', $asset->id)->exists()) {
+        if (! AssetMovement::where('asset_id', $asset->id)->exists()) {
             $changedFields = $this->buildInitialFields($asset);
             $this->logMovement($asset, 'created', [
                 'to_status_id' => $asset->status_id,
@@ -55,6 +55,19 @@ class AssetObserver
     }
 
     /**
+     * Handle the Asset "creating" event.
+     * Ensure assets assigned to workstations don't have employee assignment.
+     */
+    public function creating(Asset $asset): void
+    {
+        // IMPORTANT: If assigning to a workstation, clear employee assignment
+        // Assets should be tied to workstations, NOT employees
+        if ($asset->workstation_id) {
+            $asset->assigned_to_employee_id = null;
+        }
+    }
+
+    /**
      * Handle the Asset "updating" event.
      * Track changes BEFORE they happen (so we can capture old values)
      */
@@ -62,6 +75,13 @@ class AssetObserver
     {
         // Store original values in an observer-scoped cache for use in updated()
         $this->originalValues[$asset->id] = $asset->getOriginal();
+
+        // IMPORTANT: If assigning to a workstation, clear employee assignment
+        // Assets should be tied to workstations, NOT employees
+        // Check CURRENT workstation_id, not just if it changed
+        if ($asset->workstation_id) {
+            $asset->assigned_to_employee_id = null;
+        }
 
         if ($asset->isDirty('status_id')) {
             $defectiveStatus = \App\Models\Status::where('name', 'Defective')->first();
@@ -93,6 +113,11 @@ class AssetObserver
             $this->trackStatusChange($asset, $original);
         }
 
+        // Track workstation changes
+        if (isset($original['workstation_id']) && $asset->workstation_id != $original['workstation_id']) {
+            $this->trackWorkstationChange($asset, $original);
+        }
+
         // Track ALL other field changes comprehensively
         $this->trackAllFieldChanges($asset, $original);
     }
@@ -108,12 +133,12 @@ class AssetObserver
         $changedFields = [];
 
         foreach ($trackableFields as $field => $config) {
-            if (!array_key_exists($field, $original)) {
+            if (! array_key_exists($field, $original)) {
                 continue;
             }
-            if ($asset->$field != $original[$field]) {
-                // Skip assignment and status as they're handled separately
-                if (in_array($field, ['assigned_to_employee_id', 'status_id'])) {
+            if ($original[$field] != $asset->$field) {
+                // Skip assignment, status, and workstation as they're handled separately
+                if (in_array($field, ['assigned_to_employee_id', 'status_id', 'workstation_id'])) {
                     continue;
                 }
 
@@ -144,7 +169,7 @@ class AssetObserver
         }
 
         // Log all changes in a single movement record
-        if (!empty($changedFields)) {
+        if (! empty($changedFields)) {
             $this->logMovement($asset, 'updated', [
                 'metadata' => $this->buildChangeMetadata($changedFields),
                 'remarks' => $this->buildChangeRemark($changedFields),
@@ -157,7 +182,7 @@ class AssetObserver
      */
     protected function getRelationValue($id, string $relationName): ?string
     {
-        if (!$id) {
+        if (! $id) {
             return null;
         }
 
@@ -171,6 +196,7 @@ class AssetObserver
 
         if (isset($modelMap[$relationName])) {
             $model = $modelMap[$relationName]::find($id);
+
             return $model?->name ?? $model?->company_name ?? $model?->fullname ?? $model?->branch_name ?? null;
         }
 
@@ -190,7 +216,8 @@ class AssetObserver
             return "Updated {$fieldLabels[0]} and {$fieldLabels[1]}";
         } else {
             $lastField = array_pop($fieldLabels);
-            return "Updated " . implode(', ', $fieldLabels) . ", and {$lastField}";
+
+            return 'Updated '.implode(', ', $fieldLabels).", and {$lastField}";
         }
     }
 
@@ -205,11 +232,11 @@ class AssetObserver
         $toBranchId = $toEmployeeId ? $asset->assignedEmployee?->branch_id : null;
 
         // Determine movement type
-        if (!$fromEmployeeId && $toEmployeeId) {
+        if (! $fromEmployeeId && $toEmployeeId) {
             $movementType = 'assigned';
         } elseif ($fromEmployeeId && $toEmployeeId) {
             $movementType = 'transferred';
-        } elseif ($fromEmployeeId && !$toEmployeeId) {
+        } elseif ($fromEmployeeId && ! $toEmployeeId) {
             $movementType = 'returned';
         } else {
             return; // No change
@@ -260,6 +287,46 @@ class AssetObserver
             'from_status_id' => $original['status_id'],
             'to_status_id' => $asset->status_id,
             'metadata' => $this->buildChangeMetadata($changedFields),
+        ]);
+    }
+
+    /**
+     * Track workstation changes
+     */
+    protected function trackWorkstationChange(Asset $asset, array $original): void
+    {
+        $fromWorkstationId = $original['workstation_id'] ?? null;
+        $toWorkstationId = $asset->workstation_id;
+
+        $fromWorkstation = $fromWorkstationId ? \App\Models\Workstation::find($fromWorkstationId) : null;
+        $toWorkstation = $toWorkstationId ? $asset->workstation : null;
+
+        $changedFields = [
+            [
+                'field' => 'workstation_id',
+                'label' => 'Workstation',
+                'type' => 'relation',
+                'old_value' => $fromWorkstation?->name ?? 'Unassigned',
+                'new_value' => $toWorkstation?->name ?? 'Unassigned',
+            ],
+        ];
+
+        $movementType = 'workstation_transfer';
+        if (! $fromWorkstationId && $toWorkstationId) {
+            $movementType = 'workstation_assigned';
+        } elseif ($fromWorkstationId && ! $toWorkstationId) {
+            $movementType = 'workstation_removed';
+        }
+
+        $this->logMovement($asset, $movementType, [
+            'from_branch_id' => $fromWorkstation?->branch_id,
+            'to_branch_id' => $toWorkstation?->branch_id,
+            'metadata' => array_merge($this->buildChangeMetadata($changedFields), [
+                'from_workstation_id' => $fromWorkstationId,
+                'to_workstation_id' => $toWorkstationId,
+                'from_workstation_name' => $fromWorkstation?->name,
+                'to_workstation_name' => $toWorkstation?->name,
+            ]),
         ]);
     }
 

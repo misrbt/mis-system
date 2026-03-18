@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -13,9 +14,6 @@ import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 
 function StatusPage() {
-  const [statuses, setStatuses] = useState([])
-  const [loading, setLoading] = useState(true)
-
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -29,28 +27,52 @@ function StatusPage() {
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
 
-  // Fetch statuses
-  const fetchStatuses = async () => {
-    try {
-      setLoading(true)
-      const response = await apiClient.get('/statuses')
-      if (response.data.success) {
-        setStatuses(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch statuses',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    fetchStatuses()
-  }, [])
+  const { data: statuses = [], isLoading: loading } = useQuery({
+    queryKey: ['statuses'],
+    queryFn: async () => {
+      const response = await apiClient.get('/statuses')
+      return response.data.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => apiClient.post('/statuses', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['statuses'] })
+      setIsAddModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Status created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to create status' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => apiClient.put(`/statuses/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['statuses'] })
+      setIsEditModalOpen(false)
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Status updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to update status' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => apiClient.delete(`/statuses/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['statuses'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Status deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete status' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -73,48 +95,12 @@ function StatusPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.post('/statuses', formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchStatuses()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to create status',
-      })
-    }
+    createMutation.mutate(formData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await apiClient.put(`/statuses/${selectedStatus.id}`, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsEditModalOpen(false)
-        fetchStatuses()
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to update status',
-      })
-    }
+    updateMutation.mutate({ id: selectedStatus.id, data: formData })
   }
 
   const handleDelete = useCallback(async (status) => {
@@ -128,26 +114,8 @@ function StatusPage() {
       confirmButtonText: 'Yes, delete it!',
       cancelButtonText: 'Cancel',
     })
-
     if (result.isConfirmed) {
-      try {
-        const response = await apiClient.delete(`/statuses/${status.id}`)
-        if (response.data.success) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Deleted!',
-            text: response.data.message,
-            timer: 2000,
-          })
-          fetchStatuses()
-        }
-      } catch (error) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.response?.data?.message || 'Failed to delete status',
-        })
-      }
+      deleteMutateRef.current(status.id)
     }
   }, [])
 
@@ -237,7 +205,9 @@ function StatusPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : statuses.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 

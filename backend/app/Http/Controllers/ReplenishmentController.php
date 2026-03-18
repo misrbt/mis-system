@@ -13,20 +13,31 @@ use Illuminate\Support\Facades\Log;
 class ReplenishmentController extends Controller
 {
     /**
+     * Standard eager loading for replenishment queries.
+     */
+    private function eagerLoadRelations(): array
+    {
+        return [
+            'category',
+            'subcategory',
+            'vendor',
+            'status',
+            'assignedWorkstation:id,name,branch_id,employee_id',
+            'assignedWorkstation.branch:id,branch_name',
+            'assignedWorkstation.employee:id,fullname,branch_id,position_id',
+            'assignedWorkstation.employee.branch:id,branch_name',
+            'assignedWorkstation.employee.position:id,title',
+            'assignedBranch',
+        ];
+    }
+
+    /**
      * Get all replenishments with filters
      */
     public function index(Request $request)
     {
         try {
-            $query = Replenishment::with([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedBranch',
-            ]);
+            $query = Replenishment::with($this->eagerLoadRelations());
 
             // Filter by category
             if ($request->has('category_id') && $request->category_id) {
@@ -38,9 +49,15 @@ class ReplenishmentController extends Controller
                 $query->where('status_id', $request->status_id);
             }
 
-            // Filter by branch (assigned to branch)
+            // Filter by branch (via workstation or direct branch assignment)
             if ($request->has('branch_id') && $request->branch_id) {
-                $query->where('assigned_to_branch_id', $request->branch_id);
+                $branchId = $request->branch_id;
+                $query->where(function ($q) use ($branchId) {
+                    $q->where('assigned_to_branch_id', $branchId)
+                        ->orWhereHas('assignedWorkstation', function ($ws) use ($branchId) {
+                            $ws->where('branch_id', $branchId);
+                        });
+                });
             }
 
             // Filter by vendor
@@ -63,16 +80,26 @@ class ReplenishmentController extends Controller
             if ($request->has('assignment_status') && $request->assignment_status) {
                 if ($request->assignment_status === 'assigned') {
                     $query->where(function ($q) {
-                        $q->whereNotNull('assigned_to_employee_id')
+                        $q->whereNotNull('assigned_to_workstation_id')
                             ->orWhereNotNull('assigned_to_branch_id');
                     });
                 } elseif ($request->assignment_status === 'unassigned') {
-                    $query->whereNull('assigned_to_employee_id')
+                    $query->whereNull('assigned_to_workstation_id')
                         ->whereNull('assigned_to_branch_id');
                 }
             }
 
-            $replenishments = $query->orderBy('created_at', 'desc')->get();
+            if ($request->boolean('all', false)) {
+                $replenishments = $query->orderBy('created_at', 'desc')->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $replenishments,
+                ], 200);
+            }
+
+            $perPage = min((int) $request->input('per_page', 50), 100);
+            $replenishments = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
             return response()->json([
                 'success' => true,
@@ -97,13 +124,12 @@ class ReplenishmentController extends Controller
                 'brand' => $request->brand,
                 'model' => $request->model,
                 'acq_cost' => $request->acq_cost,
-                // 'book_value' => $request->book_value, // We verify/calc this below
                 'purchase_date' => $request->purchase_date,
                 'warranty_expiration_date' => $request->warranty_expiration_date,
                 'estimate_life' => $request->estimate_life,
                 'vendor_id' => $request->vendor_id,
                 'status_id' => $request->status_id,
-                'assigned_to_employee_id' => $request->assigned_to_employee_id,
+                'assigned_to_workstation_id' => $request->assigned_to_workstation_id,
                 'assigned_to_branch_id' => $request->assigned_to_branch_id,
                 'remarks' => $request->remarks,
                 'specifications' => $request->specifications,
@@ -114,15 +140,7 @@ class ReplenishmentController extends Controller
             $replenishment->book_value = $bookValueCalc['book_value'];
             $replenishment->save();
 
-            $replenishment->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedBranch',
-            ]);
+            $replenishment->load($this->eagerLoadRelations());
 
             return response()->json([
                 'success' => true,
@@ -140,15 +158,7 @@ class ReplenishmentController extends Controller
     public function show($id)
     {
         try {
-            $replenishment = Replenishment::with([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedBranch',
-            ])->findOrFail($id);
+            $replenishment = Replenishment::with($this->eagerLoadRelations())->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -180,13 +190,12 @@ class ReplenishmentController extends Controller
                 'brand' => $request->brand,
                 'model' => $request->model,
                 'acq_cost' => $request->acq_cost,
-                // 'book_value' => $request->book_value, // Calculated below if needed
                 'purchase_date' => $request->purchase_date,
                 'warranty_expiration_date' => $request->warranty_expiration_date,
                 'estimate_life' => $request->estimate_life,
                 'vendor_id' => $request->vendor_id,
                 'status_id' => $request->status_id,
-                'assigned_to_employee_id' => $request->assigned_to_employee_id,
+                'assigned_to_workstation_id' => $request->assigned_to_workstation_id,
                 'assigned_to_branch_id' => $request->assigned_to_branch_id,
                 'remarks' => $request->remarks,
                 'specifications' => $request->specifications,
@@ -199,15 +208,7 @@ class ReplenishmentController extends Controller
                 $replenishment->save();
             }
 
-            $replenishment->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedBranch',
-            ]);
+            $replenishment->load($this->eagerLoadRelations());
 
             return response()->json([
                 'success' => true,
@@ -238,16 +239,16 @@ class ReplenishmentController extends Controller
     }
 
     /**
-     * Assign replenishment to an employee
-     * This moves the replenishment to the assets table and assigns it to the employee
+     * Assign replenishment to a workstation.
+     * This moves the replenishment to the assets table and assigns it to the workstation.
      */
     public function assignToEmployee(AssignToEmployeeRequest $request, $id)
     {
         try {
             $replenishment = Replenishment::findOrFail($id);
 
-            // Get employee to retrieve their branch
-            $employee = \App\Models\Employee::findOrFail($request->employee_id);
+            // Get workstation to retrieve branch info
+            $workstation = \App\Models\Workstation::with('employee')->findOrFail($request->workstation_id);
 
             // Create new asset from replenishment data
             $asset = \App\Models\Asset::create([
@@ -264,15 +265,35 @@ class ReplenishmentController extends Controller
                 'status_id' => $replenishment->status_id,
                 'remarks' => $replenishment->remarks,
                 'specifications' => $replenishment->specifications,
-                'assigned_to_employee_id' => $request->employee_id,
+                'workstation_id' => $workstation->id,
+                'workstation_branch_id' => $workstation->branch_id,
+                'workstation_position_id' => $workstation->position_id,
             ]);
 
-            // Generate QR code and barcode for the new asset
+            // Load relationships needed for QR code data
+            $asset->load([
+                'category:id,name',
+                'status:id,name',
+                'workstation:id,name,branch_id,employee_id',
+                'workstation.employee:id,fullname',
+                'workstation.branch:id,branch_name',
+            ]);
+
+            // Generate QR code for the asset (non-blocking)
             try {
-                $asset->generateAndSaveQRCode('simple', true);
+                $qrResult = $asset->generateAndSaveQRCode('full', true);
+                if (! $qrResult['success']) {
+                    Log::warning("QR code generation failed for deployed asset {$asset->id}", $qrResult);
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to generate QR code for deployed asset '.$asset->id.': '.$e->getMessage());
+            }
+
+            // Generate barcode for the asset (non-blocking, separate try/catch)
+            try {
                 $asset->generateAndSaveBarcode();
             } catch (\Exception $e) {
-                Log::warning('Failed to generate QR/Barcode for asset '.$asset->id.': '.$e->getMessage());
+                Log::warning('Failed to generate barcode for deployed asset '.$asset->id.': '.$e->getMessage());
             }
 
             // Load relationships for the asset
@@ -281,21 +302,25 @@ class ReplenishmentController extends Controller
                 'subcategory',
                 'vendor',
                 'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
+                'workstation.employee',
+                'workstation.branch',
             ]);
 
             // Delete the replenishment since it's now an asset
             $replenishment->delete();
 
+            $assignedTo = $workstation->employee
+                ? $workstation->employee->fullname
+                : $workstation->name;
+
             return response()->json([
                 'success' => true,
-                'message' => 'Reserve asset has been deployed and assigned to '.$employee->fullname,
+                'message' => 'Reserve asset has been deployed and assigned to '.$assignedTo,
                 'data' => $asset,
                 'deployed' => true,
             ], 200);
         } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to assign replenishment to employee');
+            return $this->handleException($e, 'Failed to assign replenishment to workstation');
         }
     }
 
@@ -309,18 +334,10 @@ class ReplenishmentController extends Controller
 
             $replenishment->update([
                 'assigned_to_branch_id' => $request->branch_id,
-                'assigned_to_employee_id' => null, // Clear employee assignment when assigning to branch
+                'assigned_to_workstation_id' => null, // Clear workstation when assigning to branch
             ]);
 
-            $replenishment->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedBranch',
-            ]);
+            $replenishment->load($this->eagerLoadRelations());
 
             return response()->json([
                 'success' => true,
@@ -341,19 +358,11 @@ class ReplenishmentController extends Controller
             $replenishment = Replenishment::findOrFail($id);
 
             $replenishment->update([
-                'assigned_to_employee_id' => null,
+                'assigned_to_workstation_id' => null,
                 'assigned_to_branch_id' => null,
             ]);
 
-            $replenishment->load([
-                'category',
-                'subcategory',
-                'vendor',
-                'status',
-                'assignedEmployee.branch',
-                'assignedEmployee.position',
-                'assignedBranch',
-            ]);
+            $replenishment->load($this->eagerLoadRelations());
 
             return response()->json([
                 'success' => true,

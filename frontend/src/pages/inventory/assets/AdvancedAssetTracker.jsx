@@ -29,6 +29,7 @@ import {
   DollarSign,
   Shield,
   Layers,
+  Monitor,
 } from 'lucide-react'
 import apiClient from '../../../services/apiClient'
 
@@ -42,6 +43,7 @@ const INITIAL_FILTERS = {
   // Location & Assignment
   branch_id: '',
   employee_id: '',
+  workstation_id: '',
   assignment_status: '', // assigned, unassigned
 
   // Asset Identification
@@ -79,12 +81,13 @@ const AdvancedAssetTracker = ({
   statuses,
   vendors,
   employees,
+  workstations,
 }) => {
   const [filters, setFilters] = useState(INITIAL_FILTERS)
   const [appliedFilters, setAppliedFilters] = useState(INITIAL_FILTERS)
   const [sorting, setSorting] = useState([])
   const [showResults, setShowResults] = useState(false)
-  const [showFilterPanel, setShowFilterPanel] = useState(false)
+  const [showFilterPanel, setShowFilterPanel] = useState(true)
   const [expandedSections, setExpandedSections] = useState({
     location: true,
     identification: true,
@@ -116,17 +119,20 @@ const AdvancedAssetTracker = ({
     return params.toString()
   }, [])
 
-  // Fetch assets with filters
-  const { data: assetsData, isLoading, refetch } = useQuery({
+  // Fetch assets with filters - request large page to get all matching results for client-side table
+  const { data: trackResponse, isLoading } = useQuery({
     queryKey: ['tracked-assets', appliedFilters],
     queryFn: async () => {
       const queryString = buildQueryParams(appliedFilters)
-      const response = await apiClient.get(`/assets/track?${queryString}`)
-      return normalizeArrayResponse(response.data)
+      const response = await apiClient.get(`/assets/track?${queryString}&per_page=100`)
+      return response.data
     },
     enabled: showResults,
     staleTime: 0,
   })
+
+  const assetsData = useMemo(() => normalizeArrayResponse(trackResponse), [trackResponse])
+  const trackSummary = useMemo(() => trackResponse?.summary || null, [trackResponse])
 
   const assets = useMemo(() => assetsData || [], [assetsData])
 
@@ -225,19 +231,28 @@ const AdvancedAssetTracker = ({
       {
         accessorKey: 'assigned_employee',
         header: 'Assigned To',
-        size: 180,
+        size: 200,
         cell: ({ row }) => {
-          const employee = row.original.assigned_employee
-          if (!employee) {
+          const workstation = row.original.workstation
+          const employee = workstation?.employee || row.original.assigned_employee
+          if (!employee && !workstation) {
             return <span className="text-slate-400 italic">Unassigned</span>
           }
           return (
             <div>
-              <div className="font-medium text-slate-900 flex items-center gap-1">
-                <User className="w-3 h-3 text-slate-400" />
-                {employee.fullname}
-              </div>
-              {employee.branch && (
+              {employee && (
+                <div className="font-medium text-slate-900 flex items-center gap-1">
+                  <User className="w-3 h-3 text-slate-400" />
+                  {employee.fullname}
+                </div>
+              )}
+              {workstation && (
+                <div className="text-xs text-slate-500 flex items-center gap-1">
+                  <Monitor className="w-3 h-3" />
+                  {workstation.name}
+                </div>
+              )}
+              {!workstation && employee?.branch && (
                 <div className="text-xs text-slate-500 flex items-center gap-1">
                   <Building2 className="w-3 h-3" />
                   {employee.branch.branch_name}
@@ -297,7 +312,7 @@ const AdvancedAssetTracker = ({
         accessorKey: 'vendor',
         header: 'Vendor',
         size: 150,
-        cell: ({ row }) => row.original.vendor?.company_name || '—',
+        cell: ({ row }) => row.original.vendor?.company_name || row.original.vendor?.name || '—',
       },
     ],
     []
@@ -390,7 +405,7 @@ const AdvancedAssetTracker = ({
         <div className="space-y-4">
           {/* Location & Assignment */}
           <FilterSection title="Location & Assignment" icon={Building2} section="location">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
                 <select
@@ -402,6 +417,22 @@ const AdvancedAssetTracker = ({
                   <option value="">All Branches</option>
                   {branches?.map((branch) => (
                     <option key={branch.id} value={branch.id}>{branch.branch_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Workstation</label>
+                <select
+                  name="workstation_id"
+                  value={filters.workstation_id}
+                  onChange={handleFilterChange}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                >
+                  <option value="">All Workstations</option>
+                  {workstations?.map((ws) => (
+                    <option key={ws.id} value={ws.id}>
+                      {ws.name}{ws.employee?.fullname ? ` (${ws.employee.fullname})` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -680,6 +711,19 @@ const AdvancedAssetTracker = ({
               </div>
               {/* Summary badges */}
               <div className="hidden md:flex items-center gap-2">
+                {trackSummary && (
+                  <>
+                    <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                      {trackSummary.total_count} total
+                    </span>
+                    <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                      Cost: {formatCurrency(trackSummary.total_acq_cost)}
+                    </span>
+                    <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                      Book: {formatCurrency(trackSummary.total_book_value)}
+                    </span>
+                  </>
+                )}
                 {activeFilterCount > 0 && (
                   <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
                     {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} applied

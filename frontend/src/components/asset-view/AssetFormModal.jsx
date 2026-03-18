@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Modal from '../../../components/Modal'
-import SearchableSelect from '../../../components/SearchableSelect'
-import SpecificationFields from '../../../components/specifications/SpecificationFields'
+import Modal from '../Modal'
+import SearchableSelect from '../SearchableSelect'
+import SpecificationFields from '../specifications/SpecificationFields'
 import { RefreshCw, Plus, X, Package, Sparkles } from 'lucide-react'
-import { generateAssetName, shouldAutoGenerateName } from '../../../utils/assetNameGenerator'
-import apiClient from '../../../services/apiClient'
+import { generateAssetName, shouldAutoGenerateName } from '../../utils/assetNameGenerator'
+import apiClient from '../../services/apiClient'
 
 const AssetFormModal = ({
   isOpen,
@@ -17,13 +17,19 @@ const AssetFormModal = ({
   onInputChange,
   onVendorChange,
   onEmployeeChange,
+  onWorkstationChange,
   categories,
   subcategories = [],
   vendorOptions,
   employeeOptions,
+  workstationOptions = [],
   statusOptions,
+  branchOptions = [],
+  positionOptions = [],
   showStatus = false,
   showBookValue = false,
+  hideWorkstationFields = false,
+  hideAssignedEmployee = false,
   assignmentTitle,
   assignmentSubtitle,
   usePlaceholders = false,
@@ -136,10 +142,8 @@ const AssetFormModal = ({
       }
     : {}
 
-  const assignmentGridClass = showStatus
-    ? 'grid grid-cols-1 md:grid-cols-2 gap-4'
-    : 'grid grid-cols-1 gap-4'
-  const remarksWrapperClass = showStatus ? 'md:col-span-2' : ''
+  const assignmentGridClass = 'grid grid-cols-1 md:grid-cols-2 gap-4'
+  const remarksWrapperClass = 'md:col-span-2'
 
   // Helper to check if selected category is Desktop PC
   const isDesktopPCCategory = () => {
@@ -214,7 +218,7 @@ const AssetFormModal = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl">
-      <form onSubmit={onSubmit} className="space-y-6">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(e); }} className="space-y-6">
         <div className="border-b border-slate-200 pb-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -239,7 +243,7 @@ const AssetFormModal = ({
               <input
                 type="text"
                 name="asset_name"
-                value={formData.asset_name}
+                value={formData.asset_name || ''}
                 onChange={onInputChange}
                 required
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -258,7 +262,7 @@ const AssetFormModal = ({
               </label>
               <select
                 name="asset_category_id"
-                value={formData.asset_category_id}
+                value={formData.asset_category_id || ''}
                 onChange={onInputChange}
                 required
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -296,8 +300,7 @@ const AssetFormModal = ({
             )}
 
             {/* Category-Specific Specifications - placed after subcategory */}
-            {!isDesktopPCCategory() &&
-              formData.asset_category_id &&
+            {formData.asset_category_id &&
               (!hasSubcategories || formData.subcategory_id) && (
               <div className="md:col-span-2">
                 <SpecificationFields
@@ -657,7 +660,7 @@ const AssetFormModal = ({
                 <input
                   type="text"
                   name="serial_number"
-                  value={formData.serial_number}
+                  value={formData.serial_number || ''}
                   onChange={onInputChange}
                   className="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder={isDesktopPCCategory() ? "Enter Desktop PC unit serial number or generate" : (placeholders.serial_number || 'Enter serial number or generate')}
@@ -706,7 +709,7 @@ const AssetFormModal = ({
               <input
                 type="date"
                 name="purchase_date"
-                value={formData.purchase_date}
+                value={formData.purchase_date || ''}
                 onChange={onInputChange}
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
@@ -773,12 +776,12 @@ const AssetFormModal = ({
               <label className="block text-sm font-semibold text-slate-700 mb-2">Vendor</label>
               <select
                 name="vendor_id"
-                value={formData.vendor_id}
+                value={formData.vendor_id || ''}
                 onChange={(e) => {
                   if (e.target.value === 'ADD_NEW') {
                     onAddVendor?.()
                   } else {
-                    onVendorChange(e.target.value)
+                    onVendorChange?.(e.target.value)
                   }
                 }}
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -789,9 +792,9 @@ const AssetFormModal = ({
                     + Add New Vendor
                   </option>
                 )}
-                {vendorOptions?.map((vendor) => (
+                {(vendorOptions || []).map((vendor) => (
                   <option key={vendor.id} value={vendor.id}>
-                    {vendor.name}
+                    {vendor.name || vendor.company_name}
                   </option>
                 ))}
               </select>
@@ -817,7 +820,7 @@ const AssetFormModal = ({
                 </label>
                 <select
                   name="status_id"
-                  value={formData.status_id}
+                  value={formData.status_id || ''}
                   onChange={onInputChange}
                   required
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -832,20 +835,24 @@ const AssetFormModal = ({
               </div>
             )}
 
-            <div>
-              <SearchableSelect
-                label="Assigned To Employee"
-                options={employeeOptions}
-                value={formData.assigned_to_employee_id}
-                onChange={onEmployeeChange}
-                displayField="name"
-                secondaryField="position"
-                tertiaryField="branch"
-                placeholder="Select employee or search..."
-                emptyMessage="No employees found"
-                required
-              />
-            </div>
+            {/* Workstation Assignment */}
+            {hideAssignedEmployee !== true && (
+              <div className={showStatus ? '' : 'md:col-span-2'}>
+                <SearchableSelect
+                  label="Assign to Workstation"
+                  options={workstationOptions || []}
+                  value={formData.workstation_id || ''}
+                  onChange={onWorkstationChange}
+                  displayField="name"
+                  placeholder="Select employee or search..."
+                  emptyMessage="No workstations found"
+                  required={false}
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Select employee - workstation ID will be stored
+                </p>
+              </div>
+            )}
 
             <div className={remarksWrapperClass}>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Remarks</label>

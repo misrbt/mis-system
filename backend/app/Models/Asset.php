@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\QRCodeMonkeyService;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Facades\Schema;
-use App\Services\QRCodeMonkeyService;
 
 class Asset extends Model
 {
@@ -16,51 +16,21 @@ class Asset extends Model
 
     /**
      * The "booted" method of the model.
-     * Auto-cleanup defective assets - works exactly like book value calculation
-     * NO SCHEDULER NEEDED - Automatic cleanup whenever assets are queried
+     * Automatically exclude expired defective assets from queries.
+     * Deletion is handled by scheduled command (CleanupExpiredDefectiveAssets).
      */
     protected static function booted()
     {
-        if (!Schema::hasColumn('assets', 'delete_after_at')) {
+        if (! Schema::hasColumn('assets', 'delete_after_at')) {
             return;
         }
 
-        // Global scope to automatically exclude AND delete expired defective assets
-        // This runs on EVERY query, ensuring real-time cleanup
-        static::addGlobalScope('auto_delete_expired_defective', function ($query) {
-            // First, delete any assets that have passed their delete_after_at timestamp
-            // This happens in the background without blocking the query
-            try {
-                // Get assets ready for deletion (outside global scope to avoid recursion)
-                $assetsToDelete = static::withoutGlobalScope('auto_delete_expired_defective')
-                    ->whereNotNull('delete_after_at')
-                    ->where('delete_after_at', '<=', now())
-                    ->limit(50) // Batch delete to avoid performance issues
-                    ->get();
-
-                if ($assetsToDelete->isNotEmpty()) {
-                    foreach ($assetsToDelete as $asset) {
-                        try {
-                            \Illuminate\Support\Facades\Log::info("Auto-deleted defective asset", [
-                                'asset_id' => $asset->id,
-                                'asset_name' => $asset->asset_name,
-                                'defective_at' => $asset->defective_at,
-                                'delete_after_at' => $asset->delete_after_at,
-                            ]);
-                            $asset->delete();
-                        } catch (\Exception $e) {
-                            \Illuminate\Support\Facades\Log::error("Failed to auto-delete asset {$asset->id}: " . $e->getMessage());
-                        }
-                    }
-                }
-            } catch (\Exception $e) {
-                // Silent fail - don't break queries
-            }
-
-            // Then exclude any remaining expired assets from the query results
+        // Global scope to automatically exclude expired defective assets
+        // Deletion is now handled by scheduled command for better performance
+        static::addGlobalScope('hide_expired_defective', function ($query) {
             $query->where(function ($q) {
                 $q->whereNull('delete_after_at')
-                  ->orWhere('delete_after_at', '>', now());
+                    ->orWhere('delete_after_at', '>', now());
             });
         });
     }
@@ -83,6 +53,9 @@ class Asset extends Model
         'remarks',
         'specifications',
         'assigned_to_employee_id',
+        'workstation_branch_id',
+        'workstation_position_id',
+        'workstation_id',
         'qr_code',
         'barcode',
     ];
@@ -126,6 +99,24 @@ class Asset extends Model
     public function assignedEmployee()
     {
         return $this->belongsTo(Employee::class, 'assigned_to_employee_id');
+    }
+
+    public function workstationBranch()
+    {
+        return $this->belongsTo(Branch::class, 'workstation_branch_id');
+    }
+
+    public function workstationPosition()
+    {
+        return $this->belongsTo(Position::class, 'workstation_position_id');
+    }
+
+    /**
+     * Get the workstation this asset belongs to.
+     */
+    public function workstation()
+    {
+        return $this->belongsTo(Workstation::class);
     }
 
     public function repairs()
@@ -180,7 +171,7 @@ class Asset extends Model
 
     public function getCurrentAssignmentDuration()
     {
-        if (!$this->assigned_to_employee_id) {
+        if (! $this->assigned_to_employee_id) {
             return null;
         }
 
@@ -190,12 +181,15 @@ class Asset extends Model
             ->latest('movement_date')
             ->first();
 
-        if (!$lastAssignment) {
+        if (! $lastAssignment) {
             return null;
         }
 
         return now()->diffInDays($lastAssignment->movement_date);
     }
+
+    /** Cached result of calculateBookValue() for the current request. */
+    private ?array $bookValueCache = null;
 
     /**
      * Calculate the current book value using straight-line depreciation
@@ -204,8 +198,13 @@ class Asset extends Model
      */
     public function calculateBookValue($asOfDate = null)
     {
+        // Return the cached result for the default (current-date) calculation
+        if ($asOfDate === null && $this->bookValueCache !== null) {
+            return $this->bookValueCache;
+        }
+
         // Return null if required fields are missing
-        if (!$this->purchase_date || !$this->estimate_life || !$this->acq_cost) {
+        if (! $this->purchase_date || ! $this->estimate_life || ! $this->acq_cost) {
             $purchaseDateString = $this->purchase_date
                 ? \Carbon\Carbon::parse($this->purchase_date)->toDateString()
                 : null;
@@ -213,7 +212,7 @@ class Asset extends Model
                 ? \Carbon\Carbon::parse($asOfDate)->toDateString()
                 : now()->toDateString();
 
-            return [
+            $result = [
                 'book_value' => $this->acq_cost ?? 0,
                 'purchase_date' => $purchaseDateString,
                 'as_of_date' => $asOfDateString,
@@ -223,16 +222,22 @@ class Asset extends Model
                 'daily_depreciation' => 0,
                 'diminished_value' => 0,
             ];
+
+            if ($asOfDate === null) {
+                $this->bookValueCache = $result;
+            }
+
+            return $result;
         }
 
         // Parse dates
         $purchaseDate = \Carbon\Carbon::parse($this->purchase_date);
-        $asOfDate = $asOfDate ? \Carbon\Carbon::parse($asOfDate) : now();
+        $resolvedDate = $asOfDate ? \Carbon\Carbon::parse($asOfDate) : now();
 
         // Calculate number of days since purchase
         // Use startOfDay to ensure we only count FULL days (not partial days)
         // This ensures book value doesn't depreciate on the purchase day itself
-        $daysElapsed = $purchaseDate->startOfDay()->diffInDays($asOfDate->startOfDay());
+        $daysElapsed = $purchaseDate->startOfDay()->diffInDays($resolvedDate->startOfDay());
 
         // Calculate total life in days
         $totalLifeDays = $this->estimate_life * 365;
@@ -246,9 +251,9 @@ class Asset extends Model
         // Calculate book value as of cutoff (never less than 1)
         $bookValue = max(1, $this->acq_cost - $diminishedValue);
 
-        return [
+        $result = [
             'purchase_date' => $purchaseDate->toDateString(),
-            'as_of_date' => $asOfDate->toDateString(),
+            'as_of_date' => $resolvedDate->toDateString(),
             'life_years' => $this->estimate_life,
             'amount_purchased' => $this->acq_cost,
             'days_elapsed' => $daysElapsed,
@@ -256,6 +261,12 @@ class Asset extends Model
             'diminished_value' => round($diminishedValue, 2),
             'book_value' => round($bookValue, 2),
         ];
+
+        if ($asOfDate === null) {
+            $this->bookValueCache = $result;
+        }
+
+        return $result;
     }
 
     /**
@@ -268,7 +279,7 @@ class Asset extends Model
         return Attribute::make(
             get: function ($value) {
                 // If required fields are missing, return stored value or acquisition cost
-                if (!$this->purchase_date || !$this->estimate_life || !$this->acq_cost) {
+                if (! $this->purchase_date || ! $this->estimate_life || ! $this->acq_cost) {
                     return $value ?? $this->acq_cost ?? 0;
                 }
 
@@ -303,7 +314,7 @@ class Asset extends Model
     public function shouldTransitionToFunctional()
     {
         // Check if status is "New"
-        if (!$this->status || $this->status->name !== 'New') {
+        if (! $this->status || $this->status->name !== 'New') {
             return false;
         }
 
@@ -331,16 +342,27 @@ class Asset extends Model
     }
 
     /**
-     * Accessor for calculated book value (appends to JSON)
+     * Appends are disabled by default for performance.
+     * Use $asset->append(['calculated_book_value', 'depreciation_info']) when needed.
      */
-    protected $appends = ['calculated_book_value', 'depreciation_info'];
+    protected $appends = [];
 
-    public function getCalculatedBookValueAttribute()
+    /**
+     * Accessor for calculated book value.
+     * Not appended by default - call $asset->append('calculated_book_value') when needed.
+     */
+    public function getCalculatedBookValueAttribute(): float
     {
         return $this->calculateBookValue()['book_value'];
     }
 
-    public function getDepreciationInfoAttribute()
+    /**
+     * Accessor for full depreciation info.
+     * Not appended by default - call $asset->append('depreciation_info') when needed.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDepreciationInfoAttribute(): array
     {
         return $this->calculateBookValue();
     }
@@ -349,7 +371,7 @@ class Asset extends Model
      * Generate QR code for this asset using QR Code Monkey API
      * Returns base64 encoded PNG image with square design (frame0, ball0)
      *
-     * @param string $type Type of QR code: 'simple' (serial only), 'url' (asset URL), 'full' (all info)
+     * @param  string  $type  Type of QR code: 'simple' (serial only), 'url' (asset URL), 'full' (all info)
      * @return string|null Base64 encoded PNG image
      */
     public function generateQRCode(string $type = 'simple')
@@ -358,6 +380,7 @@ class Asset extends Model
             case 'url':
                 // Generate QR with URL to asset page
                 $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:5173'));
+
                 return QRCodeMonkeyService::generateForAssetWithUrl($this, $baseUrl);
 
             case 'full':
@@ -384,21 +407,23 @@ class Asset extends Model
         $warrantyDate = $this->waranty_expiration_date
             ? \Carbon\Carbon::parse($this->waranty_expiration_date)->toDateString()
             : '-';
-        $acqCost = !is_null($this->acq_cost) ? 'PHP ' . number_format($this->acq_cost, 2) : '-';
-        $bookValue = !is_null($this->book_value) ? 'PHP ' . number_format($this->book_value, 2) : '-';
+        $acqCost = ! is_null($this->acq_cost) ? 'PHP '.number_format($this->acq_cost, 2) : '-';
+        $bookValue = ! is_null($this->book_value) ? 'PHP '.number_format($this->book_value, 2) : '-';
 
         // Simple table format - clean and easy to read
         $qrData = "ASSET INFO\n";
-        $qrData .= "Name: " . ($this->asset_name ?? '-') . "\n";
-        $qrData .= "Serial: " . ($this->serial_number ?? '-') . "\n";
-        $qrData .= "Category: " . ($this->category?->name ?? '-') . "\n";
-        $qrData .= "Status: " . ($this->status?->name ?? '-') . "\n";
-        $qrData .= "Assigned Personnel: " . ($this->assignedEmployee?->fullname ?? 'Unassigned') . "\n";
-        $qrData .= "Branch: " . ($this->assignedEmployee?->branch?->branch_name ?? '-') . "\n";
-        $qrData .= "Purchase: " . $purchaseDate . "\n";
-        $qrData .= "Warranty: " . $warrantyDate . "\n";
-        $qrData .= "Cost: " . $acqCost . "\n";
-        $qrData .= "Book Value: " . $bookValue;
+        $qrData .= 'Name: '.($this->asset_name ?? '-')."\n";
+        $qrData .= 'Serial: '.($this->serial_number ?? '-')."\n";
+        $qrData .= 'Category: '.($this->category?->name ?? '-')."\n";
+        $qrData .= 'Status: '.($this->status?->name ?? '-')."\n";
+        $personnel = $this->workstation?->employee?->fullname ?? $this->assignedEmployee?->fullname ?? 'Unassigned';
+        $branch = $this->workstation?->branch?->branch_name ?? $this->assignedEmployee?->branch?->branch_name ?? '-';
+        $qrData .= 'Assigned To: '.$personnel."\n";
+        $qrData .= 'Branch: '.$branch."\n";
+        $qrData .= 'Purchase: '.$purchaseDate."\n";
+        $qrData .= 'Warranty: '.$warrantyDate."\n";
+        $qrData .= 'Cost: '.$acqCost."\n";
+        $qrData .= 'Book Value: '.$bookValue;
 
         $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')
             ->size(400)
@@ -406,15 +431,15 @@ class Asset extends Model
             ->errorCorrection('M')
             ->generate($qrData);
 
-        return 'data:image/svg+xml;base64,' . base64_encode($qrCode);
+        return 'data:image/svg+xml;base64,'.base64_encode($qrCode);
     }
 
     /**
      * Generate and save QR code for this asset
      * Uses QR Code Monkey API with fallback to legacy local generation
      *
-     * @param string $type Type of QR code: 'simple', 'url', or 'full'
-     * @param bool $useFallback Whether to use legacy fallback if API fails
+     * @param  string  $type  Type of QR code: 'simple', 'url', or 'full'
+     * @param  bool  $useFallback  Whether to use legacy fallback if API fails
      * @return array Result with 'success', 'qr_code', 'source', and optionally 'error'
      */
     public function generateAndSaveQRCode(string $type = 'simple', bool $useFallback = true): array
@@ -478,7 +503,7 @@ class Asset extends Model
     public function generateBarcode()
     {
         // Only generate barcode if serial number exists
-        if (!$this->serial_number) {
+        if (! $this->serial_number) {
             return null;
         }
 
@@ -486,10 +511,10 @@ class Asset extends Model
         $barcodeValue = $this->serial_number;
 
         // Generate CODE128 barcode as SVG
-        $generator = new \Picqer\Barcode\BarcodeGeneratorSVG();
+        $generator = new \Picqer\Barcode\BarcodeGeneratorSVG;
         $barcodeSvg = $generator->getBarcode($barcodeValue, $generator::TYPE_CODE_128, 3, 80);
 
-        return 'data:image/svg+xml;base64,' . base64_encode($barcodeSvg);
+        return 'data:image/svg+xml;base64,'.base64_encode($barcodeSvg);
     }
 
     /**
@@ -499,7 +524,7 @@ class Asset extends Model
     {
         $this->barcode = $this->generateBarcode();
         $this->save();
+
         return $this->barcode;
     }
-
 }

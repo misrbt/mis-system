@@ -19,14 +19,18 @@ const EmployeeHeader = ({ employee, assetCount = 0, totalAcqCost = 0 }) => {
         <div className="flex-1 text-center sm:text-left">
           <h1 className="text-lg sm:text-lg font-bold mb-2">{employee.fullname}</h1>
           <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-3 sm:gap-6 text-xs">
-            <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-indigo-100" />
-              <span>{employee.position?.title || 'No Position'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-indigo-100" />
-              <span>{employee.branch?.branch_name || 'No Branch'}</span>
-            </div>
+            {employee.position?.title && (
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-indigo-100" />
+                <span>{employee.position.title}</span>
+              </div>
+            )}
+            {employee.branch?.branch_name && (
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-indigo-100" />
+                <span>{employee.branch.branch_name}</span>
+              </div>
+            )}
           </div>
         </div>
 

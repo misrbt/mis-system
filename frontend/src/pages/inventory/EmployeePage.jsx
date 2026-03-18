@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { useCallback, useMemo, useState, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowLeftRight } from 'lucide-react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,6 +8,7 @@ import {
   getSortedRowModel,
   getPaginationRowModel,
 } from '@tanstack/react-table'
+import { useNavigate } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import Modal from '../../components/Modal'
 import DataTable from '../../components/DataTable'
@@ -30,63 +32,109 @@ const initialForm = {
 }
 
 function EmployeePage() {
-  const [employees, setEmployees] = useState([])
-  const [branches, setBranches] = useState([])
-  const [sections, setSections] = useState([])
-  const [positions, setPositions] = useState([])
-  const [loading, setLoading] = useState(true)
-
+  const navigate = useNavigate()
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [formData, setFormData] = useState(initialForm)
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
+  const [branchFilter, setBranchFilter] = useState('')
 
   const resetForm = () => setFormData(initialForm)
 
-  const fetchEmployees = useCallback(async () => {
-    try {
-      setLoading(true)
-      const response = await fetchEmployeesRequest()
-      if (response.data?.success) {
-        setEmployees(response.data.data)
+  const queryClient = useQueryClient()
+
+  const { data: employees = [], isLoading: loading } = useQuery({
+    queryKey: ['employees', 'all'],
+    queryFn: async () => {
+      const response = await fetchEmployeesRequest({ all: true })
+      const resData = response.data
+      // Handle both paginated and non-paginated responses
+      if (resData?.success && Array.isArray(resData?.data)) {
+        return resData.data
       }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch employees',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+      if (Array.isArray(resData?.data?.data)) {
+        return resData.data.data
+      }
+      if (Array.isArray(resData?.data)) {
+        return resData.data
+      }
+      if (Array.isArray(resData)) {
+        return resData
+      }
+      return []
+    },
+  })
 
-  const fetchReferenceData = useCallback(async () => {
-    try {
-      const [branchRes, sectionRes, positionRes] = await Promise.all([
-        fetchBranchesRequest(),
-        fetchSectionsRequest(),
-        fetchPositionsRequest(),
-      ])
-      if (branchRes.data?.success) setBranches(branchRes.data.data)
-      if (sectionRes.data?.success) setSections(sectionRes.data.data)
-      if (positionRes.data?.success) setPositions(positionRes.data.data)
-    } catch (error) {
-      console.error(error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Failed to load reference data',
-      })
-    }
-  }, [])
+  const { data: branches = [] } = useQuery({
+    queryKey: ['branches'],
+    queryFn: async () => {
+      const response = await fetchBranchesRequest()
+      return response.data?.data ?? []
+    },
+  })
 
-  useEffect(() => {
-    fetchReferenceData()
-    fetchEmployees()
-  }, [fetchEmployees, fetchReferenceData])
+  const { data: sections = [] } = useQuery({
+    queryKey: ['sections'],
+    queryFn: async () => {
+      const response = await fetchSectionsRequest()
+      return response.data?.data ?? []
+    },
+  })
+
+  const { data: positions = [] } = useQuery({
+    queryKey: ['positions'],
+    queryFn: async () => {
+      const response = await fetchPositionsRequest()
+      return response.data?.data ?? []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => createEmployeeRequest(data),
+    onSuccess: () => {
+      // Invalidate all employee queries (both 'all' and 'filtered' variants)
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      setIsAddModalOpen(false)
+      resetForm()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Employee created successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join('\n')
+        : error.response?.data?.message || 'Failed to create employee'
+      Swal.fire({ icon: 'error', title: 'Error', text: msg })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => updateEmployeeRequest(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      closeEditModal()
+      Swal.fire({ icon: 'success', title: 'Success', text: 'Employee updated successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join('\n')
+        : error.response?.data?.message || 'Failed to update employee'
+      Swal.fire({ icon: 'error', title: 'Error', text: msg })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteEmployeeRequest(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Employee deleted successfully.', timer: 2000 })
+    },
+    onError: (error) => {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to delete employee' })
+    },
+  })
+  const deleteMutateRef = useRef(deleteMutation.mutate)
+  deleteMutateRef.current = deleteMutation.mutate
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -116,88 +164,29 @@ function EmployeePage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await createEmployeeRequest(formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        setIsAddModalOpen(false)
-        fetchEmployees()
-      }
-    } catch (error) {
-      const fullnameError = error.response?.data?.errors?.fullname?.[0]
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: fullnameError || error.response?.data?.message || 'Failed to create employee',
-      })
-    }
+    createMutation.mutate(formData)
   }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
-    try {
-      const response = await updateEmployeeRequest(selectedEmployee.id, formData)
-      if (response.data.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: response.data.message,
-          timer: 2000,
-        })
-        closeEditModal()
-        fetchEmployees()
-      }
-    } catch (error) {
-      const fullnameError = error.response?.data?.errors?.fullname?.[0]
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: fullnameError || error.response?.data?.message || 'Failed to update employee',
-      })
-    }
+    updateMutation.mutate({ id: selectedEmployee.id, data: formData })
   }
 
-  const handleDelete = useCallback(
-    async (employee) => {
-      const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: `Delete employee "${employee.fullname}"?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc2626',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-      })
-
-      if (result.isConfirmed) {
-        try {
-          const response = await deleteEmployeeRequest(employee.id)
-          if (response.data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Deleted!',
-              text: response.data.message,
-              timer: 2000,
-            })
-            fetchEmployees()
-          }
-        } catch (error) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: error.response?.data?.message || 'Failed to delete employee',
-          })
-        }
-      }
-    },
-    [fetchEmployees]
-  )
+  const handleDelete = useCallback(async (employee) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Delete employee "${employee.fullname}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+    })
+    if (result.isConfirmed) {
+      deleteMutateRef.current(employee.id)
+    }
+  }, [])
 
   const columns = useMemo(() => getEmployeeColumns(openEditModal, handleDelete), [handleDelete, openEditModal])
   const mobileColumns = useMemo(
@@ -210,8 +199,13 @@ function EmployeePage() {
     []
   )
 
+  const filteredEmployees = useMemo(() => {
+    if (!branchFilter) return employees
+    return employees.filter(emp => emp.branch_id === parseInt(branchFilter))
+  }, [employees, branchFilter])
+
   const mobileTable = useReactTable({
-    data: employees,
+    data: filteredEmployees,
     columns: mobileColumns,
     state: {
       globalFilter: mobileGlobalFilter,
@@ -232,25 +226,54 @@ function EmployeePage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : filteredEmployees.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Employee Management</h1>
-          <p className="text-sm text-slate-600 mt-1.5">Manage employees and their assignments</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Employee Management</h1>
+            <p className="text-sm text-slate-600 mt-1.5">Manage employees and their assignments</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/inventory/employee-transitions')}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              <ArrowLeftRight className="w-5 h-5" />
+              <span>Manage Transitions</span>
+            </button>
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add New Employee</span>
+            </button>
+          </div>
         </div>
-        <button
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add New Employee</span>
-        </button>
+
+        {/* Branch Filter */}
+        <div className="hidden sm:block">
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[200px]"
+          >
+            <option value="">All Branches</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.branch_name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Mobile Cards */}
@@ -266,6 +289,18 @@ function EmployeePage() {
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">All Branches</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.branch_name}
+              </option>
+            ))}
+          </select>
           <div className="flex items-center gap-2">
             <select
               value={mobileSortId}
@@ -416,7 +451,7 @@ function EmployeePage() {
 
       {/* Data Table */}
       <div className="hidden sm:block">
-        <DataTable columns={columns} data={employees} loading={loading} pageSize={10} />
+        <DataTable columns={columns} data={filteredEmployees} loading={loading} pageSize={10} />
       </div>
 
       {/* Add Modal */}
@@ -456,6 +491,7 @@ function EmployeePage() {
           submitLabel="Update Employee"
         />
       </Modal>
+
     </div>
   )
 }

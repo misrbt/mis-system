@@ -45,3 +45,4 @@ coverage/
 
 # Local tooling folder
 .qodo/
+docs/*.sql

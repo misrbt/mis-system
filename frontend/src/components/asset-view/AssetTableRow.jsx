@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Edit, Trash2, ChevronDown, QrCode, Barcode, MessageSquare, RefreshCw, Loader2, Info } from 'lucide-react'
 import { formatDate, formatCurrency } from '../../utils/assetFormatters'
@@ -224,7 +224,18 @@ const AssetTableRow = ({
   onRowClick,
   onViewDetails,
   isPending,
+  isHighlighted,
 }) => {
+  const rowRef = useRef(null)
+
+  useEffect(() => {
+    if (isHighlighted && rowRef.current) {
+      setTimeout(() => {
+        rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 300)
+    }
+  }, [isHighlighted])
+
   const handleRowClick = (e) => {
     // Don't navigate if clicking on interactive elements
     if (
@@ -238,7 +249,12 @@ const AssetTableRow = ({
 
   return (
     <tr
-      className="hover:bg-slate-50 cursor-pointer transition-all duration-200"
+      ref={rowRef}
+      className={`cursor-pointer transition-all duration-300 ${
+        isHighlighted 
+          ? 'bg-yellow-50/70 border-y-2 border-yellow-300 shadow-sm relative z-10 hover:bg-yellow-50/90' 
+          : 'hover:bg-slate-50'
+      }`}
       onClick={handleRowClick}
     >
       {/* Asset Name */}

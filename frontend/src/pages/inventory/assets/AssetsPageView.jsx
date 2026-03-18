@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -22,7 +22,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import apiClient from '../../../services/apiClient'
-import AssetFormModal from './AssetFormModal'
+import AssetFormModal from '../../../components/asset-view/AssetFormModal'
 import { getAssetColumns } from './assetColumns'
 import Modal from '../../../components/Modal'
 import Swal from 'sweetalert2'
@@ -31,11 +31,15 @@ import { formatCurrency, formatDate } from '../../../utils/assetFormatters'
 import AssetsHeaderBar from './AssetsHeaderBar'
 import AssetsFiltersPanel from './AssetsFiltersPanel'
 import AssetsBulkActions from './AssetsBulkActions'
-import AdvancedAssetTracker from './AdvancedAssetTracker'
 const AssetsPivotView = lazy(() => import('./AssetsPivotView'))
+const AdvancedAssetTracker = lazy(() => import('./AdvancedAssetTracker'))
 
 const normalizeArrayResponse = (data) => {
+  // Handle Laravel pagination: { success: true, data: { data: [...], current_page: ... } }
+  if (data?.data?.data && Array.isArray(data.data.data)) return data.data.data
+  // Handle simple array response: { success: true, data: [...] }
   if (Array.isArray(data?.data)) return data.data
+  // Handle direct array
   if (Array.isArray(data)) return data
   return []
 }
@@ -49,6 +53,7 @@ const INITIAL_FILTERS = {
   subcategory_id: '',
   status_id: '',
   vendor_id: '',
+  workstation_id: '',
   purchase_date_from: '',
   purchase_date_to: '',
 }
@@ -104,7 +109,10 @@ const buildFormData = (asset = {}) => ({
   status_id: asset.status_id || '',
   remarks: asset.remarks || '',
   specifications: asset.specifications || {},
+  workstation_id: asset.workstation_id || '',
   assigned_to_employee_id: asset.assigned_to_employee_id || '',
+  workstation_branch_id: asset.workstation_branch_id || '',
+  workstation_position_id: asset.workstation_position_id || '',
 })
 
 const notifySuccess = (title, text) => {
@@ -152,6 +160,8 @@ function AssetsPage() {
   const [tableGlobalFilter, setTableGlobalFilter] = useState('')
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
+  const [mobileSearchInput, setMobileSearchInput] = useState('')
+  const mobileSearchTimeout = useRef(null)
   const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
   const isTableView = viewMode === 'table'
   const [vendorFormData, setVendorFormData] = useState({
@@ -166,40 +176,45 @@ function AssetsPage() {
   // Tab state
   const [activeTab, setActiveTab] = useState('inventory')
 
+  const viewModeRef = useRef(viewMode)
+  viewModeRef.current = viewMode
+
+  // Defer heavy secondary queries until after first paint
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const smallQuery = window.matchMedia('(max-width: 639px)')
     const largeQuery = window.matchMedia('(min-width: 640px)')
     const syncViewMode = () => {
-      if (smallQuery.matches && viewMode !== 'cards') {
+      if (smallQuery.matches && viewModeRef.current !== 'cards') {
         setViewMode('cards')
       }
-      if (largeQuery.matches && viewMode === 'cards') {
+      if (largeQuery.matches && viewModeRef.current === 'cards') {
         setViewMode('table')
       }
     }
-
     syncViewMode()
-
     smallQuery.addEventListener('change', syncViewMode)
     largeQuery.addEventListener('change', syncViewMode)
     return () => {
       smallQuery.removeEventListener('change', syncViewMode)
       largeQuery.removeEventListener('change', syncViewMode)
     }
-  }, [viewMode])
+  }, []) // Runs once on mount only; uses ref to read current viewMode
 
   // Filter state - initialize from URL search params or sessionStorage so filters persist across navigation
   const isInitialMount = useRef(true)
   const [filters, setFilters] = useState(() => {
     const restored = { ...INITIAL_FILTERS }
     // First try URL search params
-    let hasUrlParams = false
     Object.keys(INITIAL_FILTERS).forEach((key) => {
       const val = searchParams.get(key)
       if (val) {
         restored[key] = val
-        hasUrlParams = true
       }
     })
     // Fallback to sessionStorage removed to prevent auto-loading filters on clean navigation
@@ -229,8 +244,11 @@ function AssetsPage() {
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params.set(key, value)
     })
-    setSearchParams(params, { replace: true })
     const paramStr = params.toString()
+    // Only push to router when params actually changed to avoid unnecessary re-renders
+    if (paramStr !== searchParams.toString()) {
+      setSearchParams(params, { replace: true })
+    }
     if (paramStr) {
       sessionStorage.setItem('assets_filter_params', paramStr)
     } else {
@@ -246,14 +264,26 @@ function AssetsPage() {
   const [formData, setFormData] = useState(() => buildFormData())
   const [components, setComponents] = useState([])
 
-  // Fetch assets with React Query
-  const { data: assetsData, isLoading, refetch } = useQuery({
-    queryKey: ['assets', deferredFilters],
+  // Debounced search for server-side filtering
+  const deferredTableSearch = useDeferredValue(tableGlobalFilter)
+
+  // Fetch assets with React Query - uses server-side filtering when search is provided
+  const { data: assetsData, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['assets', deferredFilters, deferredTableSearch],
     queryFn: async () => {
-      const params = buildQueryParams(deferredFilters)
+      const extraParams = { all: 'true' }
+      // Add server-side search if search term is >= 2 characters
+      if (deferredTableSearch && deferredTableSearch.length >= 2) {
+        extraParams.search = deferredTableSearch
+      }
+      const params = buildQueryParams(deferredFilters, extraParams)
       const response = await apiClient.get(`/assets?${params}`)
       return response.data
     },
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
+    // Keep previous data while fetching to avoid UI flicker
+    placeholderData: (previousData) => previousData,
   })
 
   const { data: assetsTotalsData, isLoading: isLoadingTotals } = useQuery({
@@ -264,6 +294,8 @@ function AssetsPage() {
       return response.data
     },
     enabled: isTableView,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
   })
 
   // Fetch filter options
@@ -273,6 +305,7 @@ function AssetsPage() {
       const response = await apiClient.get('/branches')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: categories } = useQuery({
@@ -281,6 +314,7 @@ function AssetsPage() {
       const response = await apiClient.get('/asset-categories')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: subcategories } = useQuery({
@@ -310,6 +344,7 @@ function AssetsPage() {
       const response = await apiClient.get('/statuses')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: vendors } = useQuery({
@@ -318,15 +353,19 @@ function AssetsPage() {
       const response = await apiClient.get('/vendors')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
   })
 
-  const { data: employees } = useQuery({
+  const { data: employeesRaw } = useQuery({
     queryKey: ['employees'],
     queryFn: async () => {
       const response = await apiClient.get('/employees')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
+    enabled: hydrated,
   })
+  const employees = Array.isArray(employeesRaw) ? employeesRaw : []
 
   // Fetch equipment list
   const { data: equipmentList } = useQuery({
@@ -335,6 +374,27 @@ function AssetsPage() {
       const response = await apiClient.get('/equipment')
       return normalizeArrayResponse(response.data)
     },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Fetch positions (for workstation selector)
+  const { data: positionsList } = useQuery({
+    queryKey: ['positions'],
+    queryFn: async () => {
+      const response = await apiClient.get('/positions')
+      return normalizeArrayResponse(response.data)
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Fetch workstations
+  const { data: workstationsList } = useQuery({
+    queryKey: ['workstations'],
+    queryFn: async () => {
+      const response = await apiClient.get('/workstations')
+      return normalizeArrayResponse(response.data)
+    },
+    staleTime: 5 * 60 * 1000,
   })
 
   const employeeAcqTotals = useMemo(() => {
@@ -380,6 +440,25 @@ function AssetsPage() {
     [employees]
   )
 
+  const workstationOptions = useMemo(
+    () =>
+      (Array.isArray(workstationsList) ? workstationsList : []).map((ws) => {
+        const employeeName = ws.employee?.fullname || 'Unassigned'
+        const positionTitle = ws.position?.title || ''
+        const displayName = positionTitle
+          ? `${employeeName} - ${positionTitle}`
+          : employeeName
+
+        return {
+          id: ws.id,
+          name: displayName,
+          workstation_name: ws.name,
+          branch_name: ws.branch?.branch_name,
+        }
+      }),
+    [workstationsList]
+  )
+
   const equipmentOptions = useMemo(
     () =>
       (Array.isArray(equipmentList) ? equipmentList : []).map((eq) => ({
@@ -393,6 +472,16 @@ function AssetsPage() {
         subcategory_name: eq.subcategory?.name,
       })),
     [equipmentList]
+  )
+
+  const branchOptions = useMemo(
+    () => (Array.isArray(branches) ? branches : []),
+    [branches]
+  )
+
+  const positionOptions = useMemo(
+    () => (Array.isArray(positionsList) ? positionsList : []),
+    [positionsList]
   )
 
   const resolveEquipmentId = useCallback(
@@ -557,6 +646,18 @@ function AssetsPage() {
   const handleEmployeeChange = useCallback((value) => {
     setFormData((prev) => ({ ...prev, assigned_to_employee_id: value }))
   }, [])
+
+  const handleWorkstationChange = useCallback((value) => {
+    // Find the selected workstation to get branch and position
+    const selectedWorkstation = workstationsList?.find(ws => ws.id === parseInt(value))
+    setFormData((prev) => ({
+      ...prev,
+      workstation_id: value,
+      // Do NOT auto-populate employee - assets stay with workstations, not employees!
+      workstation_branch_id: selectedWorkstation?.branch_id || prev.workstation_branch_id,
+      workstation_position_id: selectedWorkstation?.position_id || prev.workstation_position_id,
+    }))
+  }, [workstationsList])
 
   const generateSerialNumber = useCallback(() => {
     // Get selected category
@@ -819,7 +920,10 @@ function AssetsPage() {
       subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
       vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
       status_id: formData.status_id ? Number(formData.status_id) : null,
+      workstation_id: formData.workstation_id ? Number(formData.workstation_id) : null,
       assigned_to_employee_id: formData.assigned_to_employee_id ? Number(formData.assigned_to_employee_id) : null,
+      workstation_branch_id: formData.workstation_branch_id ? Number(formData.workstation_branch_id) : null,
+      workstation_position_id: formData.workstation_position_id ? Number(formData.workstation_position_id) : null,
       equipment_id: equipmentId,
       components: components.filter(c => c.component_name.trim() !== '')
     }
@@ -839,7 +943,10 @@ function AssetsPage() {
         subcategory_id: formData.subcategory_id ? Number(formData.subcategory_id) : null,
         vendor_id: formData.vendor_id ? Number(formData.vendor_id) : null,
         status_id: formData.status_id ? Number(formData.status_id) : null,
+        workstation_id: formData.workstation_id ? Number(formData.workstation_id) : null,
         assigned_to_employee_id: formData.assigned_to_employee_id ? Number(formData.assigned_to_employee_id) : null,
+        workstation_branch_id: formData.workstation_branch_id ? Number(formData.workstation_branch_id) : null,
+        workstation_position_id: formData.workstation_position_id ? Number(formData.workstation_position_id) : null,
         equipment_id: equipmentId,
       },
     })
@@ -939,7 +1046,7 @@ function AssetsPage() {
       {
         id: 'employee',
         header: 'Employee',
-        accessorFn: (row) => row.assigned_employee?.fullname || row.assignedEmployee?.fullname || '',
+        accessorFn: (row) => row.workstation?.employee?.fullname || row.assigned_employee?.fullname || row.assignedEmployee?.fullname || '',
       },
       {
         id: 'category',
@@ -972,7 +1079,7 @@ function AssetsPage() {
   const globalFilterFn = useCallback((row, _columnId, filterValue) => {
     if (!filterValue) return true
     const search = filterValue.toLowerCase()
-    const employee = row.original.assigned_employee
+    const employee = row.original.workstation?.employee || row.original.assigned_employee
     const employeeName = (employee?.fullname || '').toLowerCase()
     const assetName = (row.original.asset_name || '').toLowerCase()
     const serialNumber = (row.original.serial_number || '').toLowerCase()
@@ -1030,7 +1137,6 @@ function AssetsPage() {
   const tableFilteredCount = deferredTableGlobalFilter
     ? table.getFilteredRowModel().rows.length
     : assetsList.length
-  const totalAssets = assetsList.length
 
   // Pivot table calculation
   const calculatePivotData = useCallback(() => {
@@ -1042,15 +1148,17 @@ function AssetsPage() {
     const getDimensionKey = (asset, dimension) => {
       switch (dimension) {
         case 'category':
-          return asset.category?.category_name || 'Uncategorized'
+          return asset.category?.category_name || asset.category?.name || 'Uncategorized'
         case 'status':
           return asset.status?.name || 'Unknown'
         case 'branch':
-          return asset.assigned_employee?.branch?.branch_name || 'Unassigned'
+          return asset.workstation?.branch?.branch_name || asset.assigned_employee?.branch?.branch_name || 'Unassigned'
         case 'vendor':
           return asset.vendor?.company_name || 'No Vendor'
+        case 'workstation':
+          return asset.workstation?.name || 'No Workstation'
         case 'employee':
-          return asset.assigned_employee?.fullname || 'Unassigned'
+          return asset.workstation?.employee?.fullname || asset.assigned_employee?.fullname || 'Unassigned'
         default:
           return 'Unknown'
       }
@@ -1223,7 +1331,7 @@ function AssetsPage() {
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         onAddAsset={openAddModal}
-        onViewEmployees={() => navigate('/inventory/employee-list')}
+        onViewEmployees={() => navigate('/inventory/workstations')}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
@@ -1241,6 +1349,7 @@ function AssetsPage() {
         filterSubcategories={filterSubcategories}
         statusOptions={statusOptions}
         vendors={vendors}
+        workstations={workstationsList}
         onClearFilters={clearFilters}
       />
 
@@ -1406,8 +1515,12 @@ function AssetsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                value={mobileGlobalFilter ?? ''}
-                onChange={(e) => setMobileGlobalFilter(e.target.value)}
+                value={mobileSearchInput}
+                onChange={(e) => {
+                  setMobileSearchInput(e.target.value)
+                  clearTimeout(mobileSearchTimeout.current)
+                  mobileSearchTimeout.current = setTimeout(() => setMobileGlobalFilter(e.target.value), 300)
+                }}
                 placeholder="Search assets..."
                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -1461,8 +1574,10 @@ function AssetsPage() {
             <div className="grid grid-cols-1 gap-3">
               {mobileTable.getRowModel().rows.map((row) => {
                 const asset = row.original
-                const assignedEmployeeId =
-                  asset.assigned_to_employee_id ?? asset.assigned_employee?.id
+                // Get employee ID from workstation or direct assignment
+                const workstationEmployeeId = asset.workstation?.employee?.id
+                const directEmployeeId = asset.assigned_to_employee_id || asset.assigned_employee?.id
+                const assignedEmployeeId = workstationEmployeeId || directEmployeeId
                 const hasEmployee = Boolean(assignedEmployeeId)
                 const statusId = asset.status_id ?? asset.status?.id
                 const statusColor = statusColorMap[statusId] || '#e2e8f0'
@@ -1539,7 +1654,7 @@ function AssetsPage() {
                       <button
                         onClick={() => {
                           if (hasEmployee) {
-                            navigate(`/inventory/employees/${assignedEmployeeId}/assets`)
+                            navigate(`/inventory/employees/${assignedEmployeeId}/assets?highlight=${asset.id}`)
                           } else {
                             Swal.fire({
                               icon: 'info',
@@ -1680,78 +1795,105 @@ function AssetsPage() {
 
       {/* Advanced Asset Tracker Tab */}
       {activeTab === 'tracker' && (
-        <AdvancedAssetTracker
-          branches={branches}
+        <Suspense
+          fallback={(
+            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
+              <div className="flex items-center justify-center">
+                <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+                <span className="ml-2 text-slate-600">Loading tracker...</span>
+              </div>
+            </div>
+          )}
+        >
+          <AdvancedAssetTracker
+            branches={branches}
+            categories={categories}
+            statuses={statuses}
+            vendors={vendors}
+            employees={employees}
+            workstations={workstationsList}
+          />
+        </Suspense>
+      )}
+
+      {/* Add Modal — only mounted while open to avoid hook overhead when closed */}
+      {isAddModalOpen && (
+        <AssetFormModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          title="Add New Asset"
+          onSubmit={handleCreate}
+          submitLabel={createMutation.isPending ? 'Creating...' : 'Create Asset'}
+          isSubmitting={createMutation.isPending}
+          formData={formData}
+          onInputChange={handleInputChange}
+          onVendorChange={handleVendorChange}
+          onEmployeeChange={handleEmployeeChange}
+          onWorkstationChange={handleWorkstationChange}
+          onGenerateSerial={generateSerialNumber}
+          onGenerateComponentSerial={generateComponentSerialNumber}
+          onAddVendor={openVendorModal}
           categories={categories}
-          statuses={statuses}
-          vendors={vendors}
-          employees={employees}
+          subcategories={subcategories || []}
+          vendorOptions={vendorOptions}
+          employeeOptions={employeeOptions}
+          workstationOptions={workstationOptions}
+          statusOptions={statusOptions}
+          branchOptions={branchOptions}
+          positionOptions={positionOptions}
+          hideAssignedEmployee={false}
+          hideWorkstationFields={false}
+          assignmentTitle="Assignment & Remarks"
+          assignmentSubtitle="Employee assignment and additional notes"
+          usePlaceholders
+          components={components}
+          onComponentAdd={handleComponentAdd}
+          onComponentRemove={handleComponentRemove}
+          onComponentChange={handleComponentChange}
+          equipmentOptions={equipmentOptions}
+          isEditMode={false}
         />
       )}
 
-      {/* Add Modal - Part 1 */}
-      <AssetFormModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Add New Asset"
-        onSubmit={handleCreate}
-        submitLabel={createMutation.isPending ? 'Creating...' : 'Create Asset'}
-        isSubmitting={createMutation.isPending}
-        formData={formData}
-        onInputChange={handleInputChange}
-        onVendorChange={handleVendorChange}
-        onEmployeeChange={handleEmployeeChange}
-        onGenerateSerial={generateSerialNumber}
-        onGenerateComponentSerial={generateComponentSerialNumber}
-        onAddVendor={openVendorModal}
-        categories={categories}
-        subcategories={subcategories || []}
-        vendorOptions={vendorOptions}
-        employeeOptions={employeeOptions}
-        statusOptions={statusOptions}
-        assignmentTitle="Assignment & Remarks"
-        assignmentSubtitle="Employee assignment and additional notes"
-        usePlaceholders
-        components={components}
-        onComponentAdd={handleComponentAdd}
-        onComponentRemove={handleComponentRemove}
-
-        onComponentChange={handleComponentChange}
-        equipmentOptions={equipmentOptions}
-        isEditMode={false}
-      />
-
-      {/* Edit Modal - Similar to Add Modal */}
-      <AssetFormModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        title="Edit Asset"
-        onSubmit={handleUpdate}
-        submitLabel={updateMutation.isPending ? 'Updating...' : 'Update Asset'}
-        isSubmitting={updateMutation.isPending}
-        formData={formData}
-        onInputChange={handleInputChange}
-        onVendorChange={handleVendorChange}
-        onEmployeeChange={handleEmployeeChange}
-        onAddVendor={openVendorModal}
-        onGenerateSerial={generateSerialNumber}
-        categories={categories}
-        subcategories={subcategories || []}
-        vendorOptions={vendorOptions}
-        employeeOptions={employeeOptions}
-        statusOptions={statusOptions}
-        showStatus
-        showBookValue
-        assignmentTitle="Assignment & Status"
-        assignmentSubtitle="Employee assignment and asset status"
-        equipmentOptions={equipmentOptions}
-        components={components}
-        onComponentAdd={handleComponentAdd}
-        onComponentRemove={handleComponentRemove}
-        onComponentChange={handleComponentChange}
-        onGenerateComponentSerial={generateComponentSerialNumber}
-        isEditMode={true}
-      />
+      {/* Edit Modal — only mounted while open to avoid hook overhead when closed */}
+      {isEditModalOpen && (
+        <AssetFormModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          title="Edit Asset"
+          onSubmit={handleUpdate}
+          submitLabel={updateMutation.isPending ? 'Updating...' : 'Update Asset'}
+          isSubmitting={updateMutation.isPending}
+          formData={formData}
+          onInputChange={handleInputChange}
+          onVendorChange={handleVendorChange}
+          onEmployeeChange={handleEmployeeChange}
+          onWorkstationChange={handleWorkstationChange}
+          onAddVendor={openVendorModal}
+          onGenerateSerial={generateSerialNumber}
+          categories={categories}
+          subcategories={subcategories || []}
+          vendorOptions={vendorOptions}
+          employeeOptions={employeeOptions}
+          workstationOptions={workstationOptions}
+          statusOptions={statusOptions}
+          branchOptions={branchOptions}
+          positionOptions={positionOptions}
+          showStatus
+          showBookValue
+          hideAssignedEmployee={false}
+          hideWorkstationFields={false}
+          assignmentTitle="Assignment & Status"
+          assignmentSubtitle="Employee assignment and asset status"
+          equipmentOptions={equipmentOptions}
+          components={components}
+          onComponentAdd={handleComponentAdd}
+          onComponentRemove={handleComponentRemove}
+          onComponentChange={handleComponentChange}
+          onGenerateComponentSerial={generateComponentSerialNumber}
+          isEditMode={true}
+        />
+      )}
 
       {/* Add Vendor Modal */}
       <Modal

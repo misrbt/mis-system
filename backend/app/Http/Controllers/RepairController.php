@@ -23,6 +23,7 @@ class RepairController extends Controller
         try {
             $query = Repair::with([
                 'asset.category',
+                'asset.status',
                 'asset.assignedEmployee',
                 'vendor',
             ]);
@@ -64,9 +65,14 @@ class RepairController extends Controller
 
             // Sorting with SQL injection protection
             $allowedSortFields = [
-                'id', 'repair_date', 'expected_return_date',
-                'actual_return_date', 'repair_cost', 'status',
-                'created_at', 'updated_at',
+                'id',
+                'repair_date',
+                'expected_return_date',
+                'actual_return_date',
+                'repair_cost',
+                'status',
+                'created_at',
+                'updated_at',
             ];
 
             [$sortBy, $sortOrder] = $this->validateSort(
@@ -77,7 +83,18 @@ class RepairController extends Controller
 
             $query->orderBy($sortBy, $sortOrder);
 
-            $repairs = $query->get();
+            // Check for 'all' parameter to return non-paginated data
+            if ($request->boolean('all', false)) {
+                $repairs = $query->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $repairs,
+                ], 200);
+            }
+
+            $perPage = $request->input('per_page', 50);
+            $repairs = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
@@ -164,6 +181,16 @@ class RepairController extends Controller
     {
         try {
             $repair = Repair::findOrFail($id);
+
+            // Nullify repair_id on movements first to avoid FK constraint
+            // when the observer creates a deletion audit movement
+            \App\Models\AssetMovement::where('repair_id', $repair->id)
+                ->update(['repair_id' => null]);
+
+            // Delete associated remarks (cascade handles this, but be explicit)
+            $repair->remarks()->delete();
+
+            // Delete the repair — observer will log a deletion movement
             $repair->delete();
 
             return response()->json([
@@ -171,11 +198,7 @@ class RepairController extends Controller
                 'message' => 'Repair record deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete repair record',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->handleException($e, 'Failed to delete repair record');
         }
     }
 
@@ -271,8 +294,17 @@ class RepairController extends Controller
             }
 
             // Auto-set actual return date when status becomes "Returned"
-            if ($request->status === 'Returned' && ! $repair->actual_return_date) {
-                $repair->actual_return_date = $request->actual_return_date ?? now();
+            if ($request->status === 'Returned') {
+                if (! $repair->actual_return_date) {
+                    $repair->actual_return_date = $request->actual_return_date ?? now();
+                }
+
+                // Automatically set the asset status back to Functional
+                $functionalStatus = \App\Models\Status::where('name', 'Functional')->first();
+                if ($functionalStatus && $repair->asset) {
+                    $repair->asset->status_id = $functionalStatus->id;
+                    $repair->asset->save();
+                }
             }
 
             $repair->save();

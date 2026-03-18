@@ -1,33 +1,71 @@
-import { useState } from 'react'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import Modal from './Modal'
 import SearchableSelect from './SearchableSelect'
 import { User, MapPin, ArrowRight, AlertCircle } from 'lucide-react'
-import Swal from 'sweetalert2'
 import apiClient from '../services/apiClient'
 import { fetchEmployeesRequest } from '../services/employeeService'
+import { useFormModal } from '../hooks/useFormModal'
+import { useAssetQueryInvalidation } from '../hooks/useAssetQueryInvalidation'
 
 function TransferAssetModal({ isOpen, onClose, asset }) {
-  const queryClient = useQueryClient()
-  const [formData, setFormData] = useState({
-    to_employee_id: '',
-    reason: '',
-    remarks: '',
-  })
-  const [errors, setErrors] = useState({})
+  const { invalidateAssetQueries } = useAssetQueryInvalidation()
 
-  // Fetch employees
+  const {
+    formData,
+    errors,
+    isLoading,
+    handleChange,
+    setField,
+    handleSubmit,
+    handleClose,
+    getCharCount,
+  } = useFormModal({
+    initialData: { to_employee_id: '', reason: '', remarks: '' },
+    validationRules: {
+      to_employee_id: {
+        required: true,
+        label: 'Employee',
+      },
+      reason: {
+        required: true,
+        minLength: 10,
+        label: 'Reason',
+      },
+    },
+    mutationFn: (data) => apiClient.post(`/assets/${asset?.id}/movements/transfer`, data),
+    onSuccess: () => {
+      invalidateAssetQueries(asset?.id)
+    },
+    onClose,
+    successTitle: 'Asset Transferred',
+    successMessage: 'Asset has been successfully transferred to the new employee',
+    errorTitle: 'Transfer Failed',
+  })
+
+  // Fetch employees - cached for 5 minutes to avoid repeated fetches
   const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => (await fetchEmployeesRequest()).data,
+    queryKey: ['employees', 'all'],
+    queryFn: async () => {
+      const response = await fetchEmployeesRequest({ all: true })
+      return response.data
+    },
     enabled: isOpen,
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   })
 
-  const employees = Array.isArray(employeesData?.data)
-    ? employeesData.data
-    : Array.isArray(employeesData)
-    ? employeesData
-    : []
+  const employees = (() => {
+    if (!employeesData) return []
+    if (employeesData.success && Array.isArray(employeesData.data)) {
+      return employeesData.data
+    }
+    if (Array.isArray(employeesData?.data)) {
+      return employeesData.data
+    }
+    if (Array.isArray(employeesData)) {
+      return employeesData
+    }
+    return []
+  })()
 
   // Format employees for SearchableSelect
   const formattedEmployees = employees.map(emp => ({
@@ -37,101 +75,16 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
     branch_name: emp.branch?.branch_name,
   }))
 
-  // Transfer mutation
-  const transferMutation = useMutation({
-    mutationFn: (data) => apiClient.post(`/assets/${asset?.id}/movements/transfer`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['asset', asset?.id])
-      queryClient.invalidateQueries(['asset-movements', asset?.id])
-      queryClient.invalidateQueries(['asset-assignments', asset?.id])
-      queryClient.invalidateQueries(['asset-statistics', asset?.id])
-      queryClient.invalidateQueries(['assets'])
-
-      Swal.fire({
-        icon: 'success',
-        title: 'Asset Transferred',
-        text: 'Asset has been successfully transferred to the new employee',
-        timer: 2000,
-        showConfirmButton: false,
-      })
-
-      handleClose()
-    },
-    onError: (error) => {
-      const errorMessage = error.response?.data?.message || 'Failed to transfer asset'
-      const validationErrors = error.response?.data?.errors || {}
-
-      setErrors(validationErrors)
-
-      Swal.fire({
-        icon: 'error',
-        title: 'Transfer Failed',
-        text: errorMessage,
-      })
-    },
-  })
-
-  const validateForm = () => {
-    const newErrors = {}
-
-    if (!formData.to_employee_id) {
-      newErrors.to_employee_id = 'Please select an employee'
-    }
-
-    if (!formData.reason || formData.reason.trim() === '') {
-      newErrors.reason = 'Reason is required'
-    } else if (formData.reason.trim().length < 10) {
-      newErrors.reason = 'Reason must be at least 10 characters'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'Please fill in all required fields correctly',
-      })
-      return
-    }
-
-    transferMutation.mutate(formData)
-  }
-
-  const handleReasonChange = (e) => {
-    const value = e.target.value
-    setFormData(prev => ({ ...prev, reason: value }))
-
-    // Clear error when user starts typing
-    if (errors.reason) {
-      setErrors(prev => ({ ...prev, reason: undefined }))
-    }
-  }
-
-  const handleClose = () => {
-    setFormData({
-      to_employee_id: '',
-      reason: '',
-      remarks: '',
-    })
-    setErrors({})
-    onClose()
-  }
-
   const currentEmployee = asset?.assigned_employee
   const currentBranch = currentEmployee?.branch
+  const reasonCharCount = getCharCount('reason')
 
   const footer = (
     <div className="flex gap-3 justify-end">
       <button
         type="button"
         onClick={handleClose}
-        disabled={transferMutation.isPending}
+        disabled={isLoading}
         className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         Cancel
@@ -139,10 +92,10 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
       <button
         type="submit"
         onClick={handleSubmit}
-        disabled={transferMutation.isPending}
+        disabled={isLoading}
         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
       >
-        {transferMutation.isPending ? (
+        {isLoading ? (
           <>
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             Transferring...
@@ -204,12 +157,7 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
             placeholder="Select employee"
             options={formattedEmployees}
             value={formData.to_employee_id}
-            onChange={(value) => {
-              setFormData(prev => ({ ...prev, to_employee_id: value }))
-              if (errors.to_employee_id) {
-                setErrors(prev => ({ ...prev, to_employee_id: undefined }))
-              }
-            }}
+            onChange={(value) => setField('to_employee_id', value)}
             displayField="fullname"
             secondaryField="position_name"
             tertiaryField="branch_name"
@@ -232,7 +180,7 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
           </label>
           <textarea
             value={formData.reason}
-            onChange={handleReasonChange}
+            onChange={handleChange('reason')}
             placeholder="Explain why this asset is being transferred (minimum 10 characters)"
             rows={4}
             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${
@@ -248,10 +196,8 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
                 </div>
               )}
             </div>
-            <span className={`text-sm ${
-              formData.reason.length >= 10 ? 'text-green-600' : 'text-slate-500'
-            }`}>
-              {formData.reason.length} / 10 characters
+            <span className={`text-sm ${reasonCharCount.isValid ? 'text-green-600' : 'text-slate-500'}`}>
+              {reasonCharCount.current} / {reasonCharCount.min} characters
             </span>
           </div>
         </div>
@@ -263,7 +209,7 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
           </label>
           <textarea
             value={formData.remarks}
-            onChange={(e) => setFormData(prev => ({ ...prev, remarks: e.target.value }))}
+            onChange={handleChange('remarks')}
             placeholder="Any additional notes or comments"
             rows={3}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"

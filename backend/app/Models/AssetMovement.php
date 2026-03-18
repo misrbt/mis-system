@@ -114,10 +114,10 @@ class AssetMovement extends Model
     {
         return match ($this->movement_type) {
             'created' => 'Asset created',
-            'assigned' => 'Assigned to ' . ($this->toEmployee?->fullname ?? 'employee'),
-            'transferred' => 'Transferred from ' . ($this->fromEmployee?->fullname ?? 'previous employee') . ' to ' . ($this->toEmployee?->fullname ?? 'new employee'),
-            'returned' => 'Returned from ' . ($this->fromEmployee?->fullname ?? 'employee'),
-            'status_changed' => 'Status changed from ' . ($this->fromStatus?->name ?? 'previous status') . ' to ' . ($this->toStatus?->name ?? 'new status'),
+            'assigned' => 'Assigned to '.($this->toEmployee?->fullname ?? 'employee'),
+            'transferred' => 'Transferred from '.($this->fromEmployee?->fullname ?? 'previous employee').' to '.($this->toEmployee?->fullname ?? 'new employee'),
+            'returned' => 'Returned from '.($this->fromEmployee?->fullname ?? 'employee'),
+            'status_changed' => 'Status changed from '.($this->fromStatus?->name ?? 'previous status').' to '.($this->toStatus?->name ?? 'new status'),
             'repair_initiated' => 'Sent for repair',
             'repair_in_progress' => 'Repair in progress',
             'repair_completed' => 'Returned from repair',
@@ -130,7 +130,8 @@ class AssetMovement extends Model
             'disposed' => 'Asset disposed',
             'code_generated' => 'QR/Barcode generated',
             'inventory_operation' => $this->remarks ?? 'Inventory operation performed',
-            'under_repair_reminder' => 'Under repair reminder shown (' . ($this->metadata['under_repair_count'] ?? '0') . ' assets)',
+            'branch_transition' => 'Branch transition: reassigned from '.($this->fromEmployee?->fullname ?? 'previous employee').' to '.($this->toEmployee?->fullname ?? 'new employee'),
+            'under_repair_reminder' => 'Under repair reminder shown ('.($this->metadata['under_repair_count'] ?? '0').' assets)',
             default => 'Unknown movement',
         };
     }
@@ -149,6 +150,7 @@ class AssetMovement extends Model
             'disposed' => 'Trash2',
             'code_generated' => 'QrCode',
             'inventory_operation' => 'Database',
+            'branch_transition' => 'ArrowLeftRight',
             'under_repair_reminder' => 'Wrench',
             default => 'CircleDot',
         };
@@ -174,6 +176,7 @@ class AssetMovement extends Model
             'disposed' => 'red',
             'code_generated' => 'cyan',
             'inventory_operation' => 'yellow',
+            'branch_transition' => 'teal',
             'under_repair_reminder' => 'amber',
             default => 'slate',
         };

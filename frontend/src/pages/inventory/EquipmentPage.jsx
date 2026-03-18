@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Monitor, Cpu, FileText, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import {
   useReactTable,
@@ -15,8 +15,6 @@ import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
 
 function EquipmentPage() {
-  const [equipmentList, setEquipmentList] = useState([])
-  const [loading, setLoading] = useState(true)
   const queryClient = useQueryClient()
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -30,71 +28,39 @@ function EquipmentPage() {
     asset_category_id: '',
     subcategory_id: '',
   })
-  const [categories, setCategories] = useState([])
-  const [subcategories, setSubcategories] = useState([])
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
+  const [searchInput, setSearchInput] = useState('')
+  const searchTimeout = useRef(null)
 
-  const fetchEquipment = useCallback(async () => {
-    try {
-      setLoading(true)
+  const { data: equipmentList = [], isLoading: loading } = useQuery({
+    queryKey: ['equipment'],
+    queryFn: async () => {
       const response = await equipmentService.getAll()
-      if (response.data.success) {
-        setEquipmentList(response.data.data)
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to fetch equipment',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+      return response.data.success ? response.data.data : []
+    },
+  })
 
-  useEffect(() => {
-    fetchEquipment()
-  }, [fetchEquipment])
+  const { data: categories = [] } = useQuery({
+    queryKey: ['asset-categories'],
+    queryFn: async () => {
+      const response = await apiClient.get('/asset-categories')
+      const data = response.data?.data ?? response.data ?? []
+      return Array.isArray(data) ? data : []
+    },
+    staleTime: 5 * 60 * 1000,
+  })
 
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await apiClient.get('/asset-categories')
-        const data = response.data?.data ?? response.data ?? []
-        setCategories(Array.isArray(data) ? data : [])
-      } catch (error) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.response?.data?.message || 'Failed to fetch categories',
-        })
-      }
-    }
-    fetchCategories()
-  }, [])
-
-  useEffect(() => {
-    const fetchSubcategories = async () => {
-      if (!formData.asset_category_id) {
-        setSubcategories([])
-        return
-      }
-      setSubcategories([])
-      try {
-        const response = await apiClient.get(`/asset-categories/${formData.asset_category_id}/subcategories`)
-        const data = response.data?.data ?? response.data ?? []
-        setSubcategories(Array.isArray(data) ? data : [])
-      } catch (error) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.response?.data?.message || 'Failed to fetch subcategories',
-        })
-      }
-    }
-    fetchSubcategories()
-  }, [formData.asset_category_id])
+  const { data: subcategories = [] } = useQuery({
+    queryKey: ['asset-subcategories', formData.asset_category_id],
+    queryFn: async () => {
+      const response = await apiClient.get(`/asset-categories/${formData.asset_category_id}/subcategories`)
+      const data = response.data?.data ?? response.data ?? []
+      return Array.isArray(data) ? data : []
+    },
+    enabled: !!formData.asset_category_id,
+    staleTime: 5 * 60 * 1000,
+  })
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -140,7 +106,6 @@ function EquipmentPage() {
           timer: 2000,
         })
         setIsAddModalOpen(false)
-        fetchEquipment()
         queryClient.invalidateQueries({ queryKey: ['equipment'] })
       }
     } catch (error) {
@@ -164,7 +129,6 @@ function EquipmentPage() {
           timer: 2000,
         })
         setIsEditModalOpen(false)
-        fetchEquipment()
         queryClient.invalidateQueries({ queryKey: ['equipment'] })
       }
     } catch (error) {
@@ -198,7 +162,6 @@ function EquipmentPage() {
             text: response.data.message,
             timer: 2000,
           })
-          fetchEquipment()
           queryClient.invalidateQueries({ queryKey: ['equipment'] })
         }
       } catch (error) {
@@ -209,7 +172,7 @@ function EquipmentPage() {
         })
       }
     }
-  }, [fetchEquipment, queryClient])
+  }, [queryClient])
 
   const columns = useMemo(
     () => [
@@ -310,7 +273,9 @@ function EquipmentPage() {
   const mobileSortId = mobileSorting[0]?.id || ''
   const mobileSortDesc = mobileSorting[0]?.desc || false
   const mobilePagination = mobileTable.getState().pagination
-  const mobileFilteredCount = mobileTable.getFilteredRowModel().rows.length
+  const mobileFilteredCount = mobileGlobalFilter
+    ? mobileTable.getFilteredRowModel().rows.length
+    : equipmentList.length
   const mobileStart = mobileFilteredCount === 0 ? 0 : mobilePagination.pageIndex * mobilePagination.pageSize + 1
   const mobileEnd = Math.min((mobilePagination.pageIndex + 1) * mobilePagination.pageSize, mobileFilteredCount)
 
@@ -338,8 +303,12 @@ function EquipmentPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              value={mobileGlobalFilter ?? ''}
-              onChange={(e) => setMobileGlobalFilter(e.target.value)}
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value)
+                clearTimeout(searchTimeout.current)
+                searchTimeout.current = setTimeout(() => setMobileGlobalFilter(e.target.value), 300)
+              }}
               placeholder="Search equipment..."
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />

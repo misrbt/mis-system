@@ -20,7 +20,9 @@ use App\Http\Controllers\ReportSignatoryController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\SoftwareLicenseController;
 use App\Http\Controllers\StatusController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\VendorController;
+use App\Http\Controllers\WorkstationController;
 use Illuminate\Support\Facades\Route;
 
 // Health check endpoint
@@ -43,6 +45,8 @@ Route::middleware(['auth:sanctum', 'throttle:10,1'])->group(function () {
     Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
     Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
     Route::post('asset-components/{id}/generate-qr-code', [AssetComponentController::class, 'generateQRCode']);
+    Route::post('asset-components/{id}/generate-barcode', [AssetComponentController::class, 'generateBarcode']);
+    Route::post('asset-components/{id}/generate-codes', [AssetComponentController::class, 'generateCodes']);
 
     // Report exports - heavy operations
     Route::post('reports/assets/export', [ReportController::class, 'exportAssets']);
@@ -111,6 +115,10 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         ]);
     });
 
+    // User Management routes
+    Route::apiResource('users', UserController::class);
+    Route::patch('users/{user}/toggle-status', [UserController::class, 'toggleStatus']);
+
     // Branch routes
     Route::apiResource('branches', BranchController::class);
 
@@ -138,8 +146,21 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::apiResource('asset-subcategories', AssetSubcategoryController::class);
 
     // Employee routes
+    Route::post('employees/branch-transition', [EmployeeController::class, 'branchTransition']);
+    Route::post('employees/employee-transition', [EmployeeController::class, 'employeeTransition']);
     Route::get('employees/{id}/asset-history', [EmployeeController::class, 'getAssetHistory']);
+    Route::get('employees/{id}/workstations', [EmployeeController::class, 'getWorkstations']);
     Route::apiResource('employees', EmployeeController::class);
+
+    // Workstation routes
+    Route::get('workstations/by-branch/{branchId}', [WorkstationController::class, 'byBranch']);
+    Route::get('workstations/{id}/assets', [WorkstationController::class, 'assets']);
+    Route::get('workstations/{id}/employees', [WorkstationController::class, 'employees']);
+    Route::post('workstations/{id}/assign-employee', [WorkstationController::class, 'assignEmployee']);
+    Route::post('workstations/{id}/unassign-employee', [WorkstationController::class, 'unassignEmployee']);
+    Route::post('workstations/{id}/assign-asset', [WorkstationController::class, 'assignAsset']);
+    Route::post('workstations/{id}/transfer-asset', [WorkstationController::class, 'transferAsset']);
+    Route::apiResource('workstations', WorkstationController::class);
 
     // Asset routes (QR generation moved to heavy operations group above)
     Route::delete('employees/{id}/assets', [AssetController::class, 'destroyByEmployee']);
@@ -185,20 +206,87 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::get('report-signatories', [ReportSignatoryController::class, 'show']);
     Route::post('report-signatories', [ReportSignatoryController::class, 'save']);
 
-    // Dashboard routes
+    // ============================================================
+    // Dashboard Routes - Performance Optimized
+    // ============================================================
+    // Routes are organized by performance tier for optimal caching
+    // and rate limiting strategies. Always prefer /initial endpoint
+    // for page loads to minimize API requests.
+    // ============================================================
     Route::prefix('dashboard')->group(function () {
-        Route::get('/initial', [DashboardController::class, 'getInitialData']); // Unified endpoint for faster loading
-        Route::get('/statistics', [DashboardController::class, 'getStatistics']);
-        Route::get('/status-distribution', [DashboardController::class, 'getAssetStatusDistribution']);
-        Route::get('/asset-trend', [DashboardController::class, 'getAssetTrend']);
-        Route::get('/assets-needing-attention', [DashboardController::class, 'getAssetsNeedingAttention']);
-        Route::get('/recent-activity', [DashboardController::class, 'getRecentActivity']);
-        Route::get('/monthly-expenses', [DashboardController::class, 'getMonthlyExpenses']);
-        Route::get('/yearly-expenses', [DashboardController::class, 'getYearlyExpenses']);
-        Route::get('/expense-trends', [DashboardController::class, 'getExpenseTrends']);
-        Route::get('/expense-breakdown', [DashboardController::class, 'getExpenseBreakdown']);
-        Route::get('/under-repair-assets', [DashboardController::class, 'getUnderRepairAssets']);
-        Route::get('/branch-statistics', [DashboardController::class, 'getBranchStatistics']);
+        // ========================================
+        // PRIMARY ENDPOINT - Use for initial page load
+        // Combines multiple endpoints into one response
+        // Response time: 300-500ms (cached), 800-1200ms (cold)
+        // ========================================
+        Route::get('/initial', [DashboardController::class, 'getInitialData'])
+            ->name('dashboard.initial')
+            ->middleware('cache.headers:private;max_age=60'); // Browser cache 1 min
+
+        // ========================================
+        // LIGHT ENDPOINTS (Fast: <100ms)
+        // For specific widget updates or real-time data
+        // Cache: 60 seconds (route + browser)
+        // Rate limit: 60 requests/minute (inherited)
+        // ========================================
+        Route::middleware(['cache.headers:public;max_age=60', 'cache.response:60'])->group(function () {
+            // Dashboard statistics - Total counts and key metrics
+            Route::get('/statistics', [DashboardController::class, 'getStatistics'])
+                ->name('dashboard.statistics');
+
+            // Asset status distribution for pie charts
+            Route::get('/status-distribution', [DashboardController::class, 'getAssetStatusDistribution'])
+                ->name('dashboard.status-distribution');
+
+            // Recent activity feed (last 10 movements)
+            Route::get('/recent-activity', [DashboardController::class, 'getRecentActivity'])
+                ->name('dashboard.recent-activity');
+
+            // Assets requiring attention (warranty expiring, maintenance due)
+            Route::get('/assets-needing-attention', [DashboardController::class, 'getAssetsNeedingAttention'])
+                ->name('dashboard.assets-attention');
+
+            // Under repair assets list
+            Route::get('/under-repair-assets', [DashboardController::class, 'getUnderRepairAssets'])
+                ->name('dashboard.under-repair');
+
+            // Asset acquisition trend over time
+            Route::get('/asset-trend', [DashboardController::class, 'getAssetTrend'])
+                ->name('dashboard.asset-trend');
+        });
+
+        // ========================================
+        // HEAVY ENDPOINTS (Slower: 200-500ms)
+        // Complex aggregations and multi-table joins
+        // Cache: 300 seconds (route + browser)
+        // Rate limit: 30 requests/minute (stricter)
+        // ========================================
+        Route::middleware(['throttle:30,1', 'cache.response:300'])->group(function () {
+            // Branch-level statistics with monthly trends (expensive query)
+            Route::get('/branch-statistics', [DashboardController::class, 'getBranchStatistics'])
+                ->name('dashboard.branch-statistics')
+                ->middleware('cache.headers:private;max_age=300');
+
+            // Detailed expense breakdown by category/branch/vendor
+            Route::get('/expense-breakdown', [DashboardController::class, 'getExpenseBreakdown'])
+                ->name('dashboard.expense-breakdown')
+                ->middleware('cache.headers:private;max_age=300');
+
+            // Monthly expenses for current year (acquisitions + repairs)
+            Route::get('/monthly-expenses', [DashboardController::class, 'getMonthlyExpenses'])
+                ->name('dashboard.monthly-expenses')
+                ->middleware('cache.headers:public;max_age=300');
+
+            // Yearly expenses comparison (last 3 years)
+            Route::get('/yearly-expenses', [DashboardController::class, 'getYearlyExpenses'])
+                ->name('dashboard.yearly-expenses')
+                ->middleware('cache.headers:public;max_age=300');
+
+            // Expense trends for specific period (year/month)
+            Route::get('/expense-trends', [DashboardController::class, 'getExpenseTrends'])
+                ->name('dashboard.expense-trends')
+                ->middleware('cache.headers:private;max_age=300');
+        });
     });
 
     // Audit Log routes (export moved to heavy operations group above)
@@ -231,7 +319,8 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::apiResource('office-tools', OfficeToolController::class);
 
     // Replenishment routes
-    Route::post('replenishments/{id}/assign-employee', [ReplenishmentController::class, 'assignToEmployee']);
+    Route::post('replenishments/{id}/assign-workstation', [ReplenishmentController::class, 'assignToEmployee']);
+    Route::post('replenishments/{id}/assign-employee', [ReplenishmentController::class, 'assignToEmployee']); // Legacy alias
     Route::post('replenishments/{id}/assign-branch', [ReplenishmentController::class, 'assignToBranch']);
     Route::post('replenishments/{id}/remove-assignment', [ReplenishmentController::class, 'removeAssignment']);
     Route::apiResource('replenishments', ReplenishmentController::class);

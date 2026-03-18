@@ -7,6 +7,7 @@ use App\Http\Requests\OfficeTool\UpdateOfficeToolRequest;
 use App\Models\OfficeTool;
 use App\Traits\ValidatesSort;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class OfficeToolController extends Controller
 {
@@ -40,6 +41,16 @@ class OfficeToolController extends Controller
             );
 
             $query->orderBy($sortBy, $sortOrder);
+
+            // Check for 'all' parameter to return non-paginated data
+            if ($request->boolean('all', false)) {
+                $officeTools = $query->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $officeTools,
+                ], 200);
+            }
 
             // Pagination - limit results per page (max 100)
             $perPage = min($request->get('per_page', 50), 100);

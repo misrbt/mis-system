@@ -14,6 +14,7 @@ class SaveSignatoryRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'prepared_by_id' => 'nullable|exists:employee,id',
             'checked_by_id' => 'nullable|exists:employee,id',
             'noted_by_id' => 'nullable|exists:employee,id',
         ];

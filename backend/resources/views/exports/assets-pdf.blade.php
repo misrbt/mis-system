@@ -186,7 +186,9 @@
                         <td style="font-size: 7pt; line-height: 1.3;">
                             @if($isFirstAsset)
                                 <strong>{{ $group['employee']['fullname'] ?? 'Unassigned' }}</strong><br/>
-                                @if(isset($group['employee']['position']['title']))
+                                @if(!empty($group['employee']['is_workstation']))
+                                    <span style="font-size: 6pt; color: #4F46E5; font-style: italic;">Workstation</span><br/>
+                                @elseif(isset($group['employee']['position']['title']))
                                     <span style="font-size: 6pt; color: #666;">{{ $group['employee']['position']['title'] }}</span><br/>
                                 @endif
                                 @if(isset($group['employee']['branch']['branch_name']))

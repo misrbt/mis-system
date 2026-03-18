@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Employee\BranchTransitionRequest;
+use App\Http\Requests\Employee\EmployeeTransitionRequest;
 use App\Http\Requests\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Employee\UpdateEmployeeRequest;
 use App\Models\AssetMovement;
 use App\Models\Employee;
+use App\Services\BranchTransitionService;
+use App\Services\EmployeeTransitionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -14,12 +18,74 @@ class EmployeeController extends Controller
     /**
      * Display a listing of employees.
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $employees = Employee::with(['branch', 'position', 'department'])
-                ->orderBy('fullname', 'asc')
-                ->get();
+            $perPage = min($request->input('per_page', 50), 100);
+
+            $relations = ['branch', 'position', 'department'];
+
+            if ($request->boolean('with_assets', false)) {
+                // Load both portable assets AND workstation assets
+                $relations[] = 'assignedAssets'; // Portable assets (laptops, etc.)
+                $relations[] = 'workstations.assets'; // Workstation assets (PCs, monitors, etc.)
+            }
+
+            // Include workstation data for transitions
+            $relations[] = 'workstations.branch';
+            $relations[] = 'workstations.position';
+
+            $query = Employee::with($relations);
+
+            // Search filter - searches fullname and related position
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('fullname', 'ILIKE', "%{$search}%")
+                        ->orWhereHas('position', function ($query) use ($search) {
+                            $query->where('title', 'ILIKE', "%{$search}%");
+                        });
+                });
+            }
+
+            // Branch filter
+            if ($request->filled('branch_id')) {
+                $query->where('branch_id', $request->input('branch_id'));
+            }
+
+            // Position filter
+            if ($request->filled('position_id')) {
+                $query->where('position_id', $request->input('position_id'));
+            }
+
+            // Department filter
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->input('department_id'));
+            }
+
+            // Sorting
+            $sortBy = $request->input('sort_by', 'fullname');
+            $sortOrder = $request->input('sort_order', 'asc');
+
+            // Whitelist sortable columns
+            $allowedSortColumns = ['fullname', 'created_at', 'updated_at'];
+            if (in_array($sortBy, $allowedSortColumns)) {
+                $query->orderBy($sortBy, $sortOrder);
+            } else {
+                $query->orderBy('fullname', 'asc');
+            }
+
+            // Handle "all" parameter - return all records without pagination
+            if ($request->boolean('all', false)) {
+                $employees = $query->get();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $employees,
+                ], 200);
+            }
+
+            $employees = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
@@ -237,6 +303,80 @@ class EmployeeController extends Controller
             ], 200);
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to fetch employee asset history');
+        }
+    }
+
+    /**
+     * Execute a branch transition for multiple employees.
+     * Assets stay at their branch workstation; only employee assignments rotate.
+     */
+    public function branchTransition(BranchTransitionRequest $request, BranchTransitionService $service)
+    {
+        try {
+            $result = $service->execute(
+                $request->validated('transitions'),
+                $request->validated('remarks'),
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Branch transition completed successfully. '
+                    .count($result['employees']).' employee'.(count($result['employees']) !== 1 ? 's' : '').' moved, '
+                    .$result['workstation_changes'].' workstation'.(($result['workstation_changes'] !== 1) ? 's' : '').' updated.',
+                'data' => $result,
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to execute branch transition');
+        }
+    }
+
+    /**
+     * Execute an employee transition where only employees move.
+     * Individual employee moves without exchange requirements.
+     * Assets remain at their workstations.
+     */
+    public function employeeTransition(EmployeeTransitionRequest $request, EmployeeTransitionService $service): \Illuminate\Http\JsonResponse
+    {
+        try {
+            $result = $service->execute(
+                $request->validated('transitions'),
+                $request->validated('remarks'),
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Employee transition completed successfully. '
+                    .count($result['employees']).' employees moved.',
+                'data' => $result,
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to execute employee transition');
+        }
+    }
+
+    /**
+     * Get workstations assigned to an employee.
+     */
+    public function getWorkstations($id)
+    {
+        try {
+            $employee = Employee::findOrFail($id);
+
+            $workstations = $employee->workstations()
+                ->with(['branch', 'position'])
+                ->withCount('assets')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $workstations,
+                'employee' => [
+                    'id' => $employee->id,
+                    'name' => $employee->fullname,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->handleException($e, 'Failed to fetch employee workstations');
         }
     }
 }

@@ -24,6 +24,7 @@ const SpecificationFields = ({ categoryName, subcategoryName, specifications = {
     if (name.includes('monitor') || name.includes('display')) return 'monitor'
     if (name.includes('cctv') || name.includes('camera')) return 'cctv'
     if (name.includes('laptop') || name.includes('notebook')) return 'laptop'
+    if (name.includes('desktop') || name.includes('pc')) return 'desktop'
     if (name.includes('server')) return 'server'
     if (name.includes('ups') || name.includes('uninterruptible')) return 'ups'
     return null
@@ -904,6 +905,30 @@ const SpecificationFields = ({ categoryName, subcategoryName, specifications = {
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
             />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Operating System</label>
+            <input
+              type="text"
+              value={specifications.os || ''}
+              onChange={(e) => handleChange('os', e.target.value)}
+              placeholder="e.g., Windows 11 Pro"
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Desktop PC specifications
+  if (categoryType === 'desktop') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Monitor className="w-5 h-5 text-amber-600" />
+          <h4 className="text-sm font-semibold text-slate-900">Desktop PC Specifications</h4>
+        </div>
+        <div className="grid grid-cols-1 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">Operating System</label>
             <input

@@ -14,7 +14,7 @@ class UpdateOfficeToolRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|max:255|unique:office_tools,name,'.$this->route('id'),
+            'name' => 'required|string|max:255|unique:office_tools,name,'.$this->route('office_tool'),
             'version' => 'nullable|string|max:255',
             'description' => 'nullable|string',
         ];

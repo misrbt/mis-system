@@ -7,7 +7,15 @@ export const getRepairColumns = (handleStatusChange, openEditModal, handleDelete
     cell: ({ row }) => (
       <div className="text-sm">
         <div className="font-semibold text-slate-900">{row.original.asset?.asset_name || '—'}</div>
-        <div className="text-xs text-slate-500">{row.original.asset?.category?.name || ''}</div>
+        <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+          <span>{row.original.asset?.category?.name || ''}</span>
+          {row.original.asset?.status && (
+            <>
+              <span>•</span>
+              <span className="font-medium">{row.original.asset.status.name}</span>
+            </>
+          )}
+        </div>
       </div>
     ),
   },

@@ -81,6 +81,7 @@ function DesktopComponentsPage() {
 
   const statuses = statusesData?.data || []
 
+  
   // Fetch component movements for expanded component
   const { data: movementsData } = useQuery({
     queryKey: ['component-movements', expandedComponent],
