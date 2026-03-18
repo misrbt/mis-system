@@ -113,7 +113,7 @@ function ReportsPage() {
   })
 
   const { data: employees } = useQuery({
-    queryKey: ['employees'],
+    queryKey: ['employees', 'all'],
     queryFn: async () => {
       const response = await apiClient.get('/employees', { params: { all: true } })
       return normalizeArrayResponse(response.data)
