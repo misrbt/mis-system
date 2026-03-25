@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // API middleware group
         $middleware->api(prepend: [
+            \App\Http\Middleware\CentralAuth::class,
             ForceJsonResponse::class,
             SecurityHeaders::class,
         ]);

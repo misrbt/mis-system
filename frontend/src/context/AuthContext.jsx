@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import apiClient from '../services/apiClient'
+import authApiClient from '../services/authApiClient'
 
 const AuthContext = createContext(null)
 
@@ -12,9 +12,9 @@ export function AuthProvider({ children }) {
   // Set up axios interceptor for auth header
   useEffect(() => {
     if (token) {
-      apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      authApiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`
     } else {
-      delete apiClient.defaults.headers.common['Authorization']
+      delete authApiClient.defaults.headers.common['Authorization']
     }
   }, [token])
 
@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
     const checkAuth = async () => {
       if (token) {
         try {
-          const response = await apiClient.get('/auth/profile')
+          const response = await authApiClient.get('/auth/profile')
           if (response.data.success) {
             setUser(response.data.data.user)
             setIsAuthenticated(true)
@@ -44,9 +44,10 @@ export function AuthProvider({ children }) {
 
   const login = async (loginCredential, password) => {
     try {
-      const response = await apiClient.post('/auth/login', {
+      const response = await authApiClient.post('/auth/login', {
         login: loginCredential,
         password,
+        system_slug: 'mis_system',
       })
 
       if (response.data.success) {
@@ -68,7 +69,7 @@ export function AuthProvider({ children }) {
 
   const register = async (userData) => {
     try {
-      const response = await apiClient.post('/auth/register', userData)
+      const response = await authApiClient.post('/auth/register', userData)
 
       if (response.data.success) {
         const { user: newUser, token: authToken } = response.data.data
@@ -92,7 +93,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await apiClient.post('/auth/logout')
+      await authApiClient.post('/auth/logout')
     } catch (error) {
       // Even if logout fails on server, clear local state
       console.error('Logout error:', error)
@@ -109,7 +110,7 @@ export function AuthProvider({ children }) {
 
   const refreshToken = async () => {
     try {
-      const response = await apiClient.post('/auth/refresh')
+      const response = await authApiClient.post('/auth/refresh')
       if (response.data.success) {
         const { token: newToken } = response.data.data
         localStorage.setItem('auth_token', newToken)
