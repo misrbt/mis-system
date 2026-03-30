@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Package,
@@ -63,6 +64,22 @@ const AssetCard = ({
 }) => {
   // State to track if details section is expanded (default: collapsed/hidden)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+  const statusBtnRef = useRef(null)
+  const [dropdownPos, setDropdownPos] = useState(null)
+
+  // Calculate dropdown position when status picker opens
+  useEffect(() => {
+    if (showStatusPicker && statusBtnRef.current) {
+      const rect = statusBtnRef.current.getBoundingClientRect()
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: Math.max(8, rect.right - 192), // 192 = w-48
+      })
+    } else {
+      setDropdownPos(null)
+    }
+  }, [showStatusPicker])
+
   const safeEquipmentOptions = Array.isArray(equipmentOptions) ? equipmentOptions : []
   const safeEditSubcategories = useMemo(
     () => (Array.isArray(editSubcategories) ? editSubcategories : []),
@@ -585,6 +602,7 @@ const AssetCard = ({
                   </button>
                 )}
                 <button
+                  ref={statusBtnRef}
                   onClick={onStatusPickerToggle}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
                 >
@@ -595,9 +613,13 @@ const AssetCard = ({
                   <span>{asset.status?.name || 'Status'}</span>
                   <ChevronDown className="w-3 h-3" />
                 </button>
-                {/* Status Dropdown - Same as before */}
-                {showStatusPicker && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
+                {/* Status Dropdown - rendered as portal to avoid overflow-hidden clipping */}
+                {showStatusPicker && dropdownPos && createPortal(
+                  <div
+                    className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-[9999]"
+                    style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="max-h-56 overflow-y-auto py-1">
                       {statuses.length ? (
                         statuses.map((status) => {
@@ -625,7 +647,8 @@ const AssetCard = ({
                         <div className="px-3 py-2 text-sm text-slate-500">No statuses</div>
                       )}
                     </div>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             </div>

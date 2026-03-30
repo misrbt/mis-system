@@ -29,11 +29,12 @@ function AssetViewModals({ controller, isEmployeeView }) {
     vendorFormData,
     isBulkTransferModalOpen,
     selectedAssets,
-    employeeSearch,
-    filteredEmployees,
-    isLoadingEmployees,
+    workstationSearch,
+    filteredWorkstations,
+    isLoadingWorkstations,
+    workstations,
+    selectedWorkstationId,
     employees,
-    selectedEmployeeId,
     handleDownloadCode,
     handlePrintCode,
     setCodeModal,
@@ -55,8 +56,8 @@ function AssetViewModals({ controller, isEmployeeView }) {
     handleCreateVendor,
     setIsVendorModalOpen,
     handleSubmitBulkTransfer,
-    setEmployeeSearch,
-    setSelectedEmployeeId,
+    setWorkstationSearch,
+    setSelectedWorkstationId,
     closeBulkTransferModal,
     closeDeleteModal,
     confirmDelete,
@@ -140,20 +141,20 @@ function AssetViewModals({ controller, isEmployeeView }) {
             isOpen={isBulkTransferModalOpen}
             onClose={closeBulkTransferModal}
             selectedAssets={selectedAssets}
-            employeeSearch={employeeSearch}
-            onEmployeeSearchChange={(value) => {
-              setEmployeeSearch(value);
-              setSelectedEmployeeId("");
+            workstationSearch={workstationSearch}
+            onWorkstationSearchChange={(value) => {
+              setWorkstationSearch(value);
+              setSelectedWorkstationId("");
             }}
-            filteredEmployees={filteredEmployees}
-            isLoadingEmployees={isLoadingEmployees}
-            employees={employees}
-            selectedEmployeeId={selectedEmployeeId}
-            onSelectEmployee={(employeeId, fullname) => {
-              setSelectedEmployeeId(employeeId);
-              setEmployeeSearch(fullname);
+            filteredWorkstations={filteredWorkstations}
+            isLoadingWorkstations={isLoadingWorkstations}
+            workstations={workstations}
+            selectedWorkstationId={selectedWorkstationId}
+            onSelectWorkstation={(wsId, wsName) => {
+              setSelectedWorkstationId(wsId);
+              setWorkstationSearch(wsName);
             }}
-            onSubmit={() => handleSubmitBulkTransfer(selectedEmployeeId)}
+            onSubmit={() => handleSubmitBulkTransfer(selectedWorkstationId)}
             isSubmitting={bulkTransferPending}
           />
 

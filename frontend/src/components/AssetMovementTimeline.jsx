@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import {
   User, UserX, Activity, Wrench, Edit, Trash2,
   Plus, CircleDot, Calendar, Clock, MapPin, MessageSquare,
-  QrCode, Database
+  QrCode, Database, Monitor, MonitorX, ArrowLeftRight
 } from 'lucide-react'
 
 const iconMap = {
@@ -17,6 +17,9 @@ const iconMap = {
   QrCode,
   Database,
   MessageSquare,
+  Monitor,
+  MonitorX,
+  ArrowLeftRight,
 }
 
 const colorClasses = {
@@ -30,6 +33,8 @@ const colorClasses = {
   slate: 'bg-slate-100 text-slate-600 border-slate-200',
   cyan: 'bg-cyan-100 text-cyan-600 border-cyan-200',
   yellow: 'bg-yellow-100 text-yellow-600 border-yellow-200',
+  teal: 'bg-teal-100 text-teal-600 border-teal-200',
+  amber: 'bg-amber-100 text-amber-600 border-amber-200',
 }
 
 function AssetMovementTimeline({ movements, loading = false }) {
@@ -121,8 +126,50 @@ function AssetMovementTimeline({ movements, loading = false }) {
 
                   {/* Details */}
                   <div className="space-y-2 mt-3">
-                    {/* From/To Employee */}
-                    {(movement.from_employee || movement.to_employee) && (
+                    {/* Workstation transfer info */}
+                    {movement.metadata?.from_workstation_name || movement.metadata?.to_workstation_name ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Monitor className="w-4 h-4 text-gray-400" />
+                          <span>
+                            {movement.metadata.from_workstation_name && (
+                              <span className="text-gray-600">
+                                From: <strong>{movement.metadata.from_workstation_name}</strong>
+                              </span>
+                            )}
+                            {movement.metadata.from_workstation_name && movement.metadata.to_workstation_name && (
+                              <span className="mx-2 text-gray-400">→</span>
+                            )}
+                            {movement.metadata.to_workstation_name && (
+                              <span className="text-gray-600">
+                                To: <strong>{movement.metadata.to_workstation_name}</strong>
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        {(movement.metadata.from_employee_name || movement.metadata.to_employee_name) && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <User className="w-4 h-4 text-gray-400" />
+                            <span>
+                              {movement.metadata.from_employee_name && (
+                                <span className="text-gray-600">
+                                  From: <strong>{movement.metadata.from_employee_name}</strong>
+                                </span>
+                              )}
+                              {movement.metadata.from_employee_name && movement.metadata.to_employee_name && (
+                                <span className="mx-2 text-gray-400">→</span>
+                              )}
+                              {movement.metadata.to_employee_name && (
+                                <span className="text-gray-600">
+                                  To: <strong>{movement.metadata.to_employee_name}</strong>
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (movement.from_employee || movement.to_employee) ? (
+                      /* From/To Employee (legacy / non-workstation movements) */
                       <div className="flex items-center gap-2 text-sm">
                         <User className="w-4 h-4 text-gray-400" />
                         <span>
@@ -151,7 +198,7 @@ function AssetMovementTimeline({ movements, loading = false }) {
                           )}
                         </span>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Status change */}
                     {(movement.from_status || movement.to_status) && (

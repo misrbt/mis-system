@@ -3,12 +3,15 @@ import {
   Package,
   User,
   ArrowRight,
+  ArrowLeftRight,
   RefreshCw,
   Wrench,
   FileText,
   MessageSquare,
   Calendar,
   TrendingUp,
+  Monitor,
+  MonitorX,
 } from 'lucide-react'
 
 function EmployeeAssetHistory({ movements = [], loading = false, statistics = {} }) {
@@ -49,6 +52,11 @@ function EmployeeAssetHistory({ movements = [], loading = false, statistics = {}
       disposed: Package,
       code_generated: Package,
       inventory_operation: Package,
+      workstation_transfer: Monitor,
+      workstation_assigned: Monitor,
+      workstation_removed: MonitorX,
+      branch_transition: ArrowLeftRight,
+      under_repair_reminder: Wrench,
     }
     return iconMap[type] || FileText
   }
@@ -172,7 +180,42 @@ function EmployeeAssetHistory({ movements = [], loading = false, statistics = {}
                       </div>
                     )}
 
-                    {movement.from_employee && (
+                    {/* Workstation details from metadata */}
+                    {(movement.metadata?.from_workstation_name || movement.metadata?.to_workstation_name) && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <Monitor className="w-3.5 h-3.5" />
+                          <span className="font-medium">Workstation:</span>
+                          {movement.metadata.from_workstation_name && movement.metadata.to_workstation_name ? (
+                            <>
+                              <span>{movement.metadata.from_workstation_name}</span>
+                              <ArrowRight className="w-3 h-3" />
+                              <span>{movement.metadata.to_workstation_name}</span>
+                            </>
+                          ) : (
+                            <span>{movement.metadata.to_workstation_name || movement.metadata.from_workstation_name}</span>
+                          )}
+                        </div>
+                        {(movement.metadata?.from_employee_name || movement.metadata?.to_employee_name) && (
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <User className="w-3.5 h-3.5" />
+                            <span className="font-medium">Employee:</span>
+                            {movement.metadata.from_employee_name && movement.metadata.to_employee_name ? (
+                              <>
+                                <span>{movement.metadata.from_employee_name}</span>
+                                <ArrowRight className="w-3 h-3" />
+                                <span>{movement.metadata.to_employee_name}</span>
+                              </>
+                            ) : (
+                              <span>{movement.metadata.to_employee_name || movement.metadata.from_employee_name}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Legacy employee details (non-workstation movements) */}
+                    {!movement.metadata?.from_workstation_name && !movement.metadata?.to_workstation_name && movement.from_employee && (
                       <div className="flex items-center gap-2 text-xs text-gray-600">
                         <User className="w-3.5 h-3.5" />
                         <span className="font-medium">From:</span>
@@ -185,7 +228,7 @@ function EmployeeAssetHistory({ movements = [], loading = false, statistics = {}
                       </div>
                     )}
 
-                    {movement.to_employee && (
+                    {!movement.metadata?.from_workstation_name && !movement.metadata?.to_workstation_name && movement.to_employee && (
                       <div className="flex items-center gap-2 text-xs text-gray-600">
                         <User className="w-3.5 h-3.5" />
                         <span className="font-medium">To:</span>

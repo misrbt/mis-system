@@ -16,7 +16,7 @@ class BulkTransferAssetsRequest extends FormRequest
         return [
             'asset_ids' => 'required|array|min:1',
             'asset_ids.*' => 'required|exists:assets,id',
-            'to_employee_id' => 'required|exists:employee,id',
+            'to_workstation_id' => 'required|exists:workstations,id',
             'reason' => 'required|string|min:10',
             'remarks' => 'nullable|string',
         ];

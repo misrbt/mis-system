@@ -8,6 +8,7 @@ use App\Http\Requests\AssetMovement\TransferAssetRequest;
 use App\Http\Requests\AssetMovement\UpdateAssetStatusRequest;
 use App\Models\Asset;
 use App\Models\AssetMovement;
+use App\Models\Workstation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -71,7 +72,7 @@ class AssetMovementController extends Controller
                 'performedBy',
             ])
                 ->where('asset_id', $assetId)
-                ->whereIn('movement_type', ['assigned', 'transferred', 'returned'])
+                ->whereIn('movement_type', ['assigned', 'transferred', 'returned', 'workstation_transfer', 'workstation_assigned', 'workstation_removed'])
                 ->orderBy('movement_date', 'desc')
                 ->get();
 
@@ -97,9 +98,9 @@ class AssetMovementController extends Controller
 
             $stats = [
                 'total_movements' => $asset->movements()->count(),
-                'assignment_count' => $asset->movements()->whereIn('movement_type', ['assigned', 'transferred'])->count(),
-                'transfer_count' => $asset->movements()->where('movement_type', 'transferred')->count(),
-                'return_count' => $asset->movements()->where('movement_type', 'returned')->count(),
+                'assignment_count' => $asset->movements()->whereIn('movement_type', ['assigned', 'transferred', 'workstation_assigned', 'workstation_transfer'])->count(),
+                'transfer_count' => $asset->movements()->whereIn('movement_type', ['transferred', 'workstation_transfer'])->count(),
+                'return_count' => $asset->movements()->whereIn('movement_type', ['returned', 'workstation_removed'])->count(),
                 'repair_count' => $asset->movements()->where('movement_type', 'repair_initiated')->count(),
                 'status_change_count' => $asset->movements()->where('movement_type', 'status_changed')->count(),
                 'current_assignment_days' => $asset->getCurrentAssignmentDuration(),
@@ -279,9 +280,11 @@ class AssetMovementController extends Controller
             DB::beginTransaction();
 
             $assetIds = $request->asset_ids;
-            $toEmployeeId = $request->to_employee_id;
+            $toWorkstationId = $request->to_workstation_id;
             $reason = $request->reason;
             $remarks = $request->remarks;
+
+            $toWorkstation = Workstation::with(['branch', 'employee'])->findOrFail($toWorkstationId);
 
             $transferredAssets = [];
             $failedAssets = [];
@@ -290,8 +293,11 @@ class AssetMovementController extends Controller
                 try {
                     $asset = Asset::findOrFail($assetId);
 
-                    // Update asset assignment
-                    $asset->assigned_to_employee_id = $toEmployeeId;
+                    // Update asset assignment to workstation
+                    $asset->workstation_id = $toWorkstationId;
+                    $asset->workstation_branch_id = $toWorkstation->branch_id;
+                    $asset->workstation_position_id = $toWorkstation->position_id;
+                    $asset->assigned_to_employee_id = $toWorkstation->employee_id;
                     $asset->save();
 
                     // Get the movement created by observer and update it with reason
@@ -310,8 +316,8 @@ class AssetMovementController extends Controller
                         'category',
                         'vendor',
                         'status',
-                        'assignedEmployee.branch',
-                        'assignedEmployee.position',
+                        'workstation.employee.branch',
+                        'workstation.employee.position',
                     ]);
 
                     $transferredAssets[] = $asset;

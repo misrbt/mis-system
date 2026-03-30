@@ -94,7 +94,7 @@ class AssetMovement extends Model
 
     public function scopeAssignments($query)
     {
-        return $query->whereIn('movement_type', ['assigned', 'transferred', 'returned']);
+        return $query->whereIn('movement_type', ['assigned', 'transferred', 'returned', 'workstation_transfer', 'workstation_assigned', 'workstation_removed']);
     }
 
     public function scopeStatusChanges($query)
@@ -112,6 +112,8 @@ class AssetMovement extends Model
      */
     public function getMovementDescription()
     {
+        $meta = $this->metadata ?? [];
+
         return match ($this->movement_type) {
             'created' => 'Asset created',
             'assigned' => 'Assigned to '.($this->toEmployee?->fullname ?? 'employee'),
@@ -131,7 +133,10 @@ class AssetMovement extends Model
             'code_generated' => 'QR/Barcode generated',
             'inventory_operation' => $this->remarks ?? 'Inventory operation performed',
             'branch_transition' => 'Branch transition: reassigned from '.($this->fromEmployee?->fullname ?? 'previous employee').' to '.($this->toEmployee?->fullname ?? 'new employee'),
-            'under_repair_reminder' => 'Under repair reminder shown ('.($this->metadata['under_repair_count'] ?? '0').' assets)',
+            'under_repair_reminder' => 'Under repair reminder shown ('.($meta['under_repair_count'] ?? '0').' assets)',
+            'workstation_transfer' => 'Transferred from workstation '.($meta['from_workstation_name'] ?? 'unknown').' to '.($meta['to_workstation_name'] ?? 'unknown'),
+            'workstation_assigned' => 'Assigned to workstation '.($meta['to_workstation_name'] ?? 'unknown'),
+            'workstation_removed' => 'Removed from workstation '.($meta['from_workstation_name'] ?? 'unknown'),
             default => 'Unknown movement',
         };
     }
@@ -152,6 +157,9 @@ class AssetMovement extends Model
             'inventory_operation' => 'Database',
             'branch_transition' => 'ArrowLeftRight',
             'under_repair_reminder' => 'Wrench',
+            'workstation_transfer' => 'Monitor',
+            'workstation_assigned' => 'Monitor',
+            'workstation_removed' => 'MonitorX',
             default => 'CircleDot',
         };
     }
@@ -178,6 +186,9 @@ class AssetMovement extends Model
             'inventory_operation' => 'yellow',
             'branch_transition' => 'teal',
             'under_repair_reminder' => 'amber',
+            'workstation_transfer' => 'purple',
+            'workstation_assigned' => 'blue',
+            'workstation_removed' => 'orange',
             default => 'slate',
         };
     }

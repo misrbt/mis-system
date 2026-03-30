@@ -1,24 +1,24 @@
 import { createPortal } from 'react-dom'
-import { MapPin, MessageSquare, Search, User, Users, X } from 'lucide-react'
+import { MapPin, Monitor, Search, User, Users, X } from 'lucide-react'
 
 function BulkTransferModal({
   isOpen,
   onClose,
   selectedAssets,
-  employeeSearch,
-  onEmployeeSearchChange,
-  filteredEmployees,
-  isLoadingEmployees,
-  employees,
-  selectedEmployeeId,
-  onSelectEmployee,
+  workstationSearch,
+  onWorkstationSearchChange,
+  filteredWorkstations,
+  isLoadingWorkstations,
+  workstations,
+  selectedWorkstationId,
+  onSelectWorkstation,
   onSubmit,
   isSubmitting,
 }) {
   if (!isOpen) return null
 
-  const employeesList = Array.isArray(employees) ? employees : []
-  const selectedEmployee = employeesList.find((emp) => emp.id === selectedEmployeeId)
+  const workstationsList = Array.isArray(workstations) ? workstations : []
+  const selectedWorkstation = workstationsList.find((ws) => ws.id === selectedWorkstationId)
 
   return createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -35,81 +35,85 @@ function BulkTransferModal({
 
         <div className="p-6 flex-1">
           <p className="text-sm text-slate-600 mb-4">
-            Search and select an employee to transfer the selected assets to:
+            Search and select a workstation to transfer the selected assets to:
           </p>
 
           <div className="relative">
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Employee Name
+              Workstation
             </label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Type employee name to search..."
-                value={employeeSearch}
-                onChange={(e) => onEmployeeSearchChange(e.target.value)}
+                placeholder="Type workstation name, branch, or employee to search..."
+                value={workstationSearch}
+                onChange={(e) => onWorkstationSearchChange(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               />
             </div>
 
-            {employeeSearch && !selectedEmployeeId && (
+            {workstationSearch && !selectedWorkstationId && (
               <div className="absolute z-[100] w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                {isLoadingEmployees ? (
+                {isLoadingWorkstations ? (
                   <div className="p-4 text-center text-slate-500">
                     <div className="animate-spin w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
                     <p className="text-sm">Loading...</p>
                   </div>
-                ) : filteredEmployees.length > 0 ? (
-                  filteredEmployees.map((employee) => (
+                ) : filteredWorkstations.length > 0 ? (
+                  filteredWorkstations.map((ws) => (
                     <button
-                      key={employee.id}
+                      key={ws.id}
                       type="button"
                       onClick={() => {
-                        onSelectEmployee(employee.id, employee.fullname)
+                        onSelectWorkstation(ws.id, ws.name)
                       }}
                       className="w-full px-4 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0"
                     >
-                      <p className="text-sm font-medium text-slate-900">{employee.fullname}</p>
+                      <p className="text-sm font-medium text-slate-900">{ws.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {ws.branch?.branch_name}
+                        {ws.employee?.fullname && ` - ${ws.employee.fullname}`}
+                      </p>
                     </button>
                   ))
                 ) : (
                   <div className="p-4 text-center text-slate-500">
-                    <p className="text-sm">No employees found</p>
+                    <p className="text-sm">No workstations found</p>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {selectedEmployee && (
+          {selectedWorkstation && (
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-start gap-3">
                 <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex-shrink-0">
-                  <User className="w-6 h-6" />
+                  <Monitor className="w-6 h-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-base font-semibold text-slate-900 mb-2">{selectedEmployee.fullname}</h4>
+                  <h4 className="text-base font-semibold text-slate-900 mb-2">{selectedWorkstation.name}</h4>
                   <div className="space-y-1.5">
-                    {selectedEmployee.position?.position_name && (
-                      <div className="flex items-center gap-2 text-sm text-slate-700">
-                        <Users className="w-4 h-4 text-slate-500" />
-                        <span className="font-medium">Position:</span>
-                        <span>{selectedEmployee.position.position_name}</span>
-                      </div>
-                    )}
-                    {selectedEmployee.branch?.branch_name && (
+                    {selectedWorkstation.branch?.branch_name && (
                       <div className="flex items-center gap-2 text-sm text-slate-700">
                         <MapPin className="w-4 h-4 text-slate-500" />
                         <span className="font-medium">Branch:</span>
-                        <span>{selectedEmployee.branch.branch_name}</span>
+                        <span>{selectedWorkstation.branch.branch_name}</span>
                       </div>
                     )}
-                    {selectedEmployee.email && (
+                    {selectedWorkstation.position?.title && (
                       <div className="flex items-center gap-2 text-sm text-slate-700">
-                        <MessageSquare className="w-4 h-4 text-slate-500" />
-                        <span className="font-medium">Email:</span>
-                        <span className="truncate">{selectedEmployee.email}</span>
+                        <Users className="w-4 h-4 text-slate-500" />
+                        <span className="font-medium">Position:</span>
+                        <span>{selectedWorkstation.position.title}</span>
+                      </div>
+                    )}
+                    {selectedWorkstation.employee?.fullname && (
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <User className="w-4 h-4 text-slate-500" />
+                        <span className="font-medium">Employee:</span>
+                        <span>{selectedWorkstation.employee.fullname}</span>
                       </div>
                     )}
                   </div>
@@ -130,7 +134,7 @@ function BulkTransferModal({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={isSubmitting || !selectedEmployeeId}
+            disabled={isSubmitting || !selectedWorkstationId}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Transferring...' : 'Transfer Assets'}

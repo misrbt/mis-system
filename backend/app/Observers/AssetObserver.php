@@ -103,19 +103,19 @@ class AssetObserver
         $original = $this->originalValues[$asset->id] ?? $asset->getOriginal();
         unset($this->originalValues[$asset->id]);
 
-        // Track assignment changes
-        if ($asset->assigned_to_employee_id != $original['assigned_to_employee_id']) {
+        $workstationChanged = isset($original['workstation_id']) && $asset->workstation_id != $original['workstation_id'];
+
+        // Track workstation changes (takes priority over employee assignment changes)
+        if ($workstationChanged) {
+            $this->trackWorkstationChange($asset, $original);
+        } elseif ($asset->assigned_to_employee_id != $original['assigned_to_employee_id']) {
+            // Only track employee assignment changes if NOT caused by a workstation transfer
             $this->trackAssignmentChange($asset, $original);
         }
 
         // Track status changes
         if ($asset->status_id != $original['status_id']) {
             $this->trackStatusChange($asset, $original);
-        }
-
-        // Track workstation changes
-        if (isset($original['workstation_id']) && $asset->workstation_id != $original['workstation_id']) {
-            $this->trackWorkstationChange($asset, $original);
         }
 
         // Track ALL other field changes comprehensively
@@ -298,8 +298,8 @@ class AssetObserver
         $fromWorkstationId = $original['workstation_id'] ?? null;
         $toWorkstationId = $asset->workstation_id;
 
-        $fromWorkstation = $fromWorkstationId ? \App\Models\Workstation::find($fromWorkstationId) : null;
-        $toWorkstation = $toWorkstationId ? $asset->workstation : null;
+        $fromWorkstation = $fromWorkstationId ? \App\Models\Workstation::with('employee')->find($fromWorkstationId) : null;
+        $toWorkstation = $toWorkstationId ? \App\Models\Workstation::with('employee')->find($toWorkstationId) : null;
 
         $changedFields = [
             [
@@ -319,6 +319,8 @@ class AssetObserver
         }
 
         $this->logMovement($asset, $movementType, [
+            'from_employee_id' => $fromWorkstation?->employee_id,
+            'to_employee_id' => $toWorkstation?->employee_id,
             'from_branch_id' => $fromWorkstation?->branch_id,
             'to_branch_id' => $toWorkstation?->branch_id,
             'metadata' => array_merge($this->buildChangeMetadata($changedFields), [
@@ -326,6 +328,8 @@ class AssetObserver
                 'to_workstation_id' => $toWorkstationId,
                 'from_workstation_name' => $fromWorkstation?->name,
                 'to_workstation_name' => $toWorkstation?->name,
+                'from_employee_name' => $fromWorkstation?->employee?->fullname,
+                'to_employee_name' => $toWorkstation?->employee?->fullname,
             ]),
         ]);
     }

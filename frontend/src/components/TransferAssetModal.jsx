@@ -1,14 +1,16 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Modal from './Modal'
 import SearchableSelect from './SearchableSelect'
-import { User, MapPin, ArrowRight, AlertCircle } from 'lucide-react'
+import { Monitor, User, MapPin, ArrowRight, AlertCircle } from 'lucide-react'
+import { fetchWorkstationsRequest } from '../services/workstationService'
 import apiClient from '../services/apiClient'
-import { fetchEmployeesRequest } from '../services/employeeService'
 import { useFormModal } from '../hooks/useFormModal'
 import { useAssetQueryInvalidation } from '../hooks/useAssetQueryInvalidation'
 
 function TransferAssetModal({ isOpen, onClose, asset }) {
   const { invalidateAssetQueries } = useAssetQueryInvalidation()
+  const [workstationSearch, setWorkstationSearch] = useState('')
 
   const {
     formData,
@@ -20,11 +22,11 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
     handleClose,
     getCharCount,
   } = useFormModal({
-    initialData: { to_employee_id: '', reason: '', remarks: '' },
+    initialData: { to_workstation_id: '', reason: '', remarks: '' },
     validationRules: {
-      to_employee_id: {
+      to_workstation_id: {
         required: true,
-        label: 'Employee',
+        label: 'Workstation',
       },
       reason: {
         required: true,
@@ -32,51 +34,66 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
         label: 'Reason',
       },
     },
-    mutationFn: (data) => apiClient.post(`/assets/${asset?.id}/movements/transfer`, data),
+    mutationFn: (data) => {
+      const fromWorkstationId = asset?.workstation_id
+      if (fromWorkstationId) {
+        return apiClient.post(`/workstations/${fromWorkstationId}/transfer-asset`, {
+          asset_id: asset.id,
+          to_workstation_id: data.to_workstation_id,
+        })
+      }
+      // If asset has no current workstation, assign it to the target workstation
+      return apiClient.post(`/workstations/${data.to_workstation_id}/assign-asset`, {
+        asset_id: asset.id,
+      })
+    },
     onSuccess: () => {
       invalidateAssetQueries(asset?.id)
     },
     onClose,
     successTitle: 'Asset Transferred',
-    successMessage: 'Asset has been successfully transferred to the new employee',
+    successMessage: 'Asset has been successfully transferred to the new workstation',
     errorTitle: 'Transfer Failed',
   })
 
-  // Fetch employees - cached for 5 minutes to avoid repeated fetches
-  const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
-    queryKey: ['employees', 'all'],
+  // Fetch workstations
+  const { data: workstationsData, isLoading: isLoadingWorkstations } = useQuery({
+    queryKey: ['workstations', 'all'],
     queryFn: async () => {
-      const response = await fetchEmployeesRequest({ all: true })
+      const response = await fetchWorkstationsRequest({ all: true })
       return response.data
     },
     enabled: isOpen,
-    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    staleTime: 5 * 60 * 1000,
   })
 
-  const employees = (() => {
-    if (!employeesData) return []
-    if (employeesData.success && Array.isArray(employeesData.data)) {
-      return employeesData.data
+  const workstations = (() => {
+    if (!workstationsData) return []
+    if (workstationsData.success && Array.isArray(workstationsData.data)) {
+      return workstationsData.data
     }
-    if (Array.isArray(employeesData?.data)) {
-      return employeesData.data
+    if (Array.isArray(workstationsData?.data)) {
+      return workstationsData.data
     }
-    if (Array.isArray(employeesData)) {
-      return employeesData
+    if (Array.isArray(workstationsData)) {
+      return workstationsData
     }
     return []
   })()
 
-  // Format employees for SearchableSelect
-  const formattedEmployees = employees.map(emp => ({
-    id: emp.id,
-    fullname: emp.fullname,
-    position_name: emp.position?.position_name,
-    branch_name: emp.branch?.branch_name,
-  }))
+  // Format workstations for SearchableSelect, excluding current workstation
+  const formattedWorkstations = workstations
+    .filter(ws => ws.id !== asset?.workstation_id)
+    .map(ws => ({
+      id: ws.id,
+      fullname: ws.name,
+      position_name: ws.employee?.fullname || 'No employee assigned',
+      branch_name: ws.branch?.branch_name,
+    }))
 
-  const currentEmployee = asset?.assigned_employee
-  const currentBranch = currentEmployee?.branch
+  const currentWorkstation = asset?.workstation
+  const currentEmployee = currentWorkstation?.employee || asset?.assigned_employee
+  const currentBranch = currentWorkstation?.branch || currentEmployee?.branch
   const reasonCharCount = getCharCount('reason')
 
   const footer = (
@@ -120,16 +137,23 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Current Assignment Info */}
-        {currentEmployee && (
+        {(currentWorkstation || currentEmployee) && (
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
             <p className="text-sm font-medium text-slate-700 mb-3">Current Assignment</p>
             <div className="flex items-start gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-200 text-slate-600">
-                <User className="w-5 h-5" />
+                {currentWorkstation ? <Monitor className="w-5 h-5" /> : <User className="w-5 h-5" />}
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-slate-900">{currentEmployee.fullname}</p>
-                {currentEmployee.position && (
+                {currentWorkstation && (
+                  <p className="font-semibold text-slate-900">{currentWorkstation.name}</p>
+                )}
+                {currentEmployee && (
+                  <p className={currentWorkstation ? 'text-sm text-slate-600' : 'font-semibold text-slate-900'}>
+                    {currentEmployee.fullname}
+                  </p>
+                )}
+                {currentEmployee?.position && (
                   <p className="text-sm text-slate-600">{currentEmployee.position.position_name}</p>
                 )}
                 {currentBranch && (
@@ -150,25 +174,25 @@ function TransferAssetModal({ isOpen, onClose, asset }) {
           <p className="text-sm text-blue-700">Serial: {asset?.serial_number}</p>
         </div>
 
-        {/* New Employee Selection */}
+        {/* New Workstation Selection */}
         <div>
           <SearchableSelect
-            label="Transfer To"
-            placeholder="Select employee"
-            options={formattedEmployees}
-            value={formData.to_employee_id}
-            onChange={(value) => setField('to_employee_id', value)}
+            label="Transfer To Workstation"
+            placeholder="Search workstation..."
+            options={formattedWorkstations}
+            value={formData.to_workstation_id}
+            onChange={(value) => setField('to_workstation_id', value)}
             displayField="fullname"
             secondaryField="position_name"
             tertiaryField="branch_name"
-            emptyMessage="No employees found"
+            emptyMessage="No workstations found"
             required
-            isLoading={isLoadingEmployees}
+            isLoading={isLoadingWorkstations}
           />
-          {errors.to_employee_id && (
+          {errors.to_workstation_id && (
             <div className="flex items-center gap-1 mt-1 text-sm text-red-600">
               <AlertCircle className="w-4 h-4" />
-              {errors.to_employee_id}
+              {errors.to_workstation_id}
             </div>
           )}
         </div>

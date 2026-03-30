@@ -78,8 +78,8 @@ export default function useAssetViewController({ id, employeeId, workstationId }
   // Multi-select state for bulk operations
   const [selectedAssets, setSelectedAssets] = useState([]);
   const [isBulkTransferModalOpen, setIsBulkTransferModalOpen] = useState(false);
-  const [employeeSearch, setEmployeeSearch] = useState("");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [workstationSearch, setWorkstationSearch] = useState("");
+  const [selectedWorkstationId, setSelectedWorkstationId] = useState("");
 
   // Fetch single asset details (when viewing individual asset)
   const { data: assetData, isLoading: isLoadingAsset } = useQuery({
@@ -247,6 +247,49 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch workstations for bulk transfer
+  const { data: workstationsData, isLoading: isLoadingWorkstations } = useQuery({
+    queryKey: ["workstations"],
+    queryFn: async () => {
+      const response = await apiClient.get("/workstations");
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const workstations = useMemo(
+    () =>
+      Array.isArray(workstationsData?.data)
+        ? workstationsData.data
+        : Array.isArray(workstationsData)
+          ? workstationsData
+          : [],
+    [workstationsData]
+  );
+
+  const filteredWorkstations = useMemo(() => {
+    if (!workstationSearch) return workstations;
+
+    const searchTrimmed = workstationSearch.trim();
+    if (!searchTrimmed) return workstations;
+
+    const searchLower = searchTrimmed.toLowerCase();
+
+    return workstations.filter((ws) => {
+      const nameLower = ws.name?.toLowerCase() || '';
+      const branchLower = ws.branch?.branch_name?.toLowerCase() || '';
+      const positionLower = ws.position?.title?.toLowerCase() || '';
+      const employeeLower = ws.employee?.fullname?.toLowerCase() || '';
+
+      return (
+        nameLower.includes(searchLower) ||
+        branchLower.includes(searchLower) ||
+        positionLower.includes(searchLower) ||
+        employeeLower.includes(searchLower)
+      );
+    });
+  }, [workstations, workstationSearch]);
+
   // Fetch branches and positions (for workstation selectors)
   const { data: branchesData } = useQuery({
     queryKey: ["branches"],
@@ -289,34 +332,6 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     [employeesData]
   );
 
-  const filteredEmployees = useMemo(() => {
-    if (!employeeSearch) return employees;
-
-    // Trim and normalize search input (case-insensitive, no extra spaces)
-    const searchTrimmed = employeeSearch.trim();
-    if (!searchTrimmed) return employees;
-
-    const searchLower = searchTrimmed.toLowerCase();
-
-    return employees.filter((employee) => {
-      // Search across multiple fields with null-safe checks
-      const fullnameLower = employee.fullname?.toLowerCase() || '';
-      const firstnameLower = employee.firstname?.toLowerCase() || '';
-      const lastnameLower = employee.lastname?.toLowerCase() || '';
-      const branchLower = employee.branch?.branch_name?.toLowerCase() || '';
-      const positionLower = employee.position?.position_name?.toLowerCase() || '';
-      const emailLower = employee.email?.toLowerCase() || '';
-
-      return (
-        fullnameLower.includes(searchLower) ||
-        firstnameLower.includes(searchLower) ||
-        lastnameLower.includes(searchLower) ||
-        branchLower.includes(searchLower) ||
-        positionLower.includes(searchLower) ||
-        emailLower.includes(searchLower)
-      );
-    });
-  }, [employees, employeeSearch]);
 
   const isLoading =
     isLoadingAsset ||
@@ -551,10 +566,10 @@ export default function useAssetViewController({ id, employeeId, workstationId }
   });
 
   const bulkTransferMutation = useMutation({
-    mutationFn: async ({ assetIds, employeeId: targetEmployeeId }) => {
+    mutationFn: async ({ assetIds, workstationId: targetWorkstationId }) => {
       const response = await apiClient.post("/assets/movements/bulk-transfer", {
         asset_ids: assetIds,
-        to_employee_id: targetEmployeeId,
+        to_workstation_id: targetWorkstationId,
         reason: "Bulk transfer",
         remarks: `Transferred ${assetIds.length} asset(s) in bulk operation`,
       });
@@ -562,10 +577,11 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     },
     onSuccess: async () => {
       await invalidateAssetRelatedQueries(id, employeeId, actualEmployeeId);
+      queryClient.invalidateQueries({ queryKey: ["workstations"] });
       setIsBulkTransferModalOpen(false);
       setSelectedAssets([]);
-      setEmployeeSearch("");
-      setSelectedEmployeeId("");
+      setWorkstationSearch("");
+      setSelectedWorkstationId("");
       Swal.fire({
         icon: "success",
         title: "Assets Transferred",
@@ -1203,25 +1219,25 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     setIsBulkTransferModalOpen(true);
   };
 
-  const handleSubmitBulkTransfer = (targetEmployeeId) => {
-    if (!targetEmployeeId) {
+  const handleSubmitBulkTransfer = (targetWorkstationId) => {
+    if (!targetWorkstationId) {
       Swal.fire({
         icon: "warning",
-        title: "No Employee Selected",
-        text: "Please select an employee to transfer the assets to",
+        title: "No Workstation Selected",
+        text: "Please select a workstation to transfer the assets to",
       });
       return;
     }
     bulkTransferMutation.mutate({
       assetIds: selectedAssets,
-      employeeId: targetEmployeeId,
+      workstationId: targetWorkstationId,
     });
   };
 
   const closeBulkTransferModal = () => {
     setIsBulkTransferModalOpen(false);
-    setEmployeeSearch("");
-    setSelectedEmployeeId("");
+    setWorkstationSearch("");
+    setSelectedWorkstationId("");
   };
 
   const closeDeleteModal = () => {
@@ -1308,7 +1324,8 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     equipmentOptions,
     statusColorMap,
     employees,
-    filteredEmployees,
+    workstations,
+    filteredWorkstations,
     movements,
     assignments,
     statistics,
@@ -1320,6 +1337,7 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     isLoadingAssignments,
     isLoadingHistory,
     isLoadingEmployees,
+    isLoadingWorkstations,
     viewMode,
     setViewMode,
     employeeViewTab,
@@ -1349,8 +1367,8 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     vendorFormData,
     selectedAssets,
     isBulkTransferModalOpen,
-    employeeSearch,
-    selectedEmployeeId,
+    workstationSearch,
+    selectedWorkstationId,
     setShowAddModal,
     setShowDeleteModal,
     setDeleteTarget,
@@ -1366,8 +1384,8 @@ export default function useAssetViewController({ id, employeeId, workstationId }
     setVendorFormData,
     setSelectedAssets,
     setIsBulkTransferModalOpen,
-    setEmployeeSearch,
-    setSelectedEmployeeId,
+    setWorkstationSearch,
+    setSelectedWorkstationId,
     setRepairModalAssetId,
     handleEditClick,
     handleSaveEdit,

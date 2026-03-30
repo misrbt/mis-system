@@ -23,6 +23,7 @@ import {
   X,
   QrCode,
   Barcode,
+  Monitor,
 } from 'lucide-react'
 import AssetMovementTimeline from '../AssetMovementTimeline'
 import AssetAssignmentHistory from '../AssetAssignmentHistory'
@@ -70,7 +71,9 @@ const SingleAssetView = ({
     )
   }
 
-  const currentEmployee = asset?.assigned_employee
+  const currentWorkstation = asset?.workstation
+  const currentEmployee = currentWorkstation?.employee || asset?.assigned_employee
+  const isAssigned = !!(currentWorkstation || currentEmployee)
   const currentStatus = asset?.status
   const currentAssignmentDays = statistics?.current_assignment_days || 0
 
@@ -220,7 +223,7 @@ const SingleAssetView = ({
               </div>
               <button
                 onClick={() => setIsTransferModalOpen(true)}
-                disabled={!currentEmployee}
+                disabled={!isAssigned}
                 className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <ArrowRight className="w-4 h-4" />
@@ -228,7 +231,7 @@ const SingleAssetView = ({
               </button>
               <button
                 onClick={() => setIsReturnModalOpen(true)}
-                disabled={!currentEmployee}
+                disabled={!isAssigned}
                 className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <CornerUpLeft className="w-4 h-4" />
@@ -294,28 +297,46 @@ const SingleAssetView = ({
             {/* Current Assignment Card */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <User className="w-5 h-5 text-blue-600" />
+                {currentWorkstation ? <Monitor className="w-5 h-5 text-blue-600" /> : <User className="w-5 h-5 text-blue-600" />}
                 Current Assignment
               </h3>
-              {currentEmployee ? (
+              {isAssigned ? (
                 <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600">
-                      <User className="w-6 h-6" />
+                  {currentWorkstation && (
+                    <div className="flex items-start gap-3">
+                      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-purple-100 text-purple-600">
+                        <Monitor className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{currentWorkstation.name}</p>
+                        {currentWorkstation.branch && (
+                          <div className="flex items-center gap-1 mt-1 text-sm text-gray-500">
+                            <MapPin className="w-3.5 h-3.5" />
+                            {currentWorkstation.branch.branch_name}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{currentEmployee.fullname}</p>
-                      {currentEmployee.position && (
-                        <p className="text-sm text-gray-600">{currentEmployee.position.position_name}</p>
-                      )}
-                      {currentEmployee.branch && (
-                        <div className="flex items-center gap-1 mt-1 text-sm text-gray-500">
-                          <MapPin className="w-3.5 h-3.5" />
-                          {currentEmployee.branch.branch_name}
-                        </div>
-                      )}
+                  )}
+                  {currentEmployee && (
+                    <div className="flex items-start gap-3">
+                      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600">
+                        <User className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{currentEmployee.fullname}</p>
+                        {currentEmployee.position && (
+                          <p className="text-sm text-gray-600">{currentEmployee.position.position_name}</p>
+                        )}
+                        {!currentWorkstation && currentEmployee.branch && (
+                          <div className="flex items-center gap-1 mt-1 text-sm text-gray-500">
+                            <MapPin className="w-3.5 h-3.5" />
+                            {currentEmployee.branch.branch_name}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {currentAssignmentDays > 0 && (
                     <div className="pt-3 border-t border-gray-100">
                       <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -326,20 +347,21 @@ const SingleAssetView = ({
                       </div>
                     </div>
                   )}
-                  {/* View All Employee Assets Button */}
-                  <div className="pt-3 border-t border-gray-100">
-                    <button
-                      onClick={() => navigate(`/inventory/employees/${currentEmployee.id}/assets`)}
-                      className="w-full px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Package className="w-4 h-4" />
-                      View All {currentEmployee.fullname.split(' ')[0]}'s Assets
-                    </button>
-                  </div>
+                  {currentEmployee && (
+                    <div className="pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => navigate(`/inventory/employees/${currentEmployee.id}/assets`)}
+                        className="w-full px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Package className="w-4 h-4" />
+                        View All {currentEmployee.fullname.split(' ')[0]}'s Assets
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <User className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <Monitor className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                   <p className="text-gray-500 text-sm">Not assigned</p>
                   <p className="text-gray-400 text-xs mt-1">Asset is in inventory</p>
                 </div>

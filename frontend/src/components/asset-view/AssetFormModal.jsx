@@ -844,12 +844,12 @@ const AssetFormModal = ({
                   value={formData.workstation_id || ''}
                   onChange={onWorkstationChange}
                   displayField="name"
-                  placeholder="Select employee or search..."
+                  placeholder="Search workstation..."
                   emptyMessage="No workstations found"
                   required={false}
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Select employee - workstation ID will be stored
+                  Select workstation to assign this asset
                 </p>
               </div>
             )}
