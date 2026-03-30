@@ -564,7 +564,7 @@ const AssetCard = ({
           <div className="bg-gradient-to-br from-slate-50 to-blue-50 p-4 border-b border-slate-200">
             <div className="flex items-start justify-between mb-2">
               <div className={`flex-1 min-w-0 pr-2 ${onSelect ? 'pl-8' : ''}`}>
-                <h3 className="text-lg font-bold text-slate-900 mb-2 truncate" title={cardTitle}>
+                <h3 className="text-sm font-bold text-slate-900 mb-2 line-clamp-2 break-words leading-snug" title={cardTitle}>
                   {cardTitle}
                 </h3>
                 {(displayBrand || displayModel) && (
