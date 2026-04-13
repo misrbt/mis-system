@@ -40,7 +40,7 @@ Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
 });
 
 // Heavy operations with stricter rate limiting (10 requests per minute)
-Route::middleware(['auth:sanctum', 'throttle:10,1'])->group(function () {
+Route::middleware(['throttle:10,1'])->group(function () {
     // QR Code generation - heavy operations
     Route::post('assets/generate-qr-codes', [AssetController::class, 'generateAllQRCodes']);
     Route::post('assets/{id}/generate-qr-code', [AssetController::class, 'generateQRCode']);
@@ -89,7 +89,7 @@ Route::middleware(['auth:sanctum', 'throttle:10,1'])->group(function () {
 });
 
 // Protected routes (require authentication + rate limiting: 60 requests per minute)
-Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+Route::middleware(['throttle:60,1'])->group(function () {
     // Auth routes
     Route::prefix('auth')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);

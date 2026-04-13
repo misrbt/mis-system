@@ -12,13 +12,14 @@ class CentralAuth
     protected array $except = [
         'api/auth/login',
         'api/auth/register',
+        'api/ping',
         'up',
     ];
 
     public function handle(Request $request, Closure $next): Response
     {
         foreach ($this->except as $path) {
-            if ($request->is($path)) {
+            if ($request->is($path) || $request->is("*/{$path}")) {
                 return $next($request);
             }
         }
@@ -33,6 +34,7 @@ class CentralAuth
             $authUrl = config('services.central_auth.url', 'http://127.0.0.1:8001/api');
 
             $response = Http::timeout(10)
+                ->withoutVerifying()
                 ->withToken($token)
                 ->get("{$authUrl}/auth/validate-token", [
                     'system_slug' => 'mis_system',
@@ -53,20 +55,29 @@ class CentralAuth
             $user = \App\Models\User::where('email', $data['user']['email'])->first();
             if (!$user) {
                 $user = \App\Models\User::create([
-                    'name' => $data['user']['name'],
-                    'username' => $data['user']['username'],
-                    'email' => $data['user']['email'],
-                    'password' => bcrypt(str()->random(32)),
+                    'name'      => $data['user']['name'],
+                    'username'  => $data['user']['username'],
+                    'email'     => $data['user']['email'],
+                    'password'  => bcrypt(str()->random(32)),
+                    'role'      => $data['access']['role'] ?? 'user',
                     'is_active' => true,
                 ]);
+            } else {
+                // Sync role from central auth
+                $role = $data['access']['role'] ?? null;
+                if ($role && $user->role !== $role) {
+                    $user->update(['role' => $role]);
+                }
             }
 
             auth()->setUser($user);
+            auth()->guard('sanctum')->setUser($user);
+            $request->setUserResolver(fn ($guard = null) => $user);
 
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Authentication service unavailable.',
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error'   => config('app.debug') ? $e->getMessage() : null,
             ], 503);
         }
 
