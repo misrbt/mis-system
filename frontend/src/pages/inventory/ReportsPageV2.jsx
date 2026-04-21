@@ -97,6 +97,7 @@ function ReportsPage() {
   const [exportLoading, setExportLoading] = useState({
     xlsx: false,
     pdf: false,
+    word: false,
   })
 
   // Signatories Modal State
@@ -1367,6 +1368,365 @@ function ReportsPage() {
     }
   }
 
+  // Handle Export Word
+  const handleExportWord = async () => {
+    if (!reportData?.data?.assets || reportData.data.assets.length === 0) {
+      Swal.fire({ icon: 'warning', title: 'No Data', text: 'Please generate a report first' })
+      return
+    }
+
+    setExportLoading(prev => ({ ...prev, word: true }))
+
+    try {
+      const {
+        Document, Paragraph, Table, TableRow, TableCell, TextRun,
+        AlignmentType, VerticalAlign, WidthType, BorderStyle,
+        ShadingType, Packer, PageOrientation,
+      } = await import('docx')
+
+      // Column widths in DXA (twips). Total ≈ 13 000 fits A4 landscape with 1-inch margins.
+      const colWidths = [2200, 1800, 1200, 900, 1000, 1300, 1000, 800, 1000, 1000, 800]
+      const totalWidth = colWidths.reduce((a, b) => a + b, 0)
+
+      const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+      const thinBorder = (color = 'CBD5E1') => ({ style: BorderStyle.SINGLE, size: 4, color })
+
+      const makePara = (text, opts = {}) =>
+        new Paragraph({
+          children: [new TextRun({ text: String(text ?? ''), ...opts })],
+          alignment: opts.alignment || AlignmentType.LEFT,
+          spacing: { before: 0, after: 0 },
+        })
+
+      const makeCell = (children, opts = {}) =>
+        new TableCell({
+          children: Array.isArray(children) ? children : [children],
+          width: opts.width != null ? { size: opts.width, type: WidthType.DXA } : undefined,
+          columnSpan: opts.columnSpan,
+          shading: opts.fill ? { fill: opts.fill, type: ShadingType.SOLID } : undefined,
+          verticalAlign: opts.verticalAlign ?? VerticalAlign.CENTER,
+          verticalMerge: opts.verticalMerge,
+          borders: opts.borders ?? {
+            top: thinBorder(),
+            bottom: thinBorder(),
+            left: thinBorder(),
+            right: thinBorder(),
+          },
+          margins: { top: 50, bottom: 50, left: 80, right: 80 },
+        })
+
+      const makeBranchHeaderRow = (label) =>
+        new TableRow({
+          children: [
+            makeCell(
+              makePara(label, { bold: true, size: 20, color: 'FFFFFF', alignment: AlignmentType.CENTER }),
+              { columnSpan: 11, width: totalWidth, fill: '334155', verticalAlign: VerticalAlign.CENTER,
+                borders: { top: thinBorder('334155'), bottom: thinBorder('334155'), left: thinBorder('334155'), right: thinBorder('334155') } }
+            ),
+          ],
+        })
+
+      const makeSectionHeaderRow = (label) =>
+        new TableRow({
+          children: [
+            makeCell(
+              makePara(label, { bold: true, size: 18, color: '3730A3' }),
+              { columnSpan: 11, width: totalWidth, fill: 'EEF2FF',
+                borders: { top: thinBorder('818CF8'), bottom: thinBorder('818CF8'), left: thinBorder('CBD5E1'), right: thinBorder('CBD5E1') } }
+            ),
+          ],
+        })
+
+      // ── Table Header Row ──
+      const headerLabels = ['Name of User', 'Asset', 'Serial No.', 'Date Acq', 'Category', 'Vendor', 'Acq Cost', 'Est. Life', 'Book Value', 'Remarks', 'Status']
+      const tableRows = [
+        new TableRow({
+          tableHeader: true,
+          children: headerLabels.map((label, i) =>
+            makeCell(
+              makePara(label, { bold: true, size: 16, color: 'FFFFFF' }),
+              { width: colWidths[i], fill: '3F51B5',
+                borders: { top: thinBorder('3949AB'), bottom: thinBorder('3949AB'), left: thinBorder('3949AB'), right: thinBorder('3949AB') } }
+            )
+          ),
+        }),
+      ]
+
+      // ── Data Rows ──
+      groupedByEmployee.forEach((group, groupIndex) => {
+        const prev = groupIndex > 0 ? groupedByEmployee[groupIndex - 1] : null
+
+        // Type header
+        const showTypeHeader = group.employee_type && group.employee_type !== 'Branch' && group.employee_type !== prev?.employee_type
+        if (showTypeHeader) {
+          tableRows.push(makeSectionHeaderRow(`[${group.employee_type === 'BLU' ? 'BLU Employees' : 'Unassigned'}]`))
+        }
+
+        // Branch header
+        const currentBranchId = group.employee?.branch?.id || null
+        const prevBranchId = prev?.employee?.branch?.id || null
+        if (!activeFilters?.branch_id && currentBranchId && currentBranchId !== prevBranchId) {
+          tableRows.push(makeBranchHeaderRow(group.employee?.branch?.branch_name || ''))
+        }
+
+        // OBO header
+        const currentOboKey = `${group.employee?.branch?.id || ''}::${group.employee?.obo?.id || ''}`
+        const prevOboKey = prev ? `${prev.employee?.branch?.id || ''}::${prev.employee?.obo?.id || ''}` : null
+        if (group.employee?.obo && currentOboKey !== prevOboKey) {
+          tableRows.push(makeSectionHeaderRow(group.employee.obo.name))
+        }
+
+        // Employee / workstation label
+        const rawWsName = group.employee?.workstation_name || group.employee?.fullname || 'Unassigned'
+        const branchPrefix = group.employee?.branch?.branch_name ? `${group.employee.branch.branch_name} - ` : ''
+        const wsName = branchPrefix && rawWsName.startsWith(branchPrefix) ? rawWsName.slice(branchPrefix.length) : rawWsName
+        const wsAssignee = group.employee?.is_workstation && group.employee?.fullname && group.employee?.fullname !== group.employee?.workstation_name
+          ? group.employee.fullname : ''
+        const empPrimaryName = group.employee?.is_workstation
+          ? (wsAssignee || wsName)
+          : (group.employee?.fullname || 'Unassigned')
+        const empSecondaryName = group.employee?.is_workstation && wsAssignee
+          ? wsName
+          : (group.employee?.is_workstation ? '' : (group.employee?.position?.title || ''))
+
+        group.assets.forEach((asset, assetIndex) => {
+          const isFirst = assetIndex === 0
+
+          const nameCellChildren = isFirst
+            ? [
+                makePara(empPrimaryName, { bold: true, size: 18, color: '0F172A' }),
+                ...(empSecondaryName ? [makePara(empSecondaryName, { size: 16, color: '4F46E5', italics: true })] : []),
+              ]
+            : [makePara('')]
+
+          const nameCell = makeCell(nameCellChildren, {
+            width: colWidths[0],
+            verticalMerge: isFirst ? 'restart' : 'continue',
+            verticalAlign: VerticalAlign.CENTER,
+            borders: {
+              top: isFirst ? thinBorder('818CF8') : thinBorder(),
+              bottom: assetIndex === group.assets.length - 1 ? thinBorder('818CF8') : thinBorder(),
+              left: thinBorder(),
+              right: thinBorder(),
+            },
+          })
+
+          const statusHex = (asset.status?.color || '#9CA3AF').replace('#', '').toUpperCase()
+          const rowBorders = {
+            top: isFirst ? thinBorder('818CF8') : thinBorder(),
+            bottom: assetIndex === group.assets.length - 1 ? thinBorder('818CF8') : thinBorder(),
+            left: thinBorder(),
+            right: thinBorder(),
+          }
+
+          tableRows.push(
+            new TableRow({
+              children: [
+                nameCell,
+                makeCell(makePara(getAssetDisplayName(asset), { size: 16 }), { width: colWidths[1], borders: rowBorders }),
+                makeCell(makePara(asset.serial_number || '—', { size: 16 }), { width: colWidths[2], borders: rowBorders }),
+                makeCell(makePara(asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : '—', { size: 16 }), { width: colWidths[3], borders: rowBorders }),
+                makeCell(makePara(asset.category?.name || '—', { size: 16 }), { width: colWidths[4], borders: rowBorders }),
+                makeCell(makePara(asset.vendor?.company_name || '—', { size: 16 }), { width: colWidths[5], borders: rowBorders }),
+                makeCell(makePara(Number(asset.acq_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), { size: 16, bold: true }), { width: colWidths[6], borders: rowBorders }),
+                makeCell(makePara(String(asset.estimated_life || 3), { size: 16 }), { width: colWidths[7], borders: rowBorders }),
+                makeCell(makePara(Number(asset.book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), { size: 16 }), { width: colWidths[8], borders: rowBorders }),
+                makeCell(makePara(asset.remarks || '—', { size: 16 }), { width: colWidths[9], borders: rowBorders }),
+                makeCell(makePara(asset.status?.name || 'N/A', { size: 16, bold: true, color: 'FFFFFF' }), { width: colWidths[10], fill: statusHex, borders: rowBorders }),
+              ],
+            })
+          )
+        })
+      })
+
+      // ── Grand Total Row ──
+      if (summary) {
+        const totalBorders = {
+          top: thinBorder('64748B'),
+          bottom: thinBorder('64748B'),
+          left: thinBorder(),
+          right: thinBorder(),
+        }
+        const labelColsWidth = colWidths.slice(0, 6).reduce((a, b) => a + b, 0)
+        tableRows.push(
+          new TableRow({
+            children: [
+              makeCell(makePara('Grand Total', { bold: true, size: 20, color: '0F172A', alignment: AlignmentType.RIGHT }), { columnSpan: 6, width: labelColsWidth, fill: 'F1F5F9', borders: totalBorders }),
+              makeCell(makePara(`₱${Number(summary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, { bold: true, size: 20, color: '047857' }), { width: colWidths[6], fill: 'F1F5F9', borders: totalBorders }),
+              makeCell(makePara(''), { width: colWidths[7], fill: 'F1F5F9', borders: totalBorders }),
+              makeCell(makePara(''), { width: colWidths[8], fill: 'F1F5F9', borders: totalBorders }),
+              makeCell(makePara(''), { width: colWidths[9], fill: 'F1F5F9', borders: totalBorders }),
+              makeCell(makePara(''), { width: colWidths[10], fill: 'F1F5F9', borders: totalBorders }),
+            ],
+          })
+        )
+      }
+
+      const mainTable = new Table({
+        width: { size: totalWidth, type: WidthType.DXA },
+        rows: tableRows,
+      })
+
+      // ── Spare / Reserve Assets Table (Head Office Only) ──
+      const spareSection = []
+      if (isHeadOfficeSelected && replenishmentsList.length > 0) {
+        spareSection.push(new Paragraph({ text: '', spacing: { before: 480, after: 0 } }))
+        spareSection.push(new Paragraph({
+          children: [new TextRun({ text: 'Spare / Reserve Assets', bold: true, size: 28, color: '4F46E5' })],
+          spacing: { before: 0, after: 60 },
+        }))
+        spareSection.push(new Paragraph({
+          children: [new TextRun({ text: 'Head Office Inventory', italics: true, size: 18, color: '4338CA' })],
+          spacing: { before: 0, after: 200 },
+        }))
+
+        const spareColWidths = [1600, 1200, 1200, 1500, 1500, 1100, 1100, 1100, 1500, 1200]
+        const spareTotalWidth = spareColWidths.reduce((a, b) => a + b, 0)
+        const spareHeaderLabels = ['Asset Name', 'Serial No.', 'Category', 'Brand / Model', 'Vendor', 'Date Acquired', 'Acq Cost', 'Book Value', 'Remarks', 'Status']
+
+        const spareRows = [
+          new TableRow({
+            tableHeader: true,
+            children: spareHeaderLabels.map((label, i) =>
+              makeCell(makePara(label, { bold: true, size: 16, color: 'FFFFFF' }),
+                { width: spareColWidths[i], fill: '3F51B5',
+                  borders: { top: thinBorder('3949AB'), bottom: thinBorder('3949AB'), left: thinBorder('3949AB'), right: thinBorder('3949AB') } }
+              )
+            ),
+          }),
+          ...replenishmentsList.map(item => {
+            const spareStatusHex = (item.status?.color || '#9CA3AF').replace('#', '').toUpperCase()
+            const brandModel = [item.brand, item.model].filter(Boolean).join(' ') || '—'
+            return new TableRow({
+              children: [
+                makeCell(makePara(item.asset_name || '—', { size: 16 }), { width: spareColWidths[0] }),
+                makeCell(makePara(item.serial_number || '—', { size: 16 }), { width: spareColWidths[1] }),
+                makeCell(makePara(item.category?.name || '—', { size: 16 }), { width: spareColWidths[2] }),
+                makeCell(makePara(brandModel, { size: 16 }), { width: spareColWidths[3] }),
+                makeCell(makePara(item.vendor?.company_name || '—', { size: 16 }), { width: spareColWidths[4] }),
+                makeCell(makePara(item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '—', { size: 16 }), { width: spareColWidths[5] }),
+                makeCell(makePara(Number(item.acq_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), { size: 16, bold: true }), { width: spareColWidths[6] }),
+                makeCell(makePara(Number(item.book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), { size: 16 }), { width: spareColWidths[7] }),
+                makeCell(makePara(item.remarks || '—', { size: 16 }), { width: spareColWidths[8] }),
+                makeCell(makePara(item.status?.name || 'N/A', { size: 16, bold: true, color: 'FFFFFF' }), { width: spareColWidths[9], fill: spareStatusHex }),
+              ],
+            })
+          }),
+        ]
+
+        if (replenishmentSummary) {
+          const spareLabelWidth = spareColWidths.slice(0, 6).reduce((a, b) => a + b, 0)
+          spareRows.push(new TableRow({
+            children: [
+              makeCell(makePara(`Spare Assets Grand Total (${replenishmentSummary.total_count} items)`, { bold: true, size: 18, color: '334155', alignment: AlignmentType.RIGHT }), { columnSpan: 6, width: spareLabelWidth, fill: 'F8FAFC' }),
+              makeCell(makePara(`₱${Number(replenishmentSummary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, { bold: true, size: 18, color: '047857' }), { width: spareColWidths[6], fill: 'F8FAFC' }),
+              makeCell(makePara(''), { width: spareColWidths[7], fill: 'F8FAFC' }),
+              makeCell(makePara(''), { width: spareColWidths[8], fill: 'F8FAFC' }),
+              makeCell(makePara(''), { width: spareColWidths[9], fill: 'F8FAFC' }),
+            ],
+          }))
+        }
+
+        spareSection.push(new Table({ width: { size: spareTotalWidth, type: WidthType.DXA }, rows: spareRows }))
+      }
+
+      // ── Signatories ──
+      const preparedByEmployee = employees?.find(e => e.id === signatories.prepared_by_id)
+      const checkedByEmployee = employees?.find(e => e.id === signatories.checked_by_id)
+      const notedByEmployee = employees?.find(e => e.id === signatories.noted_by_id)
+
+      const sigColWidth = Math.floor(totalWidth / 3)
+      const makeSigCell = (labelText, nameText, posText) =>
+        makeCell(
+          [
+            new Paragraph({ children: [new TextRun({ text: labelText, size: 18, color: '475569' })], spacing: { before: 0, after: 200 } }),
+            new Paragraph({
+              children: [new TextRun({ text: nameText, bold: true, size: 20, color: '0F172A' })],
+              border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '334155' } },
+              spacing: { before: 480, after: 120 },
+            }),
+            new Paragraph({ children: [new TextRun({ text: posText, size: 16, color: '475569' })], spacing: { before: 0, after: 0 } }),
+          ],
+          {
+            width: sigColWidth,
+            borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+          }
+        )
+
+      const signatoryTable = new Table({
+        width: { size: totalWidth, type: WidthType.DXA },
+        rows: [
+          new TableRow({
+            children: [
+              makeSigCell(
+                'Prepared by:',
+                preparedByEmployee?.fullname || resolvedUser?.fullname || 'Admin User',
+                preparedByEmployee?.position?.title || resolvedUser?.position?.title || ''
+              ),
+              makeSigCell(
+                'Checked by:',
+                checkedByEmployee?.fullname || '__________________',
+                checkedByEmployee?.position?.title || 'Position'
+              ),
+              makeSigCell(
+                'Noted by:',
+                notedByEmployee?.fullname || '__________________',
+                notedByEmployee?.position?.title || 'Position'
+              ),
+            ],
+          }),
+        ],
+      })
+
+      // ── Header labels ──
+      const wordBranchLabel = activeFilters?.branch_id
+        ? branches?.find(b => String(b.id) === String(activeFilters.branch_id))?.branch_name || 'All Branches'
+        : 'All Branches'
+      const wordFromDate = activeFilters?.report_date_from
+        ? new Date(activeFilters.report_date_from).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : null
+      const wordToDate = activeFilters?.report_date_to
+        ? new Date(activeFilters.report_date_to).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      const wordDateLabel = wordFromDate ? `${wordFromDate} — ${wordToDate}` : `As of ${wordToDate}`
+
+      // ── Assemble Document ──
+      const doc = new Document({
+        sections: [{
+          properties: { page: { size: { orientation: PageOrientation.LANDSCAPE } } },
+          children: [
+            new Paragraph({ children: [new TextRun({ text: 'RBT Bank Inc.', bold: true, size: 24 })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 } }),
+            new Paragraph({ children: [new TextRun({ text: 'MIS Department', bold: true, size: 20 })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 } }),
+            new Paragraph({ children: [new TextRun({ text: 'List of Active IT Assets', bold: true, size: 36 })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 } }),
+            new Paragraph({ children: [new TextRun({ text: wordBranchLabel, size: 20 })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 } }),
+            new Paragraph({ children: [new TextRun({ text: wordDateLabel, bold: true, size: 18 })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 280 } }),
+            mainTable,
+            ...spareSection,
+            new Paragraph({ text: '', spacing: { before: 560, after: 0 } }),
+            signatoryTable,
+          ],
+        }],
+      })
+
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `IT_Asset_Report_${new Date().toISOString().split('T')[0]}.docx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      notifySuccess('Export Complete', 'Word document has been downloaded')
+    } catch (error) {
+      console.error(error)
+      Swal.fire({ icon: 'error', title: 'Export Failed', text: 'An error occurred while exporting to Word.' })
+    } finally {
+      setExportLoading(prev => ({ ...prev, word: false }))
+    }
+  }
+
   const notifySuccess = (title, text) => {
     Swal.fire({
       icon: 'success',
@@ -1647,6 +2007,14 @@ function ReportsPage() {
                   >
                     {exportLoading.pdf ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileType className="w-5 h-5" />}
                     Export as PDF
+                  </button>
+                  <button
+                    onClick={handleExportWord}
+                    disabled={exportLoading.word}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-700 text-white font-medium rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-all"
+                  >
+                    {exportLoading.word ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+                    Export as Word
                   </button>
                 </div>
               </div>
