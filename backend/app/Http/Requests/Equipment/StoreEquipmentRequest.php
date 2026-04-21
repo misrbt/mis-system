@@ -16,9 +16,12 @@ class StoreEquipmentRequest extends FormRequest
         return [
             'brand' => 'required|string|max:255',
             'model' => 'required|string|max:255',
+            'brand_id' => 'nullable|integer|exists:brands,id',
+            'equipment_model_id' => 'nullable|integer|exists:equipment_models,id',
             'description' => 'nullable|string',
             'asset_category_id' => 'nullable|exists:asset_category,id',
             'subcategory_id' => 'nullable|exists:asset_subcategories,id',
+            'specifications' => 'nullable|array',
         ];
     }
 }

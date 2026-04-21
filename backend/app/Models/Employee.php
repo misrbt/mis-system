@@ -14,6 +14,7 @@ class Employee extends Model
     protected $fillable = [
         'fullname',
         'branch_id',
+        'obo_id',
         'department_id',
         'position_id',
     ];
@@ -21,6 +22,11 @@ class Employee extends Model
     public function branch()
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function obo()
+    {
+        return $this->belongsTo(BranchObo::class, 'obo_id');
     }
 
     public function department()

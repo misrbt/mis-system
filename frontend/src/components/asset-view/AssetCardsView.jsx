@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
+import BrandModelSelect from '../BrandModelSelect'
 import {
   Package,
   Calendar,
@@ -385,32 +386,13 @@ const AssetCard = ({
               </div>
             )}
             {!isDesktopPC && (
-              <div className="space-y-1">
-                <SearchableSelect
-                  label="Brand"
-                  options={brandOptions}
-                  value={editFormData.brand}
-                  onChange={(value) => onChange('brand', value)}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select brand..."
-                  emptyMessage="No brands found"
-                />
-              </div>
-            )}
-            {!isDesktopPC && (
-              <div className="space-y-1">
-                <SearchableSelect
-                  label="Model"
-                  options={modelOptions}
-                  value={editFormData.model}
-                  onChange={(value) => onChange('model', value)}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select model..."
-                  emptyMessage="No models found"
-                />
-              </div>
+              <BrandModelSelect
+                brandId={editFormData.brand_id}
+                modelId={editFormData.equipment_model_id}
+                onBrandChange={(vals) => { onChange('brand_id', vals.brand_id); onChange('brand', vals.brand) }}
+                onModelChange={(vals) => { onChange('equipment_model_id', vals.equipment_model_id); onChange('model', vals.model) }}
+                layout="stacked"
+              />
             )}
             {isDesktopPC && (
               <div className="space-y-1">

@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table'
 import Modal from '../../components/Modal'
 import DataTable from '../../components/DataTable'
+import SpecificationFields from '../../components/specifications/SpecificationFields'
 import equipmentService from '../../services/equipmentService'
 import apiClient from '../../services/apiClient'
 import Swal from 'sweetalert2'
@@ -24,9 +25,12 @@ function EquipmentPage() {
   const [formData, setFormData] = useState({
     brand: '',
     model: '',
+    brand_id: '',
+    equipment_model_id: '',
     description: '',
     asset_category_id: '',
     subcategory_id: '',
+    specifications: {},
   })
   const [mobileGlobalFilter, setMobileGlobalFilter] = useState('')
   const [mobileSorting, setMobileSorting] = useState([])
@@ -39,6 +43,29 @@ function EquipmentPage() {
       const response = await equipmentService.getAll()
       return response.data.success ? response.data.data : []
     },
+  })
+
+  // Fetch brands
+  const { data: brands = [] } = useQuery({
+    queryKey: ['brands'],
+    queryFn: async () => {
+      const response = await apiClient.get('/brands')
+      const data = response.data?.data ?? response.data ?? []
+      return Array.isArray(data) ? data : []
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Fetch models for selected brand
+  const { data: brandModels = [] } = useQuery({
+    queryKey: ['brand-models', formData.brand_id],
+    queryFn: async () => {
+      const response = await apiClient.get(`/brands/${formData.brand_id}/models`)
+      const data = response.data?.data ?? response.data ?? []
+      return Array.isArray(data) ? data : []
+    },
+    enabled: !!formData.brand_id,
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: categories = [] } = useQuery({
@@ -64,20 +91,117 @@ function EquipmentPage() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-      ...(name === 'asset_category_id' ? { subcategory_id: '' } : {}),
-    }))
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value }
+      // Reset subcategory and specs when category changes
+      if (name === 'asset_category_id') {
+        next.subcategory_id = ''
+        next.specifications = {}
+      }
+      // When brand dropdown changes, sync the text field and reset model
+      if (name === 'brand_id') {
+        const selected = brands.find((b) => String(b.id) === String(value))
+        next.brand = selected?.name || ''
+        next.equipment_model_id = ''
+        next.model = ''
+      }
+      // When model dropdown changes, sync the text field
+      if (name === 'equipment_model_id') {
+        const selected = brandModels.find((m) => String(m.id) === String(value))
+        next.model = selected?.name || ''
+      }
+      return next
+    })
+  }
+
+  const handleAddNewBrand = async () => {
+    const { value: brandName } = await Swal.fire({
+      title: 'Add New Brand',
+      input: 'text',
+      inputLabel: 'Brand Name',
+      inputPlaceholder: 'e.g., Dell, HP, Lenovo',
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value?.trim()) return 'Brand name is required'
+      },
+    })
+    if (!brandName) return
+
+    try {
+      const response = await apiClient.post('/brands', { name: brandName.trim() })
+      if (response.data.success) {
+        await queryClient.invalidateQueries({ queryKey: ['brands'] })
+        const newBrand = response.data.data
+        setFormData((prev) => ({
+          ...prev,
+          brand_id: newBrand.id,
+          brand: newBrand.name,
+          equipment_model_id: '',
+          model: '',
+        }))
+        Swal.fire({ icon: 'success', title: 'Brand added', timer: 1500, showConfirmButton: false })
+      }
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to add brand',
+      })
+    }
+  }
+
+  const handleAddNewModel = async () => {
+    if (!formData.brand_id) {
+      Swal.fire({ icon: 'warning', title: 'Select a brand first' })
+      return
+    }
+    const { value: modelName } = await Swal.fire({
+      title: 'Add New Model',
+      input: 'text',
+      inputLabel: `Model name for ${formData.brand}`,
+      inputPlaceholder: 'e.g., Latitude 5420',
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value?.trim()) return 'Model name is required'
+      },
+    })
+    if (!modelName) return
+
+    try {
+      const response = await apiClient.post(`/brands/${formData.brand_id}/models`, { name: modelName.trim() })
+      if (response.data.success) {
+        await queryClient.invalidateQueries({ queryKey: ['brand-models', formData.brand_id] })
+        const newModel = response.data.data
+        setFormData((prev) => ({
+          ...prev,
+          equipment_model_id: newModel.id,
+          model: newModel.name,
+        }))
+        Swal.fire({ icon: 'success', title: 'Model added', timer: 1500, showConfirmButton: false })
+      }
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to add model',
+      })
+    }
+  }
+
+  const handleSpecificationsChange = (specs) => {
+    setFormData((prev) => ({ ...prev, specifications: specs }))
   }
 
   const openAddModal = () => {
     setFormData({
       brand: '',
       model: '',
+      brand_id: '',
+      equipment_model_id: '',
       description: '',
       asset_category_id: '',
       subcategory_id: '',
+      specifications: {},
     })
     setIsAddModalOpen(true)
   }
@@ -87,9 +211,14 @@ function EquipmentPage() {
     setFormData({
       brand: equipment.brand || '',
       model: equipment.model || '',
+      brand_id: equipment.brand_id || '',
+      equipment_model_id: equipment.equipment_model_id || '',
       description: equipment.description || '',
       asset_category_id: equipment.asset_category_id || '',
       subcategory_id: equipment.subcategory_id || '',
+      specifications: equipment.specifications && typeof equipment.specifications === 'object'
+        ? equipment.specifications
+        : {},
     })
     setIsEditModalOpen(true)
   }, [])
@@ -107,6 +236,8 @@ function EquipmentPage() {
         })
         setIsAddModalOpen(false)
         queryClient.invalidateQueries({ queryKey: ['equipment'] })
+        queryClient.invalidateQueries({ queryKey: ['brands'] })
+        queryClient.invalidateQueries({ queryKey: ['brand-models'] })
       }
     } catch (error) {
       Swal.fire({
@@ -130,6 +261,8 @@ function EquipmentPage() {
         })
         setIsEditModalOpen(false)
         queryClient.invalidateQueries({ queryKey: ['equipment'] })
+        queryClient.invalidateQueries({ queryKey: ['brands'] })
+        queryClient.invalidateQueries({ queryKey: ['brand-models'] })
       }
     } catch (error) {
       Swal.fire({
@@ -505,19 +638,32 @@ function EquipmentPage() {
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Brand <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Monitor className="h-5 w-5 text-slate-400" />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Monitor className="h-5 w-5 text-slate-400" />
+                </div>
+                <select
+                  name="brand_id"
+                  value={formData.brand_id}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                >
+                  <option value="">Select brand</option>
+                  {brands.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
               </div>
-              <input
-                type="text"
-                name="brand"
-                value={formData.brand}
-                onChange={handleInputChange}
-                required
-                className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Enter brand (e.g., Dell)"
-              />
+              <button
+                type="button"
+                onClick={handleAddNewBrand}
+                className="px-3 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium whitespace-nowrap"
+                title="Add new brand"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -525,19 +671,34 @@ function EquipmentPage() {
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Model <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Cpu className="h-5 w-5 text-slate-400" />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Cpu className="h-5 w-5 text-slate-400" />
+                </div>
+                <select
+                  name="equipment_model_id"
+                  value={formData.equipment_model_id}
+                  onChange={handleInputChange}
+                  required
+                  disabled={!formData.brand_id}
+                  className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:bg-slate-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">{formData.brand_id ? 'Select model' : 'Select brand first'}</option>
+                  {brandModels.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
               </div>
-              <input
-                type="text"
-                name="model"
-                value={formData.model}
-                onChange={handleInputChange}
-                required
-                className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Enter model (e.g., Latitude 5420)"
-              />
+              <button
+                type="button"
+                onClick={handleAddNewModel}
+                disabled={!formData.brand_id}
+                className="px-3 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Add new model"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -559,6 +720,18 @@ function EquipmentPage() {
               />
             </div>
           </div>
+
+          {formData.asset_category_id && (
+            <div className="border-t border-slate-200 pt-4">
+              <h4 className="text-sm font-semibold text-slate-700 mb-3">Specifications</h4>
+              <SpecificationFields
+                categoryName={categories.find((c) => Number(c.id) === Number(formData.asset_category_id))?.name || ''}
+                subcategoryName={subcategories.find((s) => Number(s.id) === Number(formData.subcategory_id))?.name || ''}
+                specifications={formData.specifications || {}}
+                onChange={handleSpecificationsChange}
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
             <button
@@ -630,19 +803,32 @@ function EquipmentPage() {
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Brand <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Monitor className="h-5 w-5 text-slate-400" />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Monitor className="h-5 w-5 text-slate-400" />
+                </div>
+                <select
+                  name="brand_id"
+                  value={formData.brand_id}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                >
+                  <option value="">Select brand</option>
+                  {brands.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
               </div>
-              <input
-                type="text"
-                name="brand"
-                value={formData.brand}
-                onChange={handleInputChange}
-                required
-                className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Enter brand (e.g., Dell)"
-              />
+              <button
+                type="button"
+                onClick={handleAddNewBrand}
+                className="px-3 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium whitespace-nowrap"
+                title="Add new brand"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -650,19 +836,34 @@ function EquipmentPage() {
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Model <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Cpu className="h-5 w-5 text-slate-400" />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Cpu className="h-5 w-5 text-slate-400" />
+                </div>
+                <select
+                  name="equipment_model_id"
+                  value={formData.equipment_model_id}
+                  onChange={handleInputChange}
+                  required
+                  disabled={!formData.brand_id}
+                  className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:bg-slate-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">{formData.brand_id ? 'Select model' : 'Select brand first'}</option>
+                  {brandModels.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
               </div>
-              <input
-                type="text"
-                name="model"
-                value={formData.model}
-                onChange={handleInputChange}
-                required
-                className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Enter model (e.g., Latitude 5420)"
-              />
+              <button
+                type="button"
+                onClick={handleAddNewModel}
+                disabled={!formData.brand_id}
+                className="px-3 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Add new model"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -684,6 +885,18 @@ function EquipmentPage() {
               />
             </div>
           </div>
+
+          {formData.asset_category_id && (
+            <div className="border-t border-slate-200 pt-4">
+              <h4 className="text-sm font-semibold text-slate-700 mb-3">Specifications</h4>
+              <SpecificationFields
+                categoryName={categories.find((c) => Number(c.id) === Number(formData.asset_category_id))?.name || ''}
+                subcategoryName={subcategories.find((s) => Number(s.id) === Number(formData.subcategory_id))?.name || ''}
+                specifications={formData.specifications || {}}
+                onChange={handleSpecificationsChange}
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
             <button

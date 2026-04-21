@@ -12,6 +12,8 @@ const INITIAL_FORM_STATE = {
   asset_category_id: '',
   brand: '',
   model: '',
+  brand_id: '',
+  equipment_model_id: '',
   serial_number: '',
   purchase_date: '',
   acq_cost: '',

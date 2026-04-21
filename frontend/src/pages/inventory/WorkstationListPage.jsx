@@ -5,6 +5,7 @@ import {
   Building2,
   MapPin,
   User,
+  Users,
   Package,
   Search,
   Filter,
@@ -17,6 +18,7 @@ import {
 import Swal from 'sweetalert2'
 import { fetchBranchesRequest } from '../../services/branchService'
 import { fetchPositionsRequest } from '../../services/positionService'
+import { fetchEmployeesRequest } from '../../services/employeeService'
 import {
   fetchWorkstationsRequest,
   createWorkstationRequest,
@@ -24,6 +26,15 @@ import {
 } from '../../services/workstationService'
 
 const STORAGE_KEY = 'workstation-list-filters'
+
+const EMPTY_FORM = {
+  branch_id: '',
+  obo_id: '',
+  position_id: '',
+  name: '',
+  description: '',
+  employee_ids: [],
+}
 
 function WorkstationListPage() {
   const navigate = useNavigate()
@@ -55,14 +66,8 @@ function WorkstationListPage() {
     return ''
   })
 
-  // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [formData, setFormData] = useState({
-    branch_id: '',
-    position_id: '',
-    name: '',
-    description: '',
-  })
+  const [formData, setFormData] = useState(EMPTY_FORM)
 
   // Persist filters to sessionStorage when they change
   useEffect(() => {
@@ -103,6 +108,14 @@ function WorkstationListPage() {
     },
   })
 
+  // Fetch employees (all, for assignment in modal)
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees-all'],
+    queryFn: async () => {
+      const response = await fetchEmployeesRequest({ all: true })
+      return response.data?.data ?? []
+    },
+  })
 
   // Mutations
   const createMutation = useMutation({
@@ -110,7 +123,7 @@ function WorkstationListPage() {
     onSuccess: async () => {
       await queryClient.refetchQueries(['workstations'])
       setShowCreateModal(false)
-      setFormData({ branch_id: '', position_id: '', name: '', description: '' })
+      setFormData(EMPTY_FORM)
       Swal.fire({
         icon: 'success',
         title: 'Workstation Created!',
@@ -137,10 +150,16 @@ function WorkstationListPage() {
     },
   })
 
-
   const workstations = Array.isArray(workstationsData) ? workstationsData : []
   const branches = Array.isArray(branchesData) ? branchesData : []
   const positions = Array.isArray(positionsData) ? positionsData : []
+  const allEmployees = Array.isArray(employeesData) ? employeesData : []
+
+  // Employees filtered to the selected branch in the create modal
+  const modalEmployees = useMemo(() => {
+    if (!formData.branch_id) return allEmployees
+    return allEmployees.filter((e) => String(e.branch_id) === String(formData.branch_id))
+  }, [allEmployees, formData.branch_id])
 
   // Filter workstations by search query
   const filteredWorkstations = useMemo(() => {
@@ -173,10 +192,7 @@ function WorkstationListPage() {
     return Array.from(map.values())
   }, [filteredWorkstations])
 
-
   const handleWorkstationClick = (workstation) => {
-    // Navigate to dedicated workstation assets view
-    // Shows all assets at this workstation in a dedicated view
     navigate(`/inventory/workstations/${workstation.id}/assets`)
   }
 
@@ -189,12 +205,48 @@ function WorkstationListPage() {
     createMutation.mutate(formData)
   }
 
+  const handlePositionChange = (e) => {
+    const positionId = e.target.value
+    const position = positions.find((p) => String(p.id) === String(positionId))
+    setFormData((prev) => ({
+      ...prev,
+      position_id: positionId,
+      name: position ? position.title : '',
+    }))
+  }
+
+  const handleBranchChange = (e) => {
+    setFormData((prev) => ({
+      ...prev,
+      branch_id: e.target.value,
+      obo_id: '',
+      employee_ids: [],
+    }))
+  }
+
+  const handleEmployeeToggle = (employeeId) => {
+    setFormData((prev) => {
+      const id = Number(employeeId)
+      const already = prev.employee_ids.includes(id)
+      return {
+        ...prev,
+        employee_ids: already
+          ? prev.employee_ids.filter((x) => x !== id)
+          : [...prev.employee_ids, id],
+      }
+    })
+  }
+
   const handleDeleteWorkstation = (workstation) => {
     if (workstation.asset_count > 0) {
       alert('Cannot delete workstation with assigned assets')
       return
     }
-    if (workstation.employee_id || workstation.employee) {
+    const hasEmployees =
+      (workstation.employees && workstation.employees.length > 0) ||
+      workstation.employee_id ||
+      workstation.employee
+    if (hasEmployees) {
       alert('Cannot delete workstation with assigned employee')
       return
     }
@@ -203,11 +255,7 @@ function WorkstationListPage() {
     }
   }
 
-
-  const isLoading =
-    isLoadingWorkstations ||
-    isLoadingBranches ||
-    isLoadingPositions
+  const isLoading = isLoadingWorkstations || isLoadingBranches || isLoadingPositions
 
   if (isLoading) {
     return (
@@ -253,32 +301,6 @@ function WorkstationListPage() {
               <Plus className="w-5 h-5" />
               <span className="hidden sm:inline">New Workstation</span>
             </button>
-          </div>
-        </div>
-
-        {/* Info Banner */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 text-blue-600 mt-0.5">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-blue-900 mb-1">
-                Employee Assignment
-              </h3>
-              <p className="text-sm text-blue-700">
-                To assign or reassign employees to workstations, please use the{' '}
-                <button
-                  onClick={() => navigate('/inventory/employee-transitions')}
-                  className="font-semibold underline hover:text-blue-800"
-                >
-                  Employee Transitions
-                </button>{' '}
-                page. This ensures proper tracking of employee movements and workstation assignments.
-              </p>
-            </div>
           </div>
         </div>
 
@@ -380,9 +402,9 @@ function WorkstationListPage() {
                 {/* Workstation cards for this branch */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {group.workstations.map((workstation) => {
-                    const hasEmployee = !!workstation.employee
+                    const assignedEmployees = workstation.employees ?? (workstation.employee ? [workstation.employee] : [])
+                    const hasEmployees = assignedEmployees.length > 0
                     const assetCount = workstation.asset_count || 0
-                    const employeeCount = workstation.employee_count || 0
 
                     return (
                       <div
@@ -394,7 +416,7 @@ function WorkstationListPage() {
                         <div className="flex items-start gap-3">
                           <div
                             className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${
-                              hasEmployee
+                              hasEmployees
                                 ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
                                 : 'bg-slate-200 text-slate-400'
                             }`}
@@ -404,7 +426,7 @@ function WorkstationListPage() {
                           <div className="flex-1 min-w-0">
                             <h3
                               className={`text-base font-bold leading-tight ${
-                                hasEmployee
+                                hasEmployees
                                   ? 'text-slate-900 group-hover:text-blue-600'
                                   : 'text-slate-500'
                               } transition-colors`}
@@ -427,23 +449,27 @@ function WorkstationListPage() {
                           </div>
                         </div>
 
-                        {/* Assigned Employee */}
+                        {/* Assigned Employees */}
                         <div
                           className={`rounded-lg px-3 py-2.5 ${
-                            hasEmployee ? 'bg-slate-50' : 'bg-slate-50/60'
+                            hasEmployees ? 'bg-slate-50' : 'bg-slate-50/60'
                           }`}
                         >
                           <p className="text-xs text-slate-500 mb-2">
-                            Assigned Employee
+                            {assignedEmployees.length > 1 ? 'Assigned Employees' : 'Assigned Employee'}
                           </p>
-                          {hasEmployee ? (
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {workstation.employee.fullname?.charAt(0).toUpperCase()}
-                              </div>
-                              <span className="text-sm font-medium text-slate-900 truncate flex-1">
-                                {workstation.employee.fullname}
-                              </span>
+                          {hasEmployees ? (
+                            <div className="space-y-1.5">
+                              {assignedEmployees.map((emp) => (
+                                <div key={emp.id} className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                    {emp.fullname?.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="text-sm font-medium text-slate-900 truncate flex-1">
+                                    {emp.fullname}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
@@ -451,7 +477,7 @@ function WorkstationListPage() {
                                 <User className="w-3.5 h-3.5" />
                               </div>
                               <span className="text-xs text-slate-400 italic">
-                                No employee assigned (assign via Employee Transitions)
+                                No employee assigned
                               </span>
                             </div>
                           )}
@@ -468,9 +494,9 @@ function WorkstationListPage() {
                               <span>{assetCount === 1 ? 'asset' : 'assets'}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-slate-400" />
+                              <Users className="w-3.5 h-3.5 text-slate-400" />
                               <span className="font-semibold text-slate-900">
-                                {employeeCount}
+                                {assignedEmployees.length}
                               </span>
                             </div>
                           </div>
@@ -492,28 +518,27 @@ function WorkstationListPage() {
       {/* Create Workstation Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">
                 Create New Workstation
               </h2>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => { setShowCreateModal(false); setFormData(EMPTY_FORM) }}
                 className="p-1 text-slate-400 hover:text-slate-600"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleCreateSubmit} className="space-y-4">
+              {/* Branch */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Branch *
+                  Branch <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={formData.branch_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, branch_id: e.target.value })
-                  }
+                  onChange={handleBranchChange}
                   required
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -525,15 +550,43 @@ function WorkstationListPage() {
                   ))}
                 </select>
               </div>
+
+              {/* OBO (conditional) */}
+              {(() => {
+                const selBranch = branches.find(
+                  (b) => String(b.id) === String(formData.branch_id)
+                )
+                const branchObos = Array.isArray(selBranch?.obos) ? selBranch.obos : []
+                if (!selBranch?.has_obo || branchObos.length === 0) return null
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      OBO Assignment (Optional)
+                    </label>
+                    <select
+                      value={formData.obo_id}
+                      onChange={(e) => setFormData({ ...formData, obo_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Branch (not assigned to any OBO)</option>
+                      {branchObos.map((obo) => (
+                        <option key={obo.id} value={obo.id}>
+                          {obo.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              })()}
+
+              {/* Position */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Position (Optional)
                 </label>
                 <select
                   value={formData.position_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, position_id: e.target.value })
-                  }
+                  onChange={handlePositionChange}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">General</option>
@@ -544,37 +597,98 @@ function WorkstationListPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Workstation Name */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Custom Name (Optional)
+                  Workstation Name
                 </label>
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder={
+                    formData.position_id
+                      ? 'Auto-filled from position'
+                      : 'Auto-generated if empty'
                   }
-                  placeholder="Auto-generated if empty"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  {formData.position_id
+                    ? 'Based on selected position. You may override it.'
+                    : 'Leave empty to auto-generate from branch and position.'}
+                </p>
               </div>
+
+              {/* Employee Assignment */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Assign Employees (Optional)
+                </label>
+                {!formData.branch_id ? (
+                  <p className="text-xs text-slate-400 italic py-2">
+                    Select a branch first to see available employees.
+                  </p>
+                ) : modalEmployees.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic py-2">
+                    No employees found for this branch.
+                  </p>
+                ) : (
+                  <div className="border border-slate-300 rounded-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+                    {modalEmployees.map((emp) => {
+                      const checked = formData.employee_ids.includes(emp.id)
+                      return (
+                        <label
+                          key={emp.id}
+                          className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleEmployeeToggle(emp.id)}
+                            className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">
+                              {emp.fullname}
+                            </p>
+                            {emp.position?.title && (
+                              <p className="text-xs text-slate-500 truncate">
+                                {emp.position.title}
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+                {formData.employee_ids.length > 0 && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    {formData.employee_ids.length}{' '}
+                    {formData.employee_ids.length === 1 ? 'employee' : 'employees'} selected
+                  </p>
+                )}
+              </div>
+
+              {/* Description */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Description (Optional)
                 </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
+
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => { setShowCreateModal(false); setFormData(EMPTY_FORM) }}
                   className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
                 >
                   Cancel
@@ -591,7 +705,6 @@ function WorkstationListPage() {
           </div>
         </div>
       )}
-
     </div>
   )
 }

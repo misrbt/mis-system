@@ -142,6 +142,7 @@ function AssetComponentsPage() {
         name: `${eq.brand || ''} ${eq.model || ''}`.trim(),
         brand: eq.brand,
         model: eq.model,
+        
         asset_category_id: eq.asset_category_id,
         subcategory_id: eq.subcategory_id,
         category_name: eq.category?.name,

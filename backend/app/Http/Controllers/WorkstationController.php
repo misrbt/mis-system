@@ -23,7 +23,7 @@ class WorkstationController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Workstation::with(['branch', 'position', 'employee'])
+            $query = Workstation::with(['branch', 'position', 'employee', 'employees.branch', 'employees.position'])
                 ->withCount('assets');
 
             // Filter by branch
@@ -70,7 +70,8 @@ class WorkstationController extends Controller
                 $request->branch_id,
                 $request->position_id,
                 $request->name,
-                $request->description
+                $request->description,
+                $request->input('employee_ids', [])
             );
 
             // Update is_active if provided
@@ -82,7 +83,7 @@ class WorkstationController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Workstation created successfully',
-                'data' => $workstation->load(['branch', 'position']),
+                'data' => $workstation->load(['branch', 'position', 'employees.branch', 'employees.position']),
             ], 201);
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to create workstation');
@@ -103,6 +104,8 @@ class WorkstationController extends Controller
                 },
                 'employee.branch',
                 'employee.position',
+                'employees.branch',
+                'employees.position',
             ])->findOrFail($id);
 
             return response()->json([
@@ -250,7 +253,7 @@ class WorkstationController extends Controller
     public function byBranch($branchId)
     {
         try {
-            $workstations = Workstation::with(['position', 'employee'])
+            $workstations = Workstation::with(['position', 'employee', 'employees.branch', 'employees.position'])
                 ->withCount('assets')
                 ->where('branch_id', $branchId)
                 ->where('is_active', true)
@@ -293,18 +296,15 @@ class WorkstationController extends Controller
     public function employees($id)
     {
         try {
-            $workstation = Workstation::with(['employee.branch', 'employee.position', 'employee.department'])
+            $workstation = Workstation::with(['employees.branch', 'employees.position', 'employees.department'])
                 ->findOrFail($id);
-
-            // Return employee in array format for backward compatibility
-            $employees = $workstation->employee ? [$workstation->employee] : [];
 
             return response()->json([
                 'success' => true,
-                'data' => $employees,
+                'data' => $workstation->employees,
             ], 200);
         } catch (\Exception $e) {
-            return $this->handleException($e, 'Failed to fetch workstation employee');
+            return $this->handleException($e, 'Failed to fetch workstation employees');
         }
     }
 }

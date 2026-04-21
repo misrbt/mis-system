@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
-use Picqer\Barcode\BarcodeGeneratorSVG;
 use Illuminate\Support\Facades\Log;
+use Picqer\Barcode\BarcodeGeneratorSVG;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class AssetComponent extends Model
 {
@@ -97,24 +97,24 @@ class AssetComponent extends Model
 
         $qrData .= "[COMPONENT INFO]\n";
         $qrData .= "--------------------------------\n";
-        $qrData .= "* Component Type:\n  " . ($this->category?->name ?? 'N/A') . "\n\n";
-        $qrData .= "* Component Name:\n  " . $this->component_name . "\n\n";
-        $qrData .= "* Parent Asset:\n  " . $parentAssetName . "\n\n";
-        $qrData .= "* Parent ID:\n  " . $parentAssetCode . "\n\n";
-        $qrData .= "* Serial Number:\n  " . ($this->serial_number ?? 'N/A') . "\n\n";
+        $qrData .= "* Component Type:\n  ".($this->category?->name ?? 'N/A')."\n\n";
+        $qrData .= "* Component Name:\n  ".$this->component_name."\n\n";
+        $qrData .= "* Parent Asset:\n  ".$parentAssetName."\n\n";
+        $qrData .= "* Parent ID:\n  ".$parentAssetCode."\n\n";
+        $qrData .= "* Serial Number:\n  ".($this->serial_number ?? 'N/A')."\n\n";
 
         $qrData .= "[PRODUCT DETAILS]\n";
         $qrData .= "--------------------------------\n";
-        $qrData .= "* Brand:\n  " . ($this->brand ?? 'N/A') . "\n\n";
-        $qrData .= "* Model:\n  " . ($this->model ?? 'N/A') . "\n\n";
+        $qrData .= "* Brand:\n  ".($this->brand ?? 'N/A')."\n\n";
+        $qrData .= "* Model:\n  ".($this->model ?? 'N/A')."\n\n";
 
         $qrData .= "[STATUS & ASSIGNMENT]\n";
         $qrData .= "--------------------------------\n";
-        $qrData .= "* Status:\n  " . $statusName . "\n\n";
-        $qrData .= "* Assigned To:\n  " . $assignedTo . "\n\n";
-        $qrData .= "* Branch:\n  " . $branchName . "\n\n";
+        $qrData .= "* Status:\n  ".$statusName."\n\n";
+        $qrData .= "* Assigned To:\n  ".$assignedTo."\n\n";
+        $qrData .= "* Branch:\n  ".$branchName."\n\n";
 
-        $qrData .= "================================";
+        $qrData .= '================================';
 
         try {
             $qrCode = QrCode::format('svg')
@@ -123,9 +123,10 @@ class AssetComponent extends Model
                 ->errorCorrection('H')
                 ->generate($qrData);
 
-            return 'data:image/svg+xml;base64,' . base64_encode($qrCode);
+            return 'data:image/svg+xml;base64,'.base64_encode($qrCode);
         } catch (\Exception $e) {
-            Log::error("Failed to generate QR code for component {$this->id}: " . $e->getMessage());
+            Log::error("Failed to generate QR code for component {$this->id}: ".$e->getMessage());
+
             return null;
         }
     }
@@ -134,18 +135,19 @@ class AssetComponent extends Model
     {
         $this->qr_code = $this->generateQRCode();
         $this->save();
+
         return $this->qr_code;
     }
 
     // Barcode Generation (mirrors Asset model)
     public function generateBarcode()
     {
-        if (!$this->serial_number) {
+        if (! $this->serial_number) {
             return null;
         }
 
         try {
-            $generator = new BarcodeGeneratorSVG();
+            $generator = new BarcodeGeneratorSVG;
             $barcodeSvg = $generator->getBarcode(
                 $this->serial_number,
                 $generator::TYPE_CODE_128,
@@ -153,9 +155,10 @@ class AssetComponent extends Model
                 80
             );
 
-            return 'data:image/svg+xml;base64,' . base64_encode($barcodeSvg);
+            return 'data:image/svg+xml;base64,'.base64_encode($barcodeSvg);
         } catch (\Exception $e) {
-            Log::error("Failed to generate barcode for component {$this->id}: " . $e->getMessage());
+            Log::error("Failed to generate barcode for component {$this->id}: ".$e->getMessage());
+
             return null;
         }
     }
@@ -164,6 +167,7 @@ class AssetComponent extends Model
     {
         $this->barcode = $this->generateBarcode();
         $this->save();
+
         return $this->barcode;
     }
 

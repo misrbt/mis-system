@@ -8,6 +8,7 @@ use App\Http\Controllers\AssetSubcategoryController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\BrandController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EquipmentController;
@@ -133,6 +134,13 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
 
     // Vendor routes
     Route::apiResource('vendors', VendorController::class);
+
+    // Brand & Model routes
+    Route::get('brands', [BrandController::class, 'index']);
+    Route::post('brands', [BrandController::class, 'store']);
+    Route::get('brands/{brand}/models', [BrandController::class, 'models']);
+    Route::post('brands/{brand}/models', [BrandController::class, 'storeModel']);
+    Route::get('equipment-models', [BrandController::class, 'allModels']);
 
     // Equipment routes
     Route::get('equipment/{id}/assignments', [EquipmentController::class, 'getAssignments']);

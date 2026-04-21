@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Workstation extends Model
@@ -15,6 +16,7 @@ class Workstation extends Model
 
     protected $fillable = [
         'branch_id',
+        'obo_id',
         'position_id',
         'employee_id',
         'name',
@@ -25,6 +27,11 @@ class Workstation extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    public function obo(): BelongsTo
+    {
+        return $this->belongsTo(BranchObo::class, 'obo_id');
+    }
 
     protected $appends = ['asset_count', 'employee_count'];
 
@@ -76,11 +83,21 @@ class Workstation extends Model
     }
 
     /**
-     * Get the employee assigned to this workstation.
+     * Get the primary employee assigned to this workstation (for transition services).
      */
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Get all employees assigned to this workstation via the pivot table.
+     */
+    public function employees(): BelongsToMany
+    {
+        return $this->belongsToMany(Employee::class, 'employee_workstation')
+            ->withPivot('assigned_at')
+            ->withTimestamps();
     }
 
     /**
@@ -92,11 +109,15 @@ class Workstation extends Model
     }
 
     /**
-     * Get count of employees assigned to this workstation (0 or 1).
+     * Get count of employees assigned to this workstation via pivot table.
      */
     public function getEmployeeCountAttribute(): int
     {
-        return $this->employee_id ? 1 : 0;
+        if ($this->relationLoaded('employees')) {
+            return $this->getRelation('employees')->count();
+        }
+
+        return $this->employees()->count();
     }
 
     /**

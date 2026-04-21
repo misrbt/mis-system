@@ -107,6 +107,39 @@ function EmployeeForm({
         </div>
       </div>
 
+      {(() => {
+        const selectedBranch = branches.find(
+          (b) => String(b.id) === String(formData.branch_id)
+        )
+        const branchObos = Array.isArray(selectedBranch?.obos) ? selectedBranch.obos : []
+        if (!selectedBranch?.has_obo || branchObos.length === 0) return null
+        return (
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              OBO Assignment
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Building2 className="h-5 w-5 text-slate-400" />
+              </div>
+              <select
+                name="obo_id"
+                value={formData.obo_id || ''}
+                onChange={onChange}
+                className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors appearance-none"
+              >
+                <option value="">Branch (not assigned to any OBO)</option>
+                {branchObos.map((obo) => (
+                  <option key={obo.id} value={obo.id}>
+                    {obo.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )
+      })()}
+
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
         <button
           type="button"
@@ -132,6 +165,7 @@ EmployeeForm.propTypes = {
     branch_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
     department_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
     position_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    obo_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   }).isRequired,
   branches: PropTypes.arrayOf(PropTypes.object).isRequired,
   sections: PropTypes.arrayOf(PropTypes.object).isRequired,

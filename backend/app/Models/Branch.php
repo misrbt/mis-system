@@ -15,11 +15,24 @@ class Branch extends Model
         'branch_name',
         'brak',
         'brcode',
+        'has_obo',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'has_obo' => 'boolean',
+        ];
+    }
 
     public function employees()
     {
         return $this->hasMany(Employee::class);
+    }
+
+    public function obos()
+    {
+        return $this->hasMany(BranchObo::class);
     }
 
     /**

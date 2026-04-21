@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Equipment extends Model
@@ -14,9 +15,16 @@ class Equipment extends Model
     protected $fillable = [
         'brand',
         'model',
+        'brand_id',
+        'equipment_model_id',
         'description',
         'asset_category_id',
         'subcategory_id',
+        'specifications',
+    ];
+
+    protected $casts = [
+        'specifications' => 'array',
     ];
 
     /**
@@ -35,5 +43,15 @@ class Equipment extends Model
     public function subcategory()
     {
         return $this->belongsTo(AssetSubcategory::class, 'subcategory_id');
+    }
+
+    public function brandRelation(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class, 'brand_id');
+    }
+
+    public function equipmentModel(): BelongsTo
+    {
+        return $this->belongsTo(EquipmentModel::class, 'equipment_model_id');
     }
 }

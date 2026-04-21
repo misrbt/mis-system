@@ -19,6 +19,9 @@ class StoreWorkstationRequest extends FormRequest
             'name' => 'nullable|string|max:255',
             'description' => 'nullable|string|max:1000',
             'is_active' => 'boolean',
+            'obo_id' => 'nullable|exists:branch_obos,id',
+            'employee_ids' => 'nullable|array',
+            'employee_ids.*' => 'integer|exists:employee,id',
         ];
     }
 
@@ -28,6 +31,7 @@ class StoreWorkstationRequest extends FormRequest
             'branch_id.required' => 'A branch is required for the workstation.',
             'branch_id.exists' => 'The selected branch does not exist.',
             'position_id.exists' => 'The selected position does not exist.',
+            'employee_ids.*.exists' => 'One or more selected employees do not exist.',
         ];
     }
 }

@@ -99,6 +99,8 @@ const buildFormData = (asset = {}) => ({
   subcategory_id: asset.subcategory_id || '',
   brand: asset.brand || asset.equipment?.brand || '',
   model: asset.model || asset.equipment?.model || '',
+  brand_id: asset.equipment?.brand_id || '',
+  equipment_model_id: asset.equipment?.equipment_model_id || '',
   book_value: asset.book_value || '',
   serial_number: asset.serial_number || '',
   purchase_date: formatDateForInput(asset.purchase_date),
