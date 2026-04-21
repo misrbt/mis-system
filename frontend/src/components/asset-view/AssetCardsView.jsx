@@ -737,121 +737,129 @@ const AssetCard = ({
                    )}
                 </div>
 
-                {/* Specifications */}
-                {asset.specifications && Object.keys(asset.specifications).length > 0 && (
-                  <div className="space-y-2 pt-2 border-t border-slate-200">
-                    <div className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      Specifications
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {asset.specifications.capacity && (
-                        <div className="bg-blue-50 p-2 rounded border border-blue-100">
-                          <div className="text-[10px] text-blue-600 uppercase tracking-wide mb-0.5">Capacity</div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            {asset.specifications.capacity} {asset.specifications.capacity_unit || 'GB'}
+                {/* Specifications - sourced from equipment if not stored on asset */}
+                {(() => {
+                  const specs = (asset.specifications && Object.keys(asset.specifications).length > 0)
+                    ? asset.specifications
+                    : (asset.equipment?.specifications && Object.keys(asset.equipment.specifications).length > 0)
+                      ? asset.equipment.specifications
+                      : null
+                  if (!specs) return null
+                  return (
+                    <div className="space-y-2 pt-2 border-t border-slate-200">
+                      <div className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1">
+                        <Shield className="w-3 h-3" />
+                        Specifications
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {specs.capacity && (
+                          <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                            <div className="text-[10px] text-blue-600 uppercase tracking-wide mb-0.5">Capacity</div>
+                            <div className="text-sm font-semibold text-slate-900">
+                              {specs.capacity} {specs.capacity_unit || 'GB'}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      {asset.specifications.interface && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Interface</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.interface}</div>
-                        </div>
-                      )}
-                      {asset.specifications.form_factor && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Form Factor</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.form_factor}</div>
-                        </div>
-                      )}
-                      {asset.specifications.speed && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Speed</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.speed}</div>
-                        </div>
-                      )}
-                      {asset.specifications.memory_type && (
-                        <div className="bg-purple-50 p-2 rounded border border-purple-100">
-                          <div className="text-[10px] text-purple-600 uppercase tracking-wide mb-0.5">Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.memory_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.screen_size && (
-                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
-                          <div className="text-[10px] text-indigo-600 uppercase tracking-wide mb-0.5">Screen Size</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.screen_size}"</div>
-                        </div>
-                      )}
-                      {asset.specifications.resolution && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Resolution</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.resolution}</div>
-                        </div>
-                      )}
-                      {asset.specifications.panel_type && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Panel Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.panel_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.refresh_rate && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Refresh Rate</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.refresh_rate} Hz</div>
-                        </div>
-                      )}
-                      {asset.specifications.printer_type && (
-                        <div className="bg-green-50 p-2 rounded border border-green-100">
-                          <div className="text-[10px] text-green-600 uppercase tracking-wide mb-0.5">Printer Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.printer_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.color_support && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Color</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.color_support}</div>
-                        </div>
-                      )}
-                      {asset.specifications.print_speed && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Print Speed</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.print_speed} ppm</div>
-                        </div>
-                      )}
-                      {asset.specifications.device_type && (
-                        <div className="bg-cyan-50 p-2 rounded border border-cyan-100">
-                          <div className="text-[10px] text-cyan-600 uppercase tracking-wide mb-0.5">Device Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.device_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.ports && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Ports</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.ports}</div>
-                        </div>
-                      )}
-                      {asset.specifications.poe_support && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">PoE Support</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.poe_support}</div>
-                        </div>
-                      )}
-                      {asset.specifications.camera_type && (
-                        <div className="bg-red-50 p-2 rounded border border-red-100">
-                          <div className="text-[10px] text-red-600 uppercase tracking-wide mb-0.5">Camera Type</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.camera_type}</div>
-                        </div>
-                      )}
-                      {asset.specifications.night_vision_range && (
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Night Vision</div>
-                          <div className="text-sm font-semibold text-slate-900">{asset.specifications.night_vision_range}m</div>
-                        </div>
-                      )}
+                        )}
+                        {specs.interface && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Interface</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.interface}</div>
+                          </div>
+                        )}
+                        {specs.form_factor && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Form Factor</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.form_factor}</div>
+                          </div>
+                        )}
+                        {specs.speed && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Speed</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.speed}</div>
+                          </div>
+                        )}
+                        {specs.memory_type && (
+                          <div className="bg-purple-50 p-2 rounded border border-purple-100">
+                            <div className="text-[10px] text-purple-600 uppercase tracking-wide mb-0.5">Type</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.memory_type}</div>
+                          </div>
+                        )}
+                        {specs.screen_size && (
+                          <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
+                            <div className="text-[10px] text-indigo-600 uppercase tracking-wide mb-0.5">Screen Size</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.screen_size}"</div>
+                          </div>
+                        )}
+                        {specs.resolution && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Resolution</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.resolution}</div>
+                          </div>
+                        )}
+                        {specs.panel_type && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Panel Type</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.panel_type}</div>
+                          </div>
+                        )}
+                        {specs.refresh_rate && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Refresh Rate</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.refresh_rate} Hz</div>
+                          </div>
+                        )}
+                        {specs.printer_type && (
+                          <div className="bg-green-50 p-2 rounded border border-green-100">
+                            <div className="text-[10px] text-green-600 uppercase tracking-wide mb-0.5">Printer Type</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.printer_type}</div>
+                          </div>
+                        )}
+                        {specs.color_support && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Color</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.color_support}</div>
+                          </div>
+                        )}
+                        {specs.print_speed && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Print Speed</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.print_speed} ppm</div>
+                          </div>
+                        )}
+                        {specs.device_type && (
+                          <div className="bg-cyan-50 p-2 rounded border border-cyan-100">
+                            <div className="text-[10px] text-cyan-600 uppercase tracking-wide mb-0.5">Device Type</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.device_type}</div>
+                          </div>
+                        )}
+                        {specs.ports && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Ports</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.ports}</div>
+                          </div>
+                        )}
+                        {specs.poe_support && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">PoE Support</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.poe_support}</div>
+                          </div>
+                        )}
+                        {specs.camera_type && (
+                          <div className="bg-red-50 p-2 rounded border border-red-100">
+                            <div className="text-[10px] text-red-600 uppercase tracking-wide mb-0.5">Camera Type</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.camera_type}</div>
+                          </div>
+                        )}
+                        {specs.night_vision_range && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Night Vision</div>
+                            <div className="text-sm font-semibold text-slate-900">{specs.night_vision_range}m</div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {/* Remarks */}
                 {asset.remarks && (
