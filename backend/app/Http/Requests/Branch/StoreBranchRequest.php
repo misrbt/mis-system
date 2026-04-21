@@ -17,6 +17,10 @@ class StoreBranchRequest extends FormRequest
             'branch_name' => 'required|string|max:255|unique:branch,branch_name',
             'brak' => 'required|string|max:255',
             'brcode' => 'required|string|max:255|unique:branch,brcode',
+            'has_obo' => 'sometimes|boolean',
+            'obos' => 'array',
+            'obos.*.id' => 'nullable|integer|exists:branch_obos,id',
+            'obos.*.name' => 'required|string|max:255',
         ];
     }
 }

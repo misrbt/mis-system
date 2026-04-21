@@ -12,7 +12,7 @@ export const getApiBaseUrl = () => {
   }
 
   if (import.meta.env.DEV) {
-    return 'http://localhost:8000/api'
+    return 'http://localhost:8001/api'
   }
 
   return '/api'

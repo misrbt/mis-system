@@ -24,6 +24,8 @@ const initialForm = {
   branch_name: '',
   brak: '',
   brcode: '',
+  has_obo: false,
+  obos: [],
 }
 
 function BranchPage() {
@@ -95,6 +97,10 @@ function BranchPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const handleObosChange = (obos) => {
+    setFormData((prev) => ({ ...prev, obos }))
+  }
+
   const openAddModal = () => {
     resetForm()
     setIsAddModalOpen(true)
@@ -106,6 +112,10 @@ function BranchPage() {
       branch_name: branch.branch_name,
       brak: branch.brak,
       brcode: branch.brcode,
+      has_obo: !!branch.has_obo,
+      obos: Array.isArray(branch.obos)
+        ? branch.obos.map((o) => ({ id: o.id, name: o.name }))
+        : [],
     })
     setIsEditModalOpen(true)
   }, [])
@@ -361,6 +371,7 @@ function BranchPage() {
         <BranchForm
           formData={formData}
           onChange={handleInputChange}
+          onObosChange={handleObosChange}
           onSubmit={handleCreate}
           onCancel={() => setIsAddModalOpen(false)}
           submitLabel="Create Branch"
@@ -377,6 +388,7 @@ function BranchPage() {
         <BranchForm
           formData={formData}
           onChange={handleInputChange}
+          onObosChange={handleObosChange}
           onSubmit={handleUpdate}
           onCancel={closeEditModal}
           submitLabel="Update Branch"

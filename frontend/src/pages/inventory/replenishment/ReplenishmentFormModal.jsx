@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Modal from '../../../components/Modal'
 import SearchableSelect from '../../../components/SearchableSelect'
+import BrandModelSelect from '../../../components/BrandModelSelect'
 import SpecificationFields from '../../../components/specifications/SpecificationFields'
 import { RefreshCw, Sparkles, Package, Plus, X } from 'lucide-react'
 import { generateAssetName, shouldAutoGenerateName } from '../../../utils/assetNameGenerator'
@@ -601,33 +602,12 @@ const ReplenishmentFormModal = ({
             )}
 
             {!isDesktopPCCategory() && formData.asset_category_id && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Brand</label>
-                <SearchableSelect
-                  label=""
-                  options={brandOptions}
-                  value={formData.brand}
-                  onChange={(value) => onInputChange({ target: { name: 'brand', value } })}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select brand..."
-                  emptyMessage="No brands found"
-                />
-              </div>
-            )}
-
-            {!isDesktopPCCategory() && formData.asset_category_id && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Model</label>
-                <SearchableSelect
-                  label=""
-                  options={modelOptions}
-                  value={formData.model}
-                  onChange={(value) => onInputChange({ target: { name: 'model', value } })}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select model..."
-                  emptyMessage="No models found"
+              <div className="md:col-span-2">
+                <BrandModelSelect
+                  brandId={formData.brand_id}
+                  modelId={formData.equipment_model_id}
+                  onBrandChange={(vals) => { onInputChange({ target: { name: 'brand_id', value: vals.brand_id } }); onInputChange({ target: { name: 'brand', value: vals.brand } }) }}
+                  onModelChange={(vals) => { onInputChange({ target: { name: 'equipment_model_id', value: vals.equipment_model_id } }); onInputChange({ target: { name: 'model', value: vals.model } }) }}
                 />
               </div>
             )}

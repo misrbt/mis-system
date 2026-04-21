@@ -27,6 +27,7 @@ import { fetchPositionsRequest } from '../../services/positionService'
 const initialForm = {
   fullname: '',
   branch_id: '',
+  obo_id: '',
   department_id: '',
   position_id: '',
 }
@@ -138,7 +139,15 @@ function EmployeePage() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value }
+      // Clear OBO assignment whenever the branch changes — the old OBO belongs
+      // to the old branch and won't be valid against the new one.
+      if (name === 'branch_id') {
+        next.obo_id = ''
+      }
+      return next
+    })
   }
 
   const openAddModal = () => {
@@ -151,6 +160,7 @@ function EmployeePage() {
     setFormData({
       fullname: employee.fullname || '',
       branch_id: employee.branch_id || '',
+      obo_id: employee.obo_id || '',
       department_id: employee.department_id || '',
       position_id: employee.position_id || '',
     })

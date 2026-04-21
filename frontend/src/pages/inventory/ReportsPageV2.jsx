@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import apiClient from '../../services/apiClient'
 import { useAuth } from '../../context/AuthContext'
@@ -25,33 +25,54 @@ import autoTable from 'jspdf-autotable'
 import { normalizeArrayResponse } from '../../utils/assetFormatters'
 import SignatoriesModal from '../../components/SignatoriesModal'
 
-// Helper for status styles
-const statusStyle = (status) => {
-  if (!status?.color) return {
-    backgroundColor: '#f3f4f6', // slate-100
-    color: '#374151', // slate-700
-    borderColor: '#e5e7eb', // slate-200
-  }
+// Parse a hex color into { r, g, b } for use in Excel/PDF exports.
+// Returns null if the input isn't a parseable hex.
+const parseHexColor = (hex) => {
+  if (!hex) return null
+  const clean = String(hex).replace('#', '')
+  if (clean.length !== 6) return null
+  const r = parseInt(clean.substring(0, 2), 16)
+  const g = parseInt(clean.substring(2, 4), 16)
+  const b = parseInt(clean.substring(4, 6), 16)
+  if ([r, g, b].some(Number.isNaN)) return null
+  return { r, g, b }
+}
 
-  // Simple hex to rgba conversion for robustness
-  const hex = status.color.replace('#', '')
-  const r = parseInt(hex.substring(0, 2), 16)
-  const g = parseInt(hex.substring(2, 4), 16)
-  const b = parseInt(hex.length === 6 ? hex.substring(4, 6) : '00', 16) || 0
-  
-  // If parsing fails, fall back to the color itself or gray
-  if (isNaN(r) || isNaN(g)) {
-     return {
-        backgroundColor: `${status.color}20`, // Fallback to simple concatenation
-        color: status.color,
-        borderColor: `${status.color}40`,
-     }
+// Lighten a status color into a soft fill the same way the on-screen badge does (~12% opacity over white).
+const tintHex = (hex, ratio = 0.12) => {
+  const rgb = parseHexColor(hex)
+  if (!rgb) return null
+  const blend = (channel) => Math.round(channel * ratio + 255 * (1 - ratio))
+  const toHex = (n) => n.toString(16).padStart(2, '0').toUpperCase()
+  return `${toHex(blend(rgb.r))}${toHex(blend(rgb.g))}${toHex(blend(rgb.b))}`
+}
+
+// Build the displayed asset name. Prefer the linked equipment's "BRAND MODEL"
+// string so reports stay clean. Fall back to the legacy free-text asset_name
+// for assets that were created before equipment linking was enforced.
+const getAssetDisplayName = (asset) => {
+  const eq = asset?.equipment
+  if (eq) {
+    const parts = [eq.brand, eq.model].filter(Boolean).map((s) => String(s).trim())
+    if (parts.length > 0) return parts.join(' ')
+  }
+  return asset?.asset_name || '—'
+}
+
+// Status badge: solid background using the status color from the DB, white text.
+const statusStyle = (status) => {
+  if (!status?.color) {
+    return {
+      backgroundColor: '#9CA3AF', // gray-400 fallback
+      color: '#ffffff',
+      borderColor: '#6B7280',
+    }
   }
 
   return {
-    backgroundColor: `rgba(${r}, ${g}, ${b}, 0.12)`, // ~12% opacity
-    color: status.color,
-    borderColor: `rgba(${r}, ${g}, ${b}, 0.3)`, // ~30% opacity
+    backgroundColor: status.color,
+    color: '#ffffff',
+    borderColor: status.color,
   }
 }
 
@@ -63,6 +84,8 @@ function ReportsPage() {
   const [filters, setFilters] = useState({
     report_date_from: '',
     report_date_to: new Date().toISOString().split('T')[0], // Default to today
+    date_filter_field: 'purchase_date', // 'purchase_date' or 'status_change'
+    date_range_preset: 'custom', // 'today' | 'last_7_days' | 'last_30_days' | 'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'last_year' | 'custom'
     branch_id: '',
     status_id: '',
   })
@@ -121,32 +144,49 @@ function ReportsPage() {
   })
 
   // Main Report Data Query
-  const { 
-    data: reportData, 
-    isFetching, 
+  const {
+    data: reportData,
+    isFetching,
+    error: reportError,
   } = useQuery({
     queryKey: ['asset-report', activeFilters],
     queryFn: async () => {
       if (!activeFilters) return null
-      
+
       const params = new URLSearchParams()
       if (activeFilters.report_date_from) params.append('report_date_from', activeFilters.report_date_from)
       if (activeFilters.report_date_to) params.append('report_date_to', activeFilters.report_date_to)
+      if (activeFilters.date_filter_field) params.append('date_filter_field', activeFilters.date_filter_field)
       if (activeFilters.branch_id) params.append('branch_id', activeFilters.branch_id)
       if (activeFilters.status_id) params.append('status_id', activeFilters.status_id)
-      
+
       // Request grouped data
       params.append('include_grouped', 'true')
       params.append('include_summary', 'true')
-      
+
       const response = await apiClient.get('/reports/assets', { params })
       return response.data
     },
     enabled: !!activeFilters, // Only fetch when activeFilters are set
+    retry: false,
   })
 
   const groupedByEmployee = reportData?.data?.grouped_by_employee || []
   const summary = reportData?.data?.summary || null
+
+  // Pre-compute which group indices need a branch header row (for on-screen table)
+  const branchHeaderMap = useMemo(() => {
+    const map = {}
+    if (!activeFilters?.branch_id) {
+      groupedByEmployee.forEach((group, i) => {
+        const prev = i > 0 ? groupedByEmployee[i - 1] : null
+        const bn = group.employee?.branch?.branch_name || null
+        const pbn = prev?.employee?.branch?.branch_name || null
+        if (bn && bn !== pbn) map[i] = bn
+      })
+    }
+    return map
+  }, [groupedByEmployee, activeFilters?.branch_id])
 
   // Check if Head Office is selected
   const selectedBranch = useMemo(() => {
@@ -246,13 +286,94 @@ function ReportsPage() {
   }
 
   const handleFilterChange = (field, value) => {
-    setFilters(prev => ({ ...prev, [field]: value }))
+    setFilters(prev => {
+      const next = { ...prev, [field]: value }
+      // Switching from/to dates manually means the user is customizing the range
+      if (field === 'report_date_from' || field === 'report_date_to') {
+        next.date_range_preset = 'custom'
+      }
+      return next
+    })
+  }
+
+  // Compute from/to for a preset key. Returns { from, to } in YYYY-MM-DD.
+  const computePresetRange = (preset) => {
+    const today = new Date()
+    const fmt = (d) => {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+
+    switch (preset) {
+      case 'today':
+        return { from: fmt(today), to: fmt(today) }
+      case 'yesterday': {
+        const y = startOfDay(today)
+        y.setDate(y.getDate() - 1)
+        return { from: fmt(y), to: fmt(y) }
+      }
+      case 'last_7_days': {
+        const start = startOfDay(today)
+        start.setDate(start.getDate() - 6)
+        return { from: fmt(start), to: fmt(today) }
+      }
+      case 'last_30_days': {
+        const start = startOfDay(today)
+        start.setDate(start.getDate() - 29)
+        return { from: fmt(start), to: fmt(today) }
+      }
+      case 'this_month': {
+        const start = new Date(today.getFullYear(), today.getMonth(), 1)
+        return { from: fmt(start), to: fmt(today) }
+      }
+      case 'last_month': {
+        const start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+        const end = new Date(today.getFullYear(), today.getMonth(), 0)
+        return { from: fmt(start), to: fmt(end) }
+      }
+      case 'this_quarter': {
+        const q = Math.floor(today.getMonth() / 3)
+        const start = new Date(today.getFullYear(), q * 3, 1)
+        return { from: fmt(start), to: fmt(today) }
+      }
+      case 'this_year': {
+        const start = new Date(today.getFullYear(), 0, 1)
+        return { from: fmt(start), to: fmt(today) }
+      }
+      case 'last_year': {
+        const start = new Date(today.getFullYear() - 1, 0, 1)
+        const end = new Date(today.getFullYear() - 1, 11, 31)
+        return { from: fmt(start), to: fmt(end) }
+      }
+      default:
+        return null
+    }
+  }
+
+  const handlePresetChange = (preset) => {
+    if (preset === 'custom') {
+      setFilters(prev => ({ ...prev, date_range_preset: 'custom' }))
+      return
+    }
+    const range = computePresetRange(preset)
+    if (!range) return
+    setFilters(prev => ({
+      ...prev,
+      date_range_preset: preset,
+      report_date_from: range.from,
+      report_date_to: range.to,
+    }))
   }
 
   const handleClearFilters = () => {
     setFilters({
       report_date_from: '',
       report_date_to: new Date().toISOString().split('T')[0],
+      date_filter_field: 'purchase_date',
+      date_range_preset: 'custom',
       branch_id: '',
       status_id: '',
     })
@@ -260,11 +381,11 @@ function ReportsPage() {
   }
 
   const handleGenerateReport = () => {
-    if (!filters.report_date_from || !filters.report_date_to) {
+    if (!filters.report_date_to) {
       Swal.fire({
         icon: 'warning',
-        title: 'Required Fields',
-        text: 'Please select both From Date and To Date.',
+        title: 'Required Field',
+        text: 'Please select a To Date to generate the report.',
       })
       return
     }
@@ -395,7 +516,7 @@ function ReportsPage() {
 
       // ── Header Row (matches on-screen table) ──
       const headers = [
-        'Name of User', 'Asset', 'Serial No.', 'Date Acq', 'Type',
+        'Name of User', 'Asset', 'Serial No.', 'Date Acq', 'Category',
         'Vendor', 'Acq Cost', 'Est. Life', 'Book Value', 'Remarks', 'Status'
       ]
       const headerAligns = [
@@ -414,10 +535,87 @@ function ReportsPage() {
       row++
 
       // ── Data Rows (grouped by employee, matching on-screen structure) ──
-      groupedByEmployee.forEach(group => {
-        const employeeName = group.employee?.fullname || 'Unassigned'
-        const positionTitle = group.employee?.is_workstation ? 'Workstation' : (group.employee?.position?.title || '')
-        const branchName = group.employee?.branch?.branch_name || ''
+      const dataRowHeights = {}
+      const LINE_HPT = 14
+      const MIN_ROW_HPT = 18
+      const estimateLines = (text, colWch) => {
+        if (!text) return 1
+        return String(text).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / colWch)), 0)
+      }
+
+      const showBranchInRows = !activeFilters?.branch_id
+      const sectionHeaderStyle = {
+        fill: { fgColor: { rgb: 'EEF2FF' } },
+        font: { bold: true, sz: 11, color: { rgb: '3730A3' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        border: {
+          top: { style: 'medium', color: { rgb: '818CF8' } },
+          bottom: { style: 'medium', color: { rgb: '818CF8' } },
+          left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          right: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        },
+      }
+      const writeSectionHeader = (label) => {
+        setCell(row, 0, label, sectionHeaderStyle)
+        for (let c = 1; c < COL_COUNT; c++) {
+          setCell(row, c, '', sectionHeaderStyle)
+        }
+        merges.push({ s: { r: row, c: 0 }, e: { r: row, c: COL_COUNT - 1 } })
+        row++
+      }
+      const writeBranchHeader = (label) => {
+        const branchStyle = {
+          font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '334155' } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          border: {
+            top: { style: 'medium', color: { rgb: '334155' } },
+            bottom: { style: 'medium', color: { rgb: '334155' } },
+            left: { style: 'thin', color: { rgb: '334155' } },
+            right: { style: 'thin', color: { rgb: '334155' } },
+          },
+        }
+        setCell(row, 0, label, branchStyle)
+        for (let c = 1; c < COL_COUNT; c++) {
+          setCell(row, c, '', branchStyle)
+        }
+        merges.push({ s: { r: row, c: 0 }, e: { r: row, c: COL_COUNT - 1 } })
+        row++
+      }
+      groupedByEmployee.forEach((group, groupIndex) => {
+        const prev = groupIndex > 0 ? groupedByEmployee[groupIndex - 1] : null
+        const showTypeHeader =
+          group.employee_type &&
+          group.employee_type !== 'Branch' &&
+          group.employee_type !== prev?.employee_type
+        if (showTypeHeader) {
+          const typeLabel = group.employee_type === 'BLU' ? 'BLU Employees' : 'Unassigned'
+          writeSectionHeader(`[${typeLabel}]`)
+        }
+
+        // Branch header when "All Branches" is selected and branch changes
+        const currentBranchId = group.employee?.branch?.id || null
+        const prevBranchId = prev?.employee?.branch?.id || null
+        if (showBranchInRows && currentBranchId && currentBranchId !== prevBranchId) {
+          const brLabel = group.employee?.branch?.branch_name || ''
+          writeBranchHeader(brLabel)
+        }
+
+        const currentOboKey = `${group.employee?.branch?.id || ''}::${group.employee?.obo?.id || ''}`
+        const prevOboKey = prev ? `${prev.employee?.branch?.id || ''}::${prev.employee?.obo?.id || ''}` : null
+        if (group.employee?.obo && currentOboKey !== prevOboKey) {
+          writeSectionHeader(group.employee.obo.name)
+        }
+
+        const rawWsName = group.employee?.workstation_name || group.employee?.fullname || 'Unassigned'
+        const branchPrefix = group.employee?.branch?.branch_name ? `${group.employee.branch.branch_name} - ` : ''
+        const wsName = branchPrefix && rawWsName.startsWith(branchPrefix) ? rawWsName.slice(branchPrefix.length) : rawWsName
+        const wsAssignee = group.employee?.is_workstation && group.employee?.fullname && group.employee?.fullname !== group.employee?.workstation_name
+          ? group.employee.fullname : ''
+        const employeeName = group.employee?.is_workstation
+          ? (wsAssignee ? `${wsAssignee}\n${wsName}` : wsName)
+          : (group.employee?.fullname || 'Unassigned')
+        const positionTitle = group.employee?.is_workstation ? '' : (group.employee?.position?.title || '')
         const assetCount = group.assets.length
         const groupStartRow = row
 
@@ -435,7 +633,7 @@ function ReportsPage() {
 
           // Column 0: Employee name (only set on first row, will be merged)
           if (isFirst) {
-            const nameLabel = [employeeName, positionTitle, branchName].filter(Boolean).join('\n')
+            const nameLabel = [employeeName, positionTitle].filter(Boolean).join('\n')
             setCell(row, 0, nameLabel, {
               font: { bold: true, sz: 10, color: { rgb: '0F172A' } },
               alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
@@ -443,8 +641,8 @@ function ReportsPage() {
             })
           }
 
-          // Column 1: Asset
-          setCell(row, 1, asset.asset_name || '', {
+          // Column 1: Asset (equipment brand+model, fallback to legacy name)
+          setCell(row, 1, getAssetDisplayName(asset), {
             font: { sz: 10, color: { rgb: '0F172A' } },
             border: rowBorder,
             alignment: { vertical: 'center' },
@@ -464,12 +662,13 @@ function ReportsPage() {
             alignment: { vertical: 'center' },
           })
 
-          // Column 4: Type
+          // Column 4: Category
           setCell(row, 4, asset.category?.name || '—', {
             font: { sz: 10, color: { rgb: '475569' } },
             border: rowBorder,
             alignment: { vertical: 'center' },
           })
+
 
           // Column 5: Vendor
           setCell(row, 5, asset.vendor?.company_name || '—', {
@@ -508,12 +707,28 @@ function ReportsPage() {
             alignment: { vertical: 'center', wrapText: true },
           })
 
-          // Column 10: Status
+          // Column 10: Status — solid fill using status.color from the DB, white text
+          const statusFillHex = (asset.status?.color || '#9CA3AF').replace('#', '').toUpperCase()
           setCell(row, 10, asset.status?.name || 'N/A', {
-            font: { sz: 10, color: { rgb: '475569' } },
+            font: { sz: 10, color: { rgb: 'FFFFFF' }, bold: true },
+            fill: { fgColor: { rgb: statusFillHex } },
             border: rowBorder,
-            alignment: { vertical: 'center' },
+            alignment: { horizontal: 'center', vertical: 'center' },
           })
+
+          // Row height: based on remarks wrapping + asset name wrapping
+          const remarksLines = estimateLines(asset.remarks, 18)
+          const assetNameLines = estimateLines(getAssetDisplayName(asset), 20)
+          const rowHpt = Math.max(MIN_ROW_HPT, Math.max(remarksLines, assetNameLines) * LINE_HPT)
+          dataRowHeights[row] = Math.max(dataRowHeights[row] || 0, rowHpt)
+
+          // For the first row: also factor in the employee name height spread across group rows
+          if (isFirst) {
+            const nameLabel = [employeeName, positionTitle].filter(Boolean).join('\n')
+            const nameLines = estimateLines(nameLabel, 22)
+            const nameHptPerRow = Math.ceil((nameLines * LINE_HPT) / assetCount)
+            dataRowHeights[row] = Math.max(dataRowHeights[row], nameHptPerRow)
+          }
 
           row++
         })
@@ -543,23 +758,20 @@ function ReportsPage() {
           numFmt: '₱#,##0.00',
         }
 
-        // "Grand Total" label spanning cols 0-5
+        // "Grand Total" label spanning cols 0-6 (Name → Vendor)
         setCell(row, 0, 'Grand Total', totalStyle)
-        for (let c = 1; c <= 5; c++) {
+        for (let c = 1; c <= 6; c++) {
           setCell(row, c, '', totalStyle)
         }
-        merges.push({ s: { r: row, c: 0 }, e: { r: row, c: 5 } })
+        merges.push({ s: { r: row, c: 0 }, e: { r: row, c: 6 } })
 
-        // Acq Cost total
-        setCell(row, 6, Number(summary.total_acquisition_cost || 0), totalValueStyle)
+        // Acq Cost total at column 7
+        setCell(row, 7, Number(summary.total_acquisition_cost || 0), totalValueStyle)
 
-        // Empty Est. Life column
-        setCell(row, 7, '', totalStyle)
-
-        // Empty remaining columns
-        setCell(row, 8, '', totalStyle)
-        setCell(row, 9, '', totalStyle)
-        setCell(row, 10, '', totalStyle)
+        // Empty trailing columns (Est. Life → Status)
+        for (let c = 8; c <= 11; c++) {
+          setCell(row, c, '', totalStyle)
+        }
 
         row++
       }
@@ -663,8 +875,16 @@ function ReportsPage() {
           })
            // 8: Remarks
           setCell(row, 8, item.remarks || '—', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center', wrapText: true } })
-          // 9: Status
-          setCell(row, 9, item.status?.name || 'N/A', { font: { sz: 10 }, border: rowStyle, alignment: { vertical: 'center' } })
+          // 9: Status — solid fill from status.color, white text
+          {
+            const spareStatusFillHex = (item.status?.color || '#9CA3AF').replace('#', '').toUpperCase()
+            setCell(row, 9, item.status?.name || 'N/A', {
+              font: { sz: 10, color: { rgb: 'FFFFFF' }, bold: true },
+              fill: { fgColor: { rgb: spareStatusFillHex } },
+              border: rowStyle,
+              alignment: { horizontal: 'center', vertical: 'center' },
+            })
+          }
           // 10: Empty
           setCell(row, 10, '', { border: rowStyle })
 
@@ -782,6 +1002,9 @@ function ReportsPage() {
       rowHeights[2] = { hpt: 28 } // List of Active IT Assets (large title)
       rowHeights[3] = { hpt: 18 } // Branch
       rowHeights[4] = { hpt: 18 } // Date range
+      Object.entries(dataRowHeights).forEach(([r, hpt]) => {
+        rowHeights[Number(r)] = { hpt }
+      })
       ws['!rows'] = rowHeights
 
       const workbook = XLSX.utils.book_new()
@@ -862,15 +1085,69 @@ function ReportsPage() {
       doc.setTextColor(100, 116, 139)
       doc.text(pdfDateLabel, pageWidth / 2, 40, { align: 'center' })
 
-      // ── Table (matches on-screen: 11 columns, grouped by employee) ──
+      // ── Table (matches on-screen: 12 columns, grouped by employee) ──
       const tableRows = []
+      const pushSectionHeader = (label) => {
+        tableRows.push([{
+            content: label,
+            colSpan: 11,
+            styles: {
+                fillColor: [238, 242, 255],
+                textColor: [55, 48, 163],
+                fontStyle: 'bold',
+                fontSize: 9,
+                halign: 'left',
+            },
+        }])
+      }
 
-      groupedByEmployee.forEach(group => {
+      const pushBranchHeader = (label) => {
+        tableRows.push([{
+            content: label,
+            colSpan: 11,
+            styles: {
+                fillColor: [51, 65, 85],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+                fontSize: 10,
+                halign: 'center',
+            },
+        }])
+      }
+
+      groupedByEmployee.forEach((group, groupIndex) => {
+         const prev = groupIndex > 0 ? groupedByEmployee[groupIndex - 1] : null
+         const showTypeHeader =
+             group.employee_type &&
+             group.employee_type !== 'Branch' &&
+             group.employee_type !== prev?.employee_type
+         if (showTypeHeader) {
+             const typeLabel = group.employee_type === 'BLU' ? 'BLU Employees' : 'Unassigned'
+             pushSectionHeader(`[${typeLabel}]`)
+         }
+
+         // Branch header when "All Branches" is selected and branch changes
+         const currentBranchId = group.employee?.branch?.id || null
+         const prevBranchId = prev?.employee?.branch?.id || null
+         if (!activeFilters?.branch_id && currentBranchId && currentBranchId !== prevBranchId) {
+             pushBranchHeader(group.employee?.branch?.branch_name || '')
+         }
+
+         const currentOboKey = `${group.employee?.branch?.id || ''}::${group.employee?.obo?.id || ''}`
+         const prevOboKey = prev ? `${prev.employee?.branch?.id || ''}::${prev.employee?.obo?.id || ''}` : null
+         if (group.employee?.obo && currentOboKey !== prevOboKey) {
+             pushSectionHeader(group.employee.obo.name)
+         }
+
          // Group Header row
-         const pdfEmployeeName = group.employee?.fullname || 'Unassigned'
-         const pdfPositionTitle = group.employee?.is_workstation ? 'Workstation' : (group.employee?.position?.title || 'No Position')
-         const pdfBranchName = group.employee?.branch?.branch_name || ''
-         const pdfGroupLabel = [pdfEmployeeName, pdfPositionTitle, pdfBranchName].filter(Boolean).join(' - ')
+         const pdfRawWsName = group.employee?.workstation_name || group.employee?.fullname || 'Unassigned'
+         const pdfBranchPrefix = group.employee?.branch?.branch_name ? `${group.employee.branch.branch_name} - ` : ''
+         const pdfWsName = pdfBranchPrefix && pdfRawWsName.startsWith(pdfBranchPrefix) ? pdfRawWsName.slice(pdfBranchPrefix.length) : pdfRawWsName
+         const pdfEmployeeName = group.employee?.is_workstation
+           ? pdfWsName
+           : (group.employee?.fullname || 'Unassigned')
+         const pdfPositionTitle = group.employee?.is_workstation ? '' : (group.employee?.position?.title || 'No Position')
+         const pdfGroupLabel = [pdfEmployeeName, pdfPositionTitle].filter(Boolean).join(' - ')
          tableRows.push([{
              content: pdfGroupLabel,
              colSpan: 11,
@@ -878,8 +1155,18 @@ function ReportsPage() {
          }])
 
          group.assets.forEach(asset => {
+             const statusRgb = parseHexColor(asset.status?.color) || { r: 156, g: 163, b: 175 }
+             const statusCell = {
+                 content: asset.status?.name || 'N/A',
+                 styles: {
+                     fontStyle: 'bold',
+                     halign: 'center',
+                     textColor: [255, 255, 255],
+                     fillColor: [statusRgb.r, statusRgb.g, statusRgb.b],
+                 },
+             }
              tableRows.push([
-                 asset.asset_name,
+                 getAssetDisplayName(asset),
                  asset.serial_number || '—',
                  asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : '—',
                  asset.category?.name || '—',
@@ -888,16 +1175,17 @@ function ReportsPage() {
                  asset.estimated_life || 3,
                  (asset.book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
                  asset.remarks || '-',
-                 asset.status?.name || 'N/A',
+                 statusCell,
              ])
          })
       })
 
-      // Grand Total Row (only Acq Cost)
+      // Grand Total Row (only Acq Cost) — label spans 7 columns up to and including Vendor
       if (summary) {
           tableRows.push([
-              { content: 'Grand Total', colSpan: 6, styles: { fontStyle: 'bold', halign: 'right', fontSize: 11, fillColor: [241, 245, 249], textColor: [15, 23, 42] } },
+              { content: 'Grand Total', colSpan: 7, styles: { fontStyle: 'bold', halign: 'right', fontSize: 11, fillColor: [241, 245, 249], textColor: [15, 23, 42] } },
               { content: 'P ' + (summary.total_acquisition_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [241, 245, 249], textColor: [4, 120, 87] } },
+              { content: '', styles: { fillColor: [241, 245, 249] } },
               { content: '', styles: { fillColor: [241, 245, 249] } },
               { content: '', styles: { fillColor: [241, 245, 249] } },
               { content: '', styles: { fillColor: [241, 245, 249] } },
@@ -905,7 +1193,7 @@ function ReportsPage() {
       }
 
       autoTable(doc, {
-        head: [['Name of User', 'Asset', 'Serial No.', 'Date Acq', 'Type', 'Vendor', 'Acq Cost', 'Est. Life', 'Book Value', 'Remarks', 'Status']],
+        head: [['Name of User', 'Asset', 'Serial No.', 'Date Acq', 'Category', 'Vendor', 'Acq Cost', 'Est. Life', 'Book Value', 'Remarks', 'Status']],
         body: tableRows,
         startY: 45,
         theme: 'grid',
@@ -935,18 +1223,29 @@ function ReportsPage() {
         doc.text('Head Office Inventory', 14, spareStartY + 6)
 
         // Spare Assets Table
-        const spareTableRows = replenishmentsList.map(item => [
-          item.asset_name || '—',
-          item.serial_number || '—',
-          item.category?.name || '—',
-          [item.brand, item.model].filter(Boolean).join(' ') || '—',
-          item.vendor?.company_name || '—',
-          item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '—',
-          (item.acq_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-          (item.book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-          item.remarks || '—',
-          item.status?.name || 'N/A',
-        ])
+        const spareTableRows = replenishmentsList.map(item => {
+          const spareStatusRgb = parseHexColor(item.status?.color) || { r: 156, g: 163, b: 175 }
+          return [
+            item.asset_name || '—',
+            item.serial_number || '—',
+            item.category?.name || '—',
+            [item.brand, item.model].filter(Boolean).join(' ') || '—',
+            item.vendor?.company_name || '—',
+            item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '—',
+            (item.acq_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+            (item.book_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+            item.remarks || '—',
+            {
+              content: item.status?.name || 'N/A',
+              styles: {
+                fontStyle: 'bold',
+                halign: 'center',
+                textColor: [255, 255, 255],
+                fillColor: [spareStatusRgb.r, spareStatusRgb.g, spareStatusRgb.b],
+              },
+            },
+          ]
+        })
 
         // Add footer row
         if (replenishmentSummary) {
@@ -1173,6 +1472,48 @@ function ReportsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Filter By
+                    </label>
+                    <select
+                      value={filters.date_filter_field}
+                      onChange={(e) => handleFilterChange('date_filter_field', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                    >
+                      <option value="purchase_date">Purchase Date (Date Acquired)</option>
+                      <option value="status_change">Status Change Date</option>
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {filters.date_filter_field === 'status_change'
+                        ? 'Show assets that had a status change within the date range.'
+                        : 'Show assets purchased within the date range.'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Quick Range
+                    </label>
+                    <select
+                      value={filters.date_range_preset}
+                      onChange={(e) => handlePresetChange(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                    >
+                      <option value="custom">Custom Range</option>
+                      <option value="today">Today</option>
+                      <option value="yesterday">Yesterday</option>
+                      <option value="last_7_days">Last 7 Days</option>
+                      <option value="last_30_days">Last 30 Days</option>
+                      <option value="this_month">This Month</option>
+                      <option value="last_month">Last Month</option>
+                      <option value="this_quarter">This Quarter</option>
+                      <option value="this_year">This Year</option>
+                      <option value="last_year">Last Year</option>
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Pick a preset or set From/To manually.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
                       From Date <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1262,6 +1603,12 @@ function ReportsPage() {
           <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-slate-600">Generating report...</p>
         </div>
+      ) : reportError && activeFilters ? (
+         <div className="bg-white rounded-lg shadow-sm border border-red-200 p-12 text-center">
+          <X className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-red-700 mb-2">Failed to Load Report</h3>
+          <p className="text-slate-600 mb-4">{reportError?.response?.data?.message || reportError?.message || 'An error occurred while generating the report.'}</p>
+        </div>
       ) : activeFilters && (groupedByEmployee.length > 0 || replenishmentsList.length > 0) ? (
           <div className="space-y-6">
                {/* Export Actions */}
@@ -1315,7 +1662,7 @@ function ReportsPage() {
                             <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Asset</th>
                             <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Serial No.</th>
                             <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Date Acq</th>
-                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Type</th>
+                            <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Category</th>
                             <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Vendor</th>
                             <th className="px-3 py-3 text-right text-xs font-bold text-white uppercase border-r border-indigo-500">Acq Cost</th>
                             <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase border-r border-indigo-500">Est. Life</th>
@@ -1325,20 +1672,68 @@ function ReportsPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-200">
-                        {groupedByEmployee.map((group, groupIndex) => (
-                            group.assets.map((asset, assetIndex) => {
+                        {groupedByEmployee.map((group, groupIndex) => {
+                            const prev = groupIndex > 0 ? groupedByEmployee[groupIndex - 1] : null
+                            // Only show the type header for BLU and Unassigned. Branch is implicit and the
+                            // QA team asked us to drop the explicit "[Branch Employees]" divider.
+                            const showTypeHeader =
+                                group.employee_type &&
+                                group.employee_type !== 'Branch' &&
+                                group.employee_type !== prev?.employee_type
+                            const typeHeaderLabel = group.employee_type === 'BLU'
+                                ? 'BLU Employees'
+                                : 'Unassigned'
+
+                            // Show branch header when "All Branches" is selected and branch changes
+                            const currentBranchName = group.employee?.branch?.branch_name || null
+                            const prevBranchName = prev?.employee?.branch?.branch_name || null
+                            const showBranchHeader = groupIndex in branchHeaderMap
+                            const branchHeaderLabel = branchHeaderMap[groupIndex] || ''
+
+                            const currentOboKey = `${currentBranchName || ''}::${group.employee?.obo?.id || ''}`
+                            const prevOboKey = prev ? `${prevBranchName || ''}::${prev.employee?.obo?.id || ''}` : null
+                            const showOboHeader = !!group.employee?.obo && currentOboKey !== prevOboKey
+                            const oboHeaderLabel = group.employee?.obo?.name || ''
+                            return (
+                              <Fragment key={`group-${groupIndex}`}>
+                                {showTypeHeader && (
+                                    <tr>
+                                        <td colSpan={11} className="px-4 py-2 text-left text-sm font-bold text-indigo-800 bg-indigo-50 border-y-2 border-indigo-300 uppercase tracking-wide">
+                                            [{typeHeaderLabel}]
+                                        </td>
+                                    </tr>
+                                )}
+                                {showBranchHeader && (
+                                    <tr style={{backgroundColor: '#334155'}}>
+                                        <td colSpan={11} className="px-4 py-3 text-center text-sm font-bold uppercase tracking-wide" style={{backgroundColor: '#334155', color: '#ffffff'}}>
+                                            {branchHeaderLabel}
+                                        </td>
+                                    </tr>
+                                )}
+                                {showOboHeader && (
+                                    <tr>
+                                        <td colSpan={11} className="px-4 py-2 text-left text-sm font-bold text-indigo-800 bg-indigo-50 border-y-2 border-indigo-300 tracking-wide">
+                                            {oboHeaderLabel}
+                                        </td>
+                                    </tr>
+                                )}
+                                {group.assets.map((asset, assetIndex) => {
                                 const isFirstAsset = assetIndex === 0
                                 const groupHeaderBorderClass = 'border-t-2 border-b-2 border-t-indigo-300 border-b-indigo-300'
                                 const groupRowBorderClass = assetIndex === group.assets.length - 1 ? 'border-b-2 border-b-indigo-300' : ''
-                                
+
                                 return (
                                     <tr key={`${groupIndex}-${asset.id}`} className="hover:bg-slate-50">
                                         {isFirstAsset && (
                                             <td rowSpan={group.assets.length} className={`px-3 py-2 text-sm text-center align-middle border-r border-slate-200 ${groupHeaderBorderClass}`}>
                                                 {group.employee?.is_workstation ? (
                                                   <>
-                                                    <div className="font-semibold text-indigo-700">{group.employee.fullname}</div>
-                                                    <div className="text-xs text-indigo-500 italic">Workstation</div>
+                                                    <div className="font-semibold text-slate-900">{group.employee.fullname && group.employee.fullname !== group.employee.workstation_name ? group.employee.fullname : (group.employee.workstation_name || group.employee.fullname)}</div>
+                                                    {group.employee.workstation_name && group.employee.fullname !== group.employee.workstation_name && (() => {
+                                                      const bp = group.employee.branch?.branch_name ? `${group.employee.branch.branch_name} - ` : ''
+                                                      const displayWs = bp && group.employee.workstation_name.startsWith(bp) ? group.employee.workstation_name.slice(bp.length) : group.employee.workstation_name
+                                                      return <div className="text-xs text-indigo-500 italic">{displayWs}</div>
+                                                    })()}
                                                   </>
                                                 ) : (
                                                   <>
@@ -1346,13 +1741,10 @@ function ReportsPage() {
                                                     <div className="text-xs text-slate-600">{group.employee?.position?.title || ''}</div>
                                                   </>
                                                 )}
-                                                {group.employee?.branch?.branch_name && (
-                                                  <div className="text-xs text-slate-500">{group.employee.branch.branch_name}</div>
-                                                )}
                                             </td>
                                         )}
                                         {/* Asset Cols */}
-                                         <td className={`px-3 py-2 text-sm text-slate-900 border-r border-slate-200 ${groupRowBorderClass}`}>{asset.asset_name}</td>
+                                         <td className={`px-3 py-2 text-sm text-slate-900 border-r border-slate-200 ${groupRowBorderClass}`}>{getAssetDisplayName(asset)}</td>
                                          <td className={`px-3 py-2 text-sm text-slate-600 border-r border-slate-200 ${groupRowBorderClass}`}>{asset.serial_number || '—'}</td>
                                          <td className={`px-3 py-2 text-sm text-slate-600 border-r border-slate-200 ${groupRowBorderClass}`}>{asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : '—'}</td>
                                          <td className={`px-3 py-2 text-sm text-slate-600 border-r border-slate-200 ${groupRowBorderClass}`}>{asset.category?.name || '—'}</td>
@@ -1368,13 +1760,15 @@ function ReportsPage() {
                                          </td>
                                     </tr>
                                 )
-                            })
-                        ))}
+                            })}
+                              </Fragment>
+                            )
+                        })}
                       </tbody>
                       {summary && (
                           <tfoot className="bg-slate-50">
                               <tr>
-                                  <td colSpan={6} className="px-4 py-4 text-right text-base font-bold text-slate-900">Grand Total</td>
+                                  <td colSpan={7} className="px-4 py-4 text-right text-base font-bold text-slate-900">Grand Total</td>
                                   <td className="px-4 py-4 text-right text-base font-extrabold text-emerald-700">₱{(summary.total_acquisition_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                   <td colSpan={4} className="bg-slate-50"></td>
                               </tr>

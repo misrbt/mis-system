@@ -84,12 +84,12 @@ class AssetComponentMovement extends Model
     // Helper methods (mirrors AssetMovement)
     public function getMovementDescription()
     {
-        return match($this->movement_type) {
+        return match ($this->movement_type) {
             'created' => 'Component created',
-            'assigned' => 'Assigned to ' . ($this->toEmployee?->fullname ?? 'employee'),
-            'transferred' => 'Transferred from ' . ($this->fromEmployee?->fullname ?? 'previous employee') . ' to ' . ($this->toEmployee?->fullname ?? 'new employee'),
-            'returned' => 'Returned from ' . ($this->fromEmployee?->fullname ?? 'employee'),
-            'status_changed' => 'Status changed from ' . ($this->fromStatus?->name ?? 'previous status') . ' to ' . ($this->toStatus?->name ?? 'new status'),
+            'assigned' => 'Assigned to '.($this->toEmployee?->fullname ?? 'employee'),
+            'transferred' => 'Transferred from '.($this->fromEmployee?->fullname ?? 'previous employee').' to '.($this->toEmployee?->fullname ?? 'new employee'),
+            'returned' => 'Returned from '.($this->fromEmployee?->fullname ?? 'employee'),
+            'status_changed' => 'Status changed from '.($this->fromStatus?->name ?? 'previous status').' to '.($this->toStatus?->name ?? 'new status'),
             'attached' => 'Attached to parent asset',
             'detached' => 'Detached from parent asset',
             'updated' => 'Component details updated',

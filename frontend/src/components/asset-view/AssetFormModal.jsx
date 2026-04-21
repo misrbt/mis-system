@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Modal from '../Modal'
 import SearchableSelect from '../SearchableSelect'
+import BrandModelSelect from '../BrandModelSelect'
 import SpecificationFields from '../specifications/SpecificationFields'
 import { RefreshCw, Plus, X, Package, Sparkles } from 'lucide-react'
 import { generateAssetName, shouldAutoGenerateName } from '../../utils/assetNameGenerator'
@@ -276,41 +277,10 @@ const AssetFormModal = ({
               </select>
             </div>
 
-            {/* Subcategory - Only show if category has subcategories */}
-            {shouldShowSubcategory && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Subcategory <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="subcategory_id"
-                  value={formData.subcategory_id || ''}
-                  onChange={onInputChange}
-                  required={!isEditMode}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select subcategory</option>
-                  {subcategories?.map((subcategory) => (
-                    <option key={subcategory.id} value={subcategory.id}>
-                      {subcategory.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Category-Specific Specifications - placed after subcategory */}
-            {formData.asset_category_id &&
-              (!hasSubcategories || formData.subcategory_id) && (
-              <div className="md:col-span-2">
-                <SpecificationFields
-                  categoryName={safeCategories.find(c => c.id === parseInt(formData.asset_category_id))?.name}
-                  subcategoryName={subcategories?.find(s => s.id === parseInt(formData.subcategory_id))?.name}
-                  specifications={formData.specifications || {}}
-                  onChange={(specs) => onInputChange({ target: { name: 'specifications', value: specs } })}
-                />
-              </div>
-            )}
+            {/* Subcategory and per-asset Specifications removed (Phase 2 of QA #6).
+                These are now properties of Equipment. The asset inherits its
+                subcategory automatically via AssetObserver when an Equipment is
+                selected. To edit specifications, go to Equipment → edit. */}
 
             {/* Desktop PC Components Section - Appears immediately after category selection */}
             {isDesktopPCCategory() && (
@@ -618,33 +588,12 @@ const AssetFormModal = ({
             )}
 
             {!isDesktopPCCategory() && formData.asset_category_id && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Brand</label>
-                <SearchableSelect
-                  label=""
-                  options={brandOptions}
-                  value={formData.brand}
-                  onChange={(value) => onInputChange({ target: { name: 'brand', value } })}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select brand..."
-                  emptyMessage="No brands found"
-                />
-              </div>
-            )}
-
-            {!isDesktopPCCategory() && formData.asset_category_id && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Model</label>
-                <SearchableSelect
-                  label=""
-                  options={modelOptions}
-                  value={formData.model}
-                  onChange={(value) => onInputChange({ target: { name: 'model', value } })}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select model..."
-                  emptyMessage="No models found"
+              <div className="md:col-span-2">
+                <BrandModelSelect
+                  brandId={formData.brand_id}
+                  modelId={formData.equipment_model_id}
+                  onBrandChange={(vals) => { onInputChange({ target: { name: 'brand_id', value: vals.brand_id } }); onInputChange({ target: { name: 'brand', value: vals.brand } }) }}
+                  onModelChange={(vals) => { onInputChange({ target: { name: 'equipment_model_id', value: vals.equipment_model_id } }); onInputChange({ target: { name: 'model', value: vals.model } }) }}
                 />
               </div>
             )}

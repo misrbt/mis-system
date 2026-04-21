@@ -16,14 +16,17 @@ class WorkstationService
     /**
      * Create a workstation from branch and optional position.
      * Auto-generates name if not provided.
+     *
+     * @param  array<int>  $employeeIds
      */
     public function createFromBranchPosition(
         int $branchId,
         ?int $positionId = null,
         ?string $name = null,
-        ?string $description = null
+        ?string $description = null,
+        array $employeeIds = []
     ): Workstation {
-        return DB::transaction(function () use ($branchId, $positionId, $name, $description) {
+        return DB::transaction(function () use ($branchId, $positionId, $name, $description, $employeeIds) {
             $branch = Branch::findOrFail($branchId);
             $position = $positionId ? Position::find($positionId) : null;
 
@@ -34,13 +37,26 @@ class WorkstationService
                 $workstationName = "{$branchName} - {$positionName}";
             }
 
-            return Workstation::create([
+            $primaryEmployeeId = ! empty($employeeIds) ? $employeeIds[0] : null;
+
+            $workstation = Workstation::create([
                 'branch_id' => $branchId,
                 'position_id' => $positionId,
+                'employee_id' => $primaryEmployeeId,
                 'name' => $workstationName,
                 'description' => $description,
                 'is_active' => true,
             ]);
+
+            if (! empty($employeeIds)) {
+                $pivotData = [];
+                foreach ($employeeIds as $employeeId) {
+                    $pivotData[$employeeId] = ['assigned_at' => now()];
+                }
+                $workstation->employees()->sync($pivotData);
+            }
+
+            return $workstation;
         });
     }
 
@@ -94,6 +110,9 @@ class WorkstationService
             $workstation->employee_id = $employeeId;
             $workstation->save();
 
+            // Sync pivot table (replace existing entry for this workstation with new employee)
+            $workstation->employees()->syncWithoutDetaching([$employeeId => ['assigned_at' => now()]]);
+
             // Log the assignment
             InventoryAuditLogService::log('employee_workstation_assigned', [
                 'workstation_id' => $workstationId,
@@ -105,7 +124,7 @@ class WorkstationService
             return [
                 'success' => true,
                 'message' => "Employee '{$employee->fullname}' assigned to workstation '{$workstation->name}'.",
-                'workstation' => $workstation->fresh(['employee', 'assets']),
+                'workstation' => $workstation->fresh(['employee', 'employees', 'assets']),
             ];
         });
     }
@@ -134,6 +153,9 @@ class WorkstationService
             $workstation->employee_id = null;
             $workstation->save();
 
+            // Remove from pivot table
+            $workstation->employees()->detach($employeeId);
+
             // Log the unassignment
             InventoryAuditLogService::log('employee_workstation_unassigned', [
                 'workstation_id' => $workstationId,
@@ -145,7 +167,7 @@ class WorkstationService
             return [
                 'success' => true,
                 'message' => "Employee '{$employee->fullname}' unassigned from workstation '{$workstation->name}'.",
-                'workstation' => $workstation->fresh(['employee', 'assets']),
+                'workstation' => $workstation->fresh(['employee', 'employees', 'assets']),
             ];
         });
     }

@@ -29,6 +29,7 @@ class UpdateEmployeeRequest extends FormRequest
                 })->ignore($employeeId),
             ],
             'branch_id' => 'required|exists:branch,id',
+            'obo_id' => 'nullable|exists:branch_obos,id',
             'department_id' => 'nullable|exists:section,id',
             'position_id' => 'required|exists:position,id',
         ];

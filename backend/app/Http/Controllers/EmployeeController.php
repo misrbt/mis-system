@@ -63,17 +63,19 @@ class EmployeeController extends Controller
                 $query->where('department_id', $request->input('department_id'));
             }
 
-            // Sorting
-            $sortBy = $request->input('sort_by', 'fullname');
-            $sortOrder = $request->input('sort_order', 'asc');
-
-            // Whitelist sortable columns
-            $allowedSortColumns = ['fullname', 'created_at', 'updated_at'];
-            if (in_array($sortBy, $allowedSortColumns)) {
-                $query->orderBy($sortBy, $sortOrder);
-            } else {
-                $query->orderBy('fullname', 'asc');
-            }
+            // Sort: group each BLU right after its parent branch.
+            // Group key = parent branch brcode (for BLUs) or own brcode (for main branches).
+            // Within each group: main branch first (no parent), then BLUs ordered by brcode.
+            $query->orderByRaw("
+                COALESCE(
+                    (SELECT p.brcode FROM \"branch\" p WHERE p.id = (SELECT b.parent_branch_id FROM \"branch\" b WHERE b.id = branch_id)),
+                    (SELECT b.brcode FROM \"branch\" b WHERE b.id = branch_id),
+                    'ZZZZ'
+                ) ASC
+            ")
+                ->orderByRaw('CASE WHEN (SELECT b.parent_branch_id FROM "branch" b WHERE b.id = branch_id) IS NULL THEN 0 ELSE 1 END ASC')
+                ->orderByRaw('(SELECT b.brcode FROM "branch" b WHERE b.id = branch_id) ASC NULLS LAST')
+                ->orderBy('fullname', 'asc');
 
             // Handle "all" parameter - return all records without pagination
             if ($request->boolean('all', false)) {

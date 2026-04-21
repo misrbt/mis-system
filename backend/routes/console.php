@@ -25,24 +25,10 @@ Schedule::command('assets:update-book-values')
     ->weekdays()
     ->description('Update book values for all assets (evening)');
 
-// Schedule asset status transitions - runs during business hours
-Schedule::command('assets:transition-statuses')
-    ->dailyAt('09:00')  // Morning check
-    ->weekdays()
-    ->description('Transition assets from "New" to "Functional" (morning)');
-
-Schedule::command('assets:transition-statuses')
-    ->dailyAt('15:00')  // Afternoon check
-    ->weekdays()
-    ->description('Transition assets from "New" to "Functional" (afternoon)');
-
-// Optional: Catch-up command that runs every hour during business hours (8am-6pm)
-// Useful if you want frequent updates throughout the day
-Schedule::command('assets:catchup')
-    ->hourly()
-    ->between('8:00', '18:00')
-    ->weekdays()
-    ->description('Hourly catch-up for asset updates during business hours');
+// Note: assets:transition-statuses is no longer scheduled. The "New → Functional
+// after 30 days" transition now happens automatically via AssetObserver::retrieved(),
+// triggered the next time the asset is loaded from the database. The artisan command
+// is kept as an optional manual fallback (php artisan assets:transition-statuses).
 
 // Cleanup expired defective assets - runs hourly to ensure timely deletion
 Schedule::command('cleanup:expired-defective-assets')

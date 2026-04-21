@@ -16,6 +16,37 @@ class AssetObserver
     private array $originalValues = [];
 
     /**
+     * Recursion guard to prevent infinite loops when retrieved() triggers a save.
+     */
+    private bool $isAutoTransitioning = false;
+
+    /**
+     * Handle the Asset "retrieved" event.
+     * Fires every time an asset is hydrated from the database. Performs the
+     * "New → Functional after 30 days" auto-transition lazily, so no cron or
+     * scheduled command is required for it to take effect.
+     */
+    public function retrieved(Asset $asset): void
+    {
+        if ($this->isAutoTransitioning) {
+            return;
+        }
+
+        if (! $asset->shouldTransitionToFunctional()) {
+            return;
+        }
+
+        $this->isAutoTransitioning = true;
+        try {
+            $asset->transitionToFunctional();
+        } catch (\Throwable $e) {
+            // Swallow auto-transition failures so they never block reads.
+        } finally {
+            $this->isAutoTransitioning = false;
+        }
+    }
+
+    /**
      * Handle the Asset "created" event.
      */
     public function created(Asset $asset): void
@@ -30,6 +61,20 @@ class AssetObserver
                 'metadata' => $this->buildChangeMetadata($changedFields),
                 'remarks' => 'Asset initially created',
             ]);
+        }
+
+        // Apply the "New → Functional after 30 days" rule immediately on creation
+        // for back-dated assets (e.g., recording a printer purchased months ago).
+        // Without this the transition would be deferred to the next read.
+        if (! $this->isAutoTransitioning && $asset->shouldTransitionToFunctional()) {
+            $this->isAutoTransitioning = true;
+            try {
+                $asset->transitionToFunctional();
+            } catch (\Throwable $e) {
+                // Swallow auto-transition failures so creation never breaks.
+            } finally {
+                $this->isAutoTransitioning = false;
+            }
         }
     }
 
@@ -65,6 +110,30 @@ class AssetObserver
         if ($asset->workstation_id) {
             $asset->assigned_to_employee_id = null;
         }
+
+        $this->inheritFromEquipment($asset);
+    }
+
+    /**
+     * If the asset is linked to an equipment record, inherit subcategory_id
+     * from the equipment so the asset and equipment never disagree. The
+     * Equipment table is the source of truth for category/subcategory pairings
+     * after the QA refactor (concern #6).
+     */
+    protected function inheritFromEquipment(Asset $asset): void
+    {
+        if (! $asset->equipment_id) {
+            return;
+        }
+
+        $equipment = \App\Models\Equipment::find($asset->equipment_id);
+        if (! $equipment) {
+            return;
+        }
+
+        if ($equipment->subcategory_id && empty($asset->subcategory_id)) {
+            $asset->subcategory_id = $equipment->subcategory_id;
+        }
     }
 
     /**
@@ -81,6 +150,12 @@ class AssetObserver
         // Check CURRENT workstation_id, not just if it changed
         if ($asset->workstation_id) {
             $asset->assigned_to_employee_id = null;
+        }
+
+        // Re-inherit subcategory if equipment was just changed.
+        if ($asset->isDirty('equipment_id')) {
+            $asset->subcategory_id = null;
+            $this->inheritFromEquipment($asset);
         }
 
         if ($asset->isDirty('status_id')) {

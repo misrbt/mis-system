@@ -308,37 +308,65 @@ class Asset extends Model
     }
 
     /**
-     * Check if asset should transition from "New" to "Functional"
-     * Assets created 30+ days ago with status "New" should become "Functional"
+     * Check if this asset should auto-transition from "New" to "Functional".
+     * Rule: status must currently be "New" and the asset must have been
+     * purchased at least 30 days ago. Uses purchase_date (not created_at) so
+     * back-dated entries are evaluated correctly.
      */
-    public function shouldTransitionToFunctional()
+    public function shouldTransitionToFunctional(): bool
     {
-        // Check if status is "New"
-        if (! $this->status || $this->status->name !== 'New') {
+        $newStatusId = Status::where('name', 'New')->value('id');
+        if (! $newStatusId || (int) $this->status_id !== (int) $newStatusId) {
             return false;
         }
 
-        // Check if created 30+ days ago
-        $daysSinceCreation = $this->created_at->diffInDays(now());
+        if (! $this->purchase_date) {
+            return false;
+        }
 
-        return $daysSinceCreation >= 30;
+        $purchaseDate = $this->purchase_date instanceof \Carbon\Carbon
+            ? $this->purchase_date
+            : \Carbon\Carbon::parse($this->purchase_date);
+
+        return $purchaseDate->copy()->addDays(30)->lte(now());
     }
 
     /**
-     * Transition asset status from "New" to "Functional"
+     * Transition this asset's status from "New" to "Functional" and record an
+     * audit movement dated when the transition was *supposed* to happen
+     * (purchase_date + 30 days). The asset itself is updated quietly so the
+     * AssetObserver doesn't double-log the change.
      */
-    public function transitionToFunctional()
+    public function transitionToFunctional(): bool
     {
-        $functionalStatus = Status::where('name', 'Functional')->first();
-
-        if ($functionalStatus && $this->shouldTransitionToFunctional()) {
-            $this->status_id = $functionalStatus->id;
-            $this->save();
-
-            return true;
+        if (! $this->shouldTransitionToFunctional()) {
+            return false;
         }
 
-        return false;
+        $functionalStatus = Status::where('name', 'Functional')->first();
+        if (! $functionalStatus) {
+            return false;
+        }
+
+        $purchaseDate = $this->purchase_date instanceof \Carbon\Carbon
+            ? $this->purchase_date
+            : \Carbon\Carbon::parse($this->purchase_date);
+        $transitionDate = $purchaseDate->copy()->addDays(30);
+
+        AssetMovement::create([
+            'asset_id' => $this->id,
+            'movement_type' => 'status_changed',
+            'from_status_id' => $this->status_id,
+            'to_status_id' => $functionalStatus->id,
+            'movement_date' => $transitionDate,
+            'reason' => 'Auto-transition: 30 days after purchase',
+            'metadata' => ['auto_transition' => true],
+        ]);
+
+        $this->status_id = $functionalStatus->id;
+        $this->saveQuietly();
+
+        return true;
     }
 
     /**

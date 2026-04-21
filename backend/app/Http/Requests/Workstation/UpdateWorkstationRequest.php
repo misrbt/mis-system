@@ -19,6 +19,7 @@ class UpdateWorkstationRequest extends FormRequest
             'name' => 'nullable|string|max:255',
             'description' => 'nullable|string|max:1000',
             'is_active' => 'boolean',
+            'obo_id' => 'nullable|exists:branch_obos,id',
         ];
     }
 

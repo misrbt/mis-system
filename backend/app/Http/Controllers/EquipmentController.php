@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Equipment\StoreEquipmentRequest;
 use App\Http\Requests\Equipment\UpdateEquipmentRequest;
+use App\Models\Brand;
 use App\Models\Equipment;
+use App\Models\EquipmentModel;
 use Illuminate\Http\Request;
 
 class EquipmentController extends Controller
@@ -15,7 +17,7 @@ class EquipmentController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Equipment::with(['category', 'subcategory']);
+            $query = Equipment::with(['category', 'subcategory', 'brandRelation', 'equipmentModel']);
 
             // Search by brand or model
             if ($request->has('search') && $request->search) {
@@ -60,13 +62,19 @@ class EquipmentController extends Controller
     public function store(StoreEquipmentRequest $request)
     {
         try {
+            [$brandId, $modelId, $brandName, $modelName] = $this->resolveBrandAndModel($request);
+
             $equipment = Equipment::create([
-                'brand' => $request->brand,
-                'model' => $request->model,
+                'brand' => $brandName,
+                'model' => $modelName,
+                'brand_id' => $brandId,
+                'equipment_model_id' => $modelId,
                 'description' => $request->description,
                 'asset_category_id' => $request->input('asset_category_id') ?: null,
                 'subcategory_id' => $request->input('subcategory_id') ?: null,
             ]);
+
+            $equipment->load(['brandRelation', 'equipmentModel', 'category', 'subcategory']);
 
             return response()->json([
                 'success' => true,
@@ -86,13 +94,19 @@ class EquipmentController extends Controller
         try {
             $equipment = Equipment::findOrFail($id);
 
+            [$brandId, $modelId, $brandName, $modelName] = $this->resolveBrandAndModel($request);
+
             $equipment->update([
-                'brand' => $request->brand,
-                'model' => $request->model,
+                'brand' => $brandName,
+                'model' => $modelName,
+                'brand_id' => $brandId,
+                'equipment_model_id' => $modelId,
                 'description' => $request->description,
                 'asset_category_id' => $request->input('asset_category_id') ?: null,
                 'subcategory_id' => $request->input('subcategory_id') ?: null,
             ]);
+
+            $equipment->load(['brandRelation', 'equipmentModel', 'category', 'subcategory']);
 
             return response()->json([
                 'success' => true,
@@ -175,5 +189,45 @@ class EquipmentController extends Controller
         } catch (\Exception $e) {
             return $this->handleException($e, 'Failed to delete equipment');
         }
+    }
+
+    /**
+     * Resolve brand_id and equipment_model_id from request.
+     * Accepts either IDs (brand_id, equipment_model_id) or text (brand, model).
+     * Auto-creates brand/model records when text is provided without matching IDs.
+     *
+     * @return array{0: ?int, 1: ?int, 2: string, 3: string}
+     */
+    private function resolveBrandAndModel(Request $request): array
+    {
+        $brandId = $request->input('brand_id') ?: null;
+        $modelId = $request->input('equipment_model_id') ?: null;
+        $brandName = trim($request->input('brand', ''));
+        $modelName = trim($request->input('model', ''));
+
+        // Resolve brand: use brand_id if provided, otherwise find or create from text
+        if (! $brandId && $brandName) {
+            $brand = Brand::firstOrCreate(['name' => $brandName]);
+            $brandId = $brand->id;
+        }
+
+        // Resolve model: use equipment_model_id if provided, otherwise find or create from text
+        if (! $modelId && $modelName && $brandId) {
+            $model = EquipmentModel::firstOrCreate([
+                'brand_id' => $brandId,
+                'name' => $modelName,
+            ]);
+            $modelId = $model->id;
+        }
+
+        // Ensure text fields stay in sync with the resolved records
+        if ($brandId && ! $brandName) {
+            $brandName = Brand::find($brandId)?->name ?? '';
+        }
+        if ($modelId && ! $modelName) {
+            $modelName = EquipmentModel::find($modelId)?->name ?? '';
+        }
+
+        return [$brandId, $modelId, $brandName, $modelName];
     }
 }

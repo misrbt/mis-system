@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { X, RefreshCw, Plus, Package, Sparkles } from 'lucide-react'
 import SearchableSelect from '../SearchableSelect'
+import BrandModelSelect from '../BrandModelSelect'
 import SpecificationFields from '../specifications/SpecificationFields'
 import { generateAssetName, shouldAutoGenerateName } from '../../utils/assetNameGenerator'
 import apiClient from '../../services/apiClient'
@@ -16,7 +17,6 @@ const AddAssetModal = ({
   formData,
   onInputChange,
   categories,
-  subcategories = [],
   equipmentOptions = [],
   vendors,
   statuses = [],
@@ -234,25 +234,9 @@ const AddAssetModal = ({
             </select>
           </div>
 
-          {/* Subcategory - Only show if category has subcategories */}
-          {formData.asset_category_id && subcategories?.length > 0 && (
-            <div>
-              <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">
-                Subcategory <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.subcategory_id || ''}
-                onChange={(e) => onInputChange('subcategory_id', e.target.value)}
-                className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-                required
-              >
-                <option value="">Select Subcategory</option>
-                {subcategories.map((subcat) => (
-                  <option key={subcat.id} value={subcat.id}>{subcat.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Subcategory selector removed (Phase 2 of QA concern #6).
+              Subcategory is now a property of Equipment and is auto-inherited
+              by the asset when an Equipment is selected. See AssetObserver. */}
 
           {/* Desktop PC Components Section - Appears immediately after category selection */}
           {isDesktopPCCategory() && (
@@ -549,45 +533,17 @@ const AddAssetModal = ({
 
           {/* Brand & Model */}
           {!isDesktopPCCategory() && formData.asset_category_id && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Brand</label>
-                <SearchableSelect
-                  label=""
-                  options={brandOptions}
-                  value={formData.brand}
-                  onChange={(value) => onInputChange('brand', value)}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select brand..."
-                  emptyMessage="No brands found"
-                />
-              </div>
-              <div>
-                <label className="block text-sm sm:text-base font-medium text-slate-700 mb-2">Model</label>
-                <SearchableSelect
-                  label=""
-                  options={modelOptions}
-                  value={formData.model}
-                  onChange={(value) => onInputChange('model', value)}
-                  displayField="name"
-                  secondaryField="categoryLabel"
-                  placeholder="Select model..."
-                  emptyMessage="No models found"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Category-Specific Specifications */}
-          {formData.asset_category_id && (
-            <SpecificationFields
-              categoryName={categories?.find(c => c.id === parseInt(formData.asset_category_id))?.name}
-              subcategoryName={subcategories?.find(s => s.id === parseInt(formData.subcategory_id))?.name}
-              specifications={formData.specifications || {}}
-              onChange={(specs) => onInputChange('specifications', specs)}
+            <BrandModelSelect
+              brandId={formData.brand_id}
+              modelId={formData.equipment_model_id}
+              onBrandChange={(vals) => { onInputChange('brand_id', vals.brand_id); onInputChange('brand', vals.brand) }}
+              onModelChange={(vals) => { onInputChange('equipment_model_id', vals.equipment_model_id); onInputChange('model', vals.model) }}
             />
           )}
+
+          {/* Per-asset Specifications removed (Phase 2 of QA concern #6).
+              Specifications now live on the Equipment record. To edit specs,
+              go to Asset Management → Equipment → edit the equipment. */}
 
           {/* Serial Number */}
           <div>

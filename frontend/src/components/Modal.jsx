@@ -55,7 +55,7 @@ function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] bg-black/60"
       onClick={handleOverlayClick}
     >
       <div
