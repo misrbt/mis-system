@@ -12,8 +12,11 @@ use App\Http\Controllers\BrandController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EquipmentController;
+use App\Http\Controllers\HelpdeskAuditLogController;
+use App\Http\Controllers\HelpdeskReportController;
 use App\Http\Controllers\OfficeToolController;
 use App\Http\Controllers\PositionController;
+use App\Http\Controllers\PublicTicketController;
 use App\Http\Controllers\RepairController;
 use App\Http\Controllers\ReplenishmentController;
 use App\Http\Controllers\ReportController;
@@ -21,6 +24,11 @@ use App\Http\Controllers\ReportSignatoryController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\SoftwareLicenseController;
 use App\Http\Controllers\StatusController;
+use App\Http\Controllers\TicketApprovalController;
+use App\Http\Controllers\TicketApproverController;
+use App\Http\Controllers\TicketCategoryController;
+use App\Http\Controllers\TicketController;
+use App\Http\Controllers\TicketFormFieldController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WorkstationController;
@@ -38,6 +46,37 @@ Route::get('/ping', function () {
 Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+});
+
+// Public helpdesk endpoints (no auth) — end-user ticket submission + status lookup.
+// Rate-limited to deter abuse. Employees list and lookup share the same limiter;
+// creation has a stricter limiter.
+Route::prefix('public/helpdesk')->group(function () {
+    Route::middleware('throttle:30,1')->group(function () {
+        Route::get('/categories', [PublicTicketController::class, 'categories']);
+        Route::get('/employees', [PublicTicketController::class, 'employees']);
+        Route::get('/form-fields', [TicketFormFieldController::class, 'publicIndex']);
+        Route::get('/tickets/track/{ticketNumber}', [PublicTicketController::class, 'track']);
+    });
+
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('/tickets', [PublicTicketController::class, 'store']);
+    });
+
+    Route::middleware('throttle:15,1')->group(function () {
+        Route::post('/tickets/track/{ticketNumber}/remarks', [PublicTicketController::class, 'addRemark']);
+    });
+
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::patch('/tickets/track/{ticketNumber}/rating', [PublicTicketController::class, 'submitRating']);
+    });
+
+    // Approval workflow — token-authenticated (link in the approver's email).
+    Route::middleware('throttle:20,1')->group(function () {
+        Route::get('/approval/{token}', [TicketApprovalController::class, 'show']);
+        Route::post('/approval/{token}/approve', [TicketApprovalController::class, 'approve']);
+        Route::post('/approval/{token}/reject', [TicketApprovalController::class, 'reject']);
+    });
 });
 
 // Heavy operations with stricter rate limiting (10 requests per minute)
@@ -193,6 +232,50 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::delete('/{id}', [AssetComponentController::class, 'destroy']);
         Route::post('/{id}/transfer', [AssetComponentController::class, 'transfer']);
         // QR generation moved to heavy operations group above
+    });
+
+    // Helpdesk Ticket routes
+    Route::patch('ticket-categories/{id}/toggle-active', [TicketCategoryController::class, 'toggleActive']);
+    Route::apiResource('ticket-categories', TicketCategoryController::class);
+
+    Route::patch('ticket-form-fields/{id}/toggle-active', [TicketFormFieldController::class, 'toggleActive']);
+    Route::apiResource('ticket-form-fields', TicketFormFieldController::class);
+
+    // Ticket Approvers (per-branch routing for High/Urgent approval emails)
+    Route::get('ticket-approvers/managers', [TicketApproverController::class, 'managers']);
+    Route::patch('ticket-approvers/{id}/toggle-active', [TicketApproverController::class, 'toggleActive']);
+    Route::apiResource('ticket-approvers', TicketApproverController::class);
+    Route::get('tickets/statistics', [TicketController::class, 'statistics']);
+    Route::patch('tickets/{id}/status', [TicketController::class, 'updateStatus']);
+    Route::patch('tickets/{id}/assign', [TicketController::class, 'assign']);
+    Route::get('tickets/{id}/remarks', [TicketController::class, 'getRemarks']);
+    Route::post('tickets/{id}/remarks', [TicketController::class, 'addRemark']);
+    Route::post('tickets/{id}/attachments', [TicketController::class, 'uploadAttachment']);
+    Route::delete('tickets/{id}/attachments/{attachmentId}', [TicketController::class, 'deleteAttachment']);
+    Route::get('tickets/{id}/escalation-preview', [TicketController::class, 'escalationPreview']);
+    Route::post('tickets/{id}/escalate', [TicketController::class, 'escalate']);
+    Route::apiResource('tickets', TicketController::class);
+
+    // Helpdesk audit log routes
+    Route::prefix('helpdesk-audit-logs')->group(function () {
+        Route::get('/', [HelpdeskAuditLogController::class, 'index']);
+        Route::get('/statistics', [HelpdeskAuditLogController::class, 'statistics']);
+        Route::get('/tickets/{id}', [HelpdeskAuditLogController::class, 'forTicket']);
+        Route::get('/export', [HelpdeskAuditLogController::class, 'export']);
+    });
+
+    // Helpdesk reports routes
+    Route::prefix('helpdesk/reports')->group(function () {
+        Route::get('/summary', [HelpdeskReportController::class, 'summary']);
+        Route::get('/top-requesters', [HelpdeskReportController::class, 'topRequesters']);
+        Route::get('/top-resolvers', [HelpdeskReportController::class, 'topResolvers']);
+        Route::get('/breakdowns', [HelpdeskReportController::class, 'breakdowns']);
+        Route::get('/volume-trend', [HelpdeskReportController::class, 'volumeTrend']);
+        Route::get('/tickets', [HelpdeskReportController::class, 'detailedTickets']);
+        Route::get('/workload', [HelpdeskReportController::class, 'workload']);
+        Route::get('/recurring-issues', [HelpdeskReportController::class, 'recurringIssues']);
+        Route::get('/tickets-by-branch', [HelpdeskReportController::class, 'ticketsByBranch']);
+        Route::get('/branches-with-requesters', [HelpdeskReportController::class, 'branchesWithRequesters']);
     });
 
     // Repair routes

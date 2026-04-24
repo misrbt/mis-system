@@ -3,6 +3,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import ProtectedRoute from '../components/ProtectedRoute'
 import inventoryRoutes from './inventoryRoutes'
 import adminRoutes from './adminRoutes'
+import helpdeskRoutes from './helpdeskRoutes'
+import publicHelpdeskRoutes from './publicHelpdeskRoutes'
 import ErrorPage from '../components/ErrorPage'
 
 // Lazy load auth and portal pages
@@ -58,14 +60,15 @@ const router = createBrowserRouter([
     errorElement: <ErrorPage />,
   },
 
-  // Helpdesk routes (protected) - placeholder for now
+  // Helpdesk routes (protected)
   {
-    path: '/helpdesk',
-    element: (
-      <ProtectedRoute>
-        <Navigate to="/portal" replace />
-      </ProtectedRoute>
-    ),
+    ...helpdeskRoutes,
+    errorElement: <ErrorPage />,
+  },
+
+  // Public-facing helpdesk (end-user self-service, no auth)
+  {
+    ...publicHelpdeskRoutes,
     errorElement: <ErrorPage />,
   },
 

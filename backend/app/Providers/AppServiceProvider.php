@@ -14,6 +14,7 @@ use App\Models\Replenishment;
 use App\Models\Section;
 use App\Models\SoftwareLicense;
 use App\Models\Status;
+use App\Models\Ticket;
 use App\Models\Vendor;
 use App\Models\Workstation;
 use App\Observers\AssetCategoryObserver;
@@ -29,6 +30,7 @@ use App\Observers\ReplenishmentObserver;
 use App\Observers\SectionObserver;
 use App\Observers\SoftwareLicenseObserver;
 use App\Observers\StatusObserver;
+use App\Observers\TicketObserver;
 use App\Observers\VendorObserver;
 use App\Observers\WorkstationObserver;
 use Illuminate\Support\ServiceProvider;
@@ -69,6 +71,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Register workstation observer for audit logging
         Workstation::observe(WorkstationObserver::class);
+
+        // Register helpdesk ticket observer for status/assignment activity tracking
+        Ticket::observe(TicketObserver::class);
 
         // Register cache observer to invalidate dashboard cache on data changes
         Asset::observe(DashboardCacheObserver::class);

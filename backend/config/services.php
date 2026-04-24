@@ -35,4 +35,25 @@ return [
         ],
     ],
 
+    'realtime' => [
+        'url' => env('REALTIME_URL', 'http://127.0.0.1:6001'),
+        'secret' => env('REALTIME_SECRET', ''),
+        'enabled' => env('REALTIME_ENABLED', true),
+    ],
+
+    /**
+     * Helpdesk-specific config.
+     *
+     *   frontend_url : Base URL of the SPA; the approval email builds
+     *                  "{frontend_url}/public-helpdesk/approval/{token}"
+     *                  from this.
+     *
+     * Approver routing is handled entirely by the ticket_approvers table
+     * (see App\Services\TicketApproverResolver and the admin page at
+     * /helpdesk/approvers). There is no global env fallback.
+     */
+    'helpdesk' => [
+        'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:5173')),
+    ],
+
 ];

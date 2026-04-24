@@ -2,8 +2,8 @@
   "name": "mis-system",
   "private": true,
   "scripts": {
-    "predev": "npm --prefix frontend install",
-    "dev": "concurrently -c \"#22c55e,#3b82f6\" -n \"api,web\" \"cd backend && php artisan serve --port=8001\" \"cd frontend && npm run dev\""
+    "predev": "npm --prefix frontend install && npm --prefix realtime-server install",
+    "dev": "concurrently -c \"#22c55e,#3b82f6,#a855f7\" -n \"api,web,rtc\" \"cd backend && php artisan serve --port=8001\" \"cd frontend && npm run dev\" \"cd realtime-server && npm run dev\""
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

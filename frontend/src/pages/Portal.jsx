@@ -50,7 +50,7 @@ function Portal() {
       icon: Headphones,
       color: 'from-indigo-500 to-indigo-600',
       path: '/helpdesk',
-      available: false,
+      available: true,
     },
     {
       id: 'documents',
